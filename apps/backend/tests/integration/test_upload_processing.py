@@ -236,12 +236,17 @@ async def test_upload_accepts_valid_pdf_container(
 async def test_upload_rejects_valid_pdf_without_extractable_text(
     client: AsyncClient, isolated_db: Database, sample_resume: dict[str, object]
 ) -> None:
-    """A valid but blank/scanned-style PDF remains an intentional 422 control."""
-    with patch(
-        "app.routers.resumes.parse_resume_to_json",
-        new_callable=AsyncMock,
-        return_value=sample_resume,
-    ) as parse_json:
+    """A blank/scanned-style PDF stays 422 when OCR is unavailable/empty."""
+    with (
+        patch(
+            "app.routers.resumes.parse_resume_to_json",
+            new_callable=AsyncMock,
+            return_value=sample_resume,
+        ) as parse_json,
+        # Pin the OCR gate off: this test owns the no-OCR contract regardless
+        # of whether the optional 'ocr' extra is installed locally.
+        patch("app.services.ocr.is_ocr_available", return_value=False),
+    ):
         async with client:
             response = await client.post(
                 "/api/v1/resumes/upload",
@@ -254,6 +259,59 @@ async def test_upload_rejects_valid_pdf_without_extractable_text(
         "image-based or scanned. Please upload a text-based PDF, DOC, or DOCX "
         "with selectable text, or run OCR first."
     )
+    parse_json.assert_not_awaited()
+    assert await isolated_db.list_resumes() == []
+
+
+async def test_upload_recovers_blank_pdf_via_ocr(
+    client: AsyncClient, isolated_db: Database, sample_resume: dict[str, object]
+) -> None:
+    """A text-less PDF accepted via OCR fallback reaches parsing and persists."""
+    ocr_text = "叶宏汉 求职意向 Java 后端开发 2019.09-2023.07"
+    with (
+        patch(
+            "app.routers.resumes.parse_resume_to_json",
+            new_callable=AsyncMock,
+            return_value=sample_resume,
+        ) as parse_json,
+        patch("app.services.ocr.is_ocr_available", return_value=True),
+        patch("app.services.ocr.ocr_pdf", return_value=ocr_text) as run_ocr,
+    ):
+        async with client:
+            response = await client.post(
+                "/api/v1/resumes/upload",
+                files={"file": ("outline-only.pdf", _pdf_bytes(), "application/pdf")},
+            )
+
+    assert response.status_code == 200
+    assert response.json()["processing_status"] == "ready"
+    run_ocr.assert_called_once()
+    parse_json.assert_awaited_once()
+    resumes = await isolated_db.list_resumes()
+    assert len(resumes) == 1
+
+
+async def test_upload_treats_ocr_failure_as_blank_pdf(
+    client: AsyncClient, isolated_db: Database, sample_resume: dict[str, object]
+) -> None:
+    """An OCR engine error degrades to the blank-PDF 422, never a 500."""
+    with (
+        patch(
+            "app.routers.resumes.parse_resume_to_json",
+            new_callable=AsyncMock,
+            return_value=sample_resume,
+        ) as parse_json,
+        patch("app.services.ocr.is_ocr_available", return_value=True),
+        patch("app.services.ocr.ocr_pdf", side_effect=RuntimeError("ocr boom")),
+    ):
+        async with client:
+            response = await client.post(
+                "/api/v1/resumes/upload",
+                files={"file": ("broken-ocr.pdf", _pdf_bytes(), "application/pdf")},
+            )
+
+    assert response.status_code == 422
+    assert "extract text" in response.json()["detail"].lower()
     parse_json.assert_not_awaited()
     assert await isolated_db.list_resumes() == []
 

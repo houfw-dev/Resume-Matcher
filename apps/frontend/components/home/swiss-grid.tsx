@@ -6,7 +6,14 @@ import Link from 'next/link';
 import LayoutGrid from 'lucide-react/dist/esm/icons/layout-grid';
 import { useTranslations } from '@/lib/i18n';
 
-export const SwissGrid = ({ children }: { children: React.ReactNode }) => {
+export const SwissGrid = ({
+  children,
+  footerActions,
+}: {
+  children: React.ReactNode;
+  /** Optional actions rendered in the footer bar, next to tracker/settings. */
+  footerActions?: React.ReactNode;
+}) => {
   const { t } = useTranslations();
 
   return (
@@ -45,7 +52,7 @@ export const SwissGrid = ({ children }: { children: React.ReactNode }) => {
         </div>
 
         {/* Footer - stays above hovered cards */}
-        <div className="p-4 bg-background flex justify-between items-center font-mono text-xs text-blue-700 border-t border-black shrink-0 relative z-30">
+        <div className="p-4 bg-background flex justify-between items-center gap-3 flex-wrap font-mono text-xs text-blue-700 border-t border-black shrink-0 relative z-30">
           <div className="flex items-center gap-2">
             <Image
               src="/logo.svg"
@@ -56,7 +63,8 @@ export const SwissGrid = ({ children }: { children: React.ReactNode }) => {
             />
             <span className="uppercase font-bold">Resume Matcher</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center justify-end gap-3 md:gap-4 flex-wrap">
+            {footerActions}
             <Link
               href="/tracker"
               className="inline-flex items-center justify-center gap-2 bg-background text-black border border-black px-6 py-2 uppercase font-bold tracking-wide shadow-sw-sm hover:translate-y-[1px] hover:translate-x-[1px] hover:shadow-none transition-all min-w-[140px] text-center"

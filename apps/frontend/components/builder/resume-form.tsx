@@ -1,20 +1,6 @@
 'use client';
 
-import React from 'react';
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+import React, { useMemo } from 'react';
 import {
   ResumeData,
   PersonalInfo,
@@ -33,28 +19,107 @@ import { GenericTextForm } from './forms/generic-text-form';
 import { GenericItemForm } from './forms/generic-item-form';
 import { GenericListForm } from './forms/generic-list-form';
 import { AddSectionButton } from './add-section-dialog';
-import { DraggableSectionWrapper } from './draggable-section-wrapper';
+import Lock from 'lucide-react/dist/esm/icons/lock';
 import {
-  getSectionMeta,
-  getAllSections,
   createCustomSection,
   DEFAULT_SECTION_META,
+  ensureDefaultSectionMeta,
+  migrateTextSectionToSummary,
+  withLocalizedDefaultSections,
 } from '@/lib/utils/section-helpers';
+import {
+  DEFAULT_SECTION_KEYS,
+  getCanonicalSections,
+  isAcceptedDefaultTitle,
+  validateSectionName,
+} from '@/lib/utils/section-order';
+import { customSectionToken } from '@/lib/utils/fine-tune-scope';
 import { useTranslations } from '@/lib/i18n';
 
 interface ResumeFormProps {
   resumeData: ResumeData;
   onUpdate: (data: ResumeData) => void;
+  /** Open the fine-tune wizard scoped to one section (or all custom blocks). */
+  onFineTuneSection?: (sectionId: string) => void;
 }
 
-export const ResumeForm: React.FC<ResumeFormProps> = ({ resumeData, onUpdate }) => {
+const isDefaultSectionKey = (key: string): boolean =>
+  (DEFAULT_SECTION_KEYS as readonly string[]).includes(key);
+
+export const ResumeForm: React.FC<ResumeFormProps> = ({
+  resumeData,
+  onUpdate,
+  onFineTuneSection,
+}) => {
   const { t } = useTranslations();
 
-  // Get section metadata, falling back to defaults
-  const allSections = getSectionMeta(resumeData);
-  // Use getAllSections for form - shows ALL sections including hidden ones
-  // (Hidden sections are editable but marked with visual indicator)
-  const sortedAllSections = getAllSections(resumeData);
+  // Raw meta drives every state mutation; the localized copy only feeds
+  // display (locked default titles) and canonical ordering. Missing default
+  // rows (e.g. an uploaded resume with no 个人优势 block at all) are inserted
+  // for the builder so their forms exist. Builder contract: every built-in
+  // block is always listed and visible regardless of content — an empty
+  // optional block is hidden downstream (save-time canonicalization →
+  // PDF/render), never in the editor.
+  const allSections = useMemo(
+    () =>
+      ensureDefaultSectionMeta(resumeData).map((section) =>
+        isDefaultSectionKey(section.key) ? { ...section, isVisible: true } : section
+      ),
+    [resumeData]
+  );
+  const localizedData = useMemo(
+    () => withLocalizedDefaultSections({ ...resumeData, sectionMeta: allSections }, t),
+    [resumeData, allSections, t]
+  );
+  // Fixed canonical order (degree-branch aware), hidden sections included.
+  const sortedAllSections = getCanonicalSections(localizedData, { includeHidden: true });
+
+  // The six default titles in the active locale are reserved custom names.
+  const reservedDefaultNames = useMemo(
+    () => [
+      t('resume.sections.personalInfo'),
+      t('resume.sections.summary'),
+      t('resume.sections.experience'),
+      t('resume.sections.education'),
+      t('resume.sections.projects'),
+      t('resume.sections.skills'),
+    ],
+    [t]
+  );
+
+  // Whether renaming this custom block to `name` is the 自我评价 → 个人优势
+  // migration: a custom TEXT block taking the summary title is merged into
+  // the built-in summary block on save, so the reserved-title rule must not
+  // reject it (and no duplicate-title row remains afterwards).
+  const isSummaryMigration = (name: string, excludeId?: string): boolean => {
+    const trimmed = name.trim();
+    const target = excludeId ? allSections.find((s) => s.id === excludeId) : undefined;
+    if (!target || target.isDefault || !isAcceptedDefaultTitle('summary', trimmed)) {
+      return false;
+    }
+    return resumeData.customSections?.[target.key]?.sectionType === 'text';
+  };
+
+  // Validate a new/renamed custom-section name; returns a localized error
+  // string or null. The dialog performs the same check; this is the backstop.
+  const validateName = (name: string, excludeId?: string): string | null => {
+    if (isSummaryMigration(name, excludeId)) return null;
+    const error = validateSectionName(name, allSections, {
+      excludeId,
+      reservedNames: reservedDefaultNames,
+    });
+    const trimmed = name.trim();
+    if (error === 'duplicate') {
+      return t('builder.sectionHeader.duplicateNameError', { name: trimmed });
+    }
+    if (error === 'reserved') {
+      return t('builder.sectionHeader.reservedNameError', { name: trimmed });
+    }
+    if (error === 'empty') {
+      return t('builder.sectionHeader.nameRequiredError');
+    }
+    return null;
+  };
 
   // Handle section metadata updates
   const handleSectionMetaUpdate = (sections: SectionMeta[]) => {
@@ -66,14 +131,16 @@ export const ResumeForm: React.FC<ResumeFormProps> = ({ resumeData, onUpdate }) 
 
   // Handle adding a new custom section
   const handleAddSection = (displayName: string, sectionType: SectionType) => {
-    const newSection = createCustomSection(allSections, displayName, sectionType);
+    if (validateName(displayName)) return;
+
+    const newSection = createCustomSection(allSections, displayName.trim(), sectionType);
 
     // Initialize section metadata if not present
     const currentMeta = resumeData.sectionMeta?.length
       ? resumeData.sectionMeta
       : DEFAULT_SECTION_META;
 
-    // Initialize custom section data
+    // Initialize section data
     const newCustomSection: CustomSection = {
       sectionType,
       text: sectionType === 'text' ? '' : undefined,
@@ -91,10 +158,26 @@ export const ResumeForm: React.FC<ResumeFormProps> = ({ resumeData, onUpdate }) 
     });
   };
 
-  // Handler for section rename
+  // Handler for section rename — custom sections only; default titles are locked.
   const handleRename = (sectionId: string, newName: string) => {
+    const target = allSections.find((s) => s.id === sectionId);
+    if (!target || isDefaultSectionKey(target.key)) return;
+
+    // Renaming a custom text block to the summary title (e.g. 自我评价 →
+    // 个人优势) merges it into the built-in summary block instead of keeping
+    // a custom block with a reserved name.
+    if (isAcceptedDefaultTitle('summary', newName.trim())) {
+      const migrated = migrateTextSectionToSummary(resumeData, target.key);
+      if (migrated) {
+        onUpdate(migrated);
+        return;
+      }
+    }
+
+    if (validateName(newName, sectionId)) return;
+
     const updatedSections = allSections.map((s) =>
-      s.id === sectionId ? { ...s, displayName: newName } : s
+      s.id === sectionId ? { ...s, displayName: newName.trim() } : s
     );
     handleSectionMetaUpdate(updatedSections);
   };
@@ -129,85 +212,8 @@ export const ResumeForm: React.FC<ResumeFormProps> = ({ resumeData, onUpdate }) 
     handleSectionMetaUpdate(updatedSections);
   };
 
-  // Handler for moving section up
-  const handleMoveUp = (sectionId: string) => {
-    const sorted = [...allSections].sort((a, b) => a.order - b.order);
-    const index = sorted.findIndex((s) => s.id === sectionId);
-    if (index <= 0 || sorted[index - 1].id === 'personalInfo') return;
-
-    const current = sorted[index];
-    const above = sorted[index - 1];
-    const updatedSections = allSections.map((s) => {
-      if (s.id === current.id) return { ...s, order: above.order };
-      if (s.id === above.id) return { ...s, order: current.order };
-      return s;
-    });
-    handleSectionMetaUpdate(updatedSections);
-  };
-
-  // Handler for moving section down
-  const handleMoveDown = (sectionId: string) => {
-    const sorted = [...allSections].sort((a, b) => a.order - b.order);
-    const index = sorted.findIndex((s) => s.id === sectionId);
-    if (index < 0 || index >= sorted.length - 1) return;
-
-    const current = sorted[index];
-    const below = sorted[index + 1];
-    const updatedSections = allSections.map((s) => {
-      if (s.id === current.id) return { ...s, order: below.order };
-      if (s.id === below.id) return { ...s, order: current.order };
-      return s;
-    });
-    handleSectionMetaUpdate(updatedSections);
-  };
-
-  // Configure drag-and-drop sensors
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  // Handler for drag end event
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    if (!over || active.id === over.id) return;
-
-    const sorted = [...allSections].sort((a, b) => a.order - b.order);
-    const oldIndex = sorted.findIndex((s) => s.id === active.id);
-    const newIndex = sorted.findIndex((s) => s.id === over.id);
-
-    if (oldIndex === -1 || newIndex === -1) return;
-
-    // Prevent moving above personalInfo
-    if (sorted[newIndex].id === 'personalInfo') return;
-
-    // Create new order by swapping the order values
-    const updatedSections = allSections.map((section) => {
-      if (section.id === active.id) {
-        return { ...section, order: sorted[newIndex].order };
-      }
-      if (oldIndex < newIndex) {
-        // Moving down: shift items up
-        if (section.order > sorted[oldIndex].order && section.order <= sorted[newIndex].order) {
-          return { ...section, order: section.order - 1 };
-        }
-      } else {
-        // Moving up: shift items down
-        if (section.order >= sorted[newIndex].order && section.order < sorted[oldIndex].order) {
-          return { ...section, order: section.order + 1 };
-        }
-      }
-      return section;
-    });
-
-    handleSectionMetaUpdate(updatedSections);
-  };
-
   // Render default section forms
-  const renderDefaultSection = (section: SectionMeta, isFirst: boolean, isLast: boolean) => {
+  const renderDefaultSection = (section: SectionMeta) => {
     const isPersonalInfo = section.id === 'personalInfo';
 
     // Render content based on section key
@@ -225,7 +231,23 @@ export const ResumeForm: React.FC<ResumeFormProps> = ({ resumeData, onUpdate }) 
           return (
             <SummaryForm
               value={resumeData.summary || ''}
-              onChange={(value) => onUpdate({ ...resumeData, summary: value })}
+              onChange={(value) => {
+                // The editor always lists built-in blocks (allSections forces
+                // them visible), but storage still hides an empty summary.
+                // Persist the visibility flip alongside the first typed text;
+                // merge meta + content in ONE update (two onUpdate calls would
+                // both spread the stale closure and drop the flip).
+                const storedSummary = resumeData.sectionMeta?.find((s) => s.key === 'summary');
+                const revealedMeta =
+                  value.trim() && storedSummary?.isVisible !== true
+                    ? allSections.map((s) => (s.key === 'summary' ? { ...s, isVisible: true } : s))
+                    : undefined;
+                onUpdate({
+                  ...resumeData,
+                  ...(revealedMeta ? { sectionMeta: revealedMeta } : {}),
+                  summary: value,
+                });
+              }}
             />
           );
 
@@ -278,19 +300,18 @@ export const ResumeForm: React.FC<ResumeFormProps> = ({ resumeData, onUpdate }) 
       return renderContent();
     }
 
-    // Other default sections get SectionHeader with visibility/reorder controls
-    // The form components provide their own container styling
+    // Other default sections get SectionHeader without hide/delete controls:
+    // built-in blocks are always listed in the builder. Titles are locked
+    // (lock icon, no rename); order is fixed. Empty optional blocks are
+    // hidden from the resume/PDF downstream instead of by the user.
     return (
       <SectionHeader
         section={section}
-        onRename={(name) => handleRename(section.id, name)}
         onDelete={() => handleDelete(section.id)}
-        onMoveUp={() => handleMoveUp(section.id)}
-        onMoveDown={() => handleMoveDown(section.id)}
         onToggleVisibility={() => handleToggleVisibility(section.id)}
-        isFirst={isFirst}
-        isLast={isLast}
-        canDelete={true}
+        canDelete={false}
+        visibilityLocked
+        onFineTune={onFineTuneSection ? () => onFineTuneSection(section.id) : undefined}
       >
         {renderContent()}
       </SectionHeader>
@@ -298,12 +319,19 @@ export const ResumeForm: React.FC<ResumeFormProps> = ({ resumeData, onUpdate }) 
   };
 
   // Render custom section forms
-  const renderCustomSection = (section: SectionMeta, isFirst: boolean, isLast: boolean) => {
+  const renderCustomSection = (section: SectionMeta) => {
     const customSection = resumeData.customSections?.[section.key];
 
     const updateCustomSection = (updates: Partial<CustomSection>) => {
+      // Editing a hidden section means the user wants it shown. Merge the
+      // visibility flip into the same update (a second onUpdate call would
+      // spread the stale closure and overwrite sectionMeta).
+      const revealedMeta = !section.isVisible
+        ? allSections.map((s) => (s.id === section.id ? { ...s, isVisible: true } : s))
+        : undefined;
       onUpdate({
         ...resumeData,
+        ...(revealedMeta ? { sectionMeta: revealedMeta } : {}),
         customSections: {
           ...resumeData.customSections,
           [section.key]: {
@@ -362,13 +390,13 @@ export const ResumeForm: React.FC<ResumeFormProps> = ({ resumeData, onUpdate }) 
       <SectionHeader
         section={section}
         onRename={(name) => handleRename(section.id, name)}
+        validateName={(name) => validateName(name, section.id)}
         onDelete={() => handleDelete(section.id)}
-        onMoveUp={() => handleMoveUp(section.id)}
-        onMoveDown={() => handleMoveDown(section.id)}
         onToggleVisibility={() => handleToggleVisibility(section.id)}
-        isFirst={isFirst}
-        isLast={isLast}
         canDelete={true}
+        onFineTune={
+          onFineTuneSection ? () => onFineTuneSection(customSectionToken(section.key)) : undefined
+        }
       >
         {renderContent()}
       </SectionHeader>
@@ -376,37 +404,21 @@ export const ResumeForm: React.FC<ResumeFormProps> = ({ resumeData, onUpdate }) 
   };
 
   return (
-    <DndContext
-      id="resume-sections"
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext
-        items={sortedAllSections.map((s) => s.id)}
-        strategy={verticalListSortingStrategy}
-      >
-        <div className="space-y-6 pb-20">
-          {sortedAllSections.map((section, index) => {
-            const isFirst = index === 0 || section.id === 'personalInfo';
-            const isLast = index === sortedAllSections.length - 1;
-            const isPersonalInfo = section.id === 'personalInfo';
+    <div className="space-y-6 pb-20">
+      {/* Order lock notice — section order is fixed by the canonical rule */}
+      <div className="flex items-center gap-2 border-b border-black pb-2 font-mono text-[10px] uppercase tracking-wider text-steel-grey">
+        <Lock className="h-3 w-3" />
+        {t('builder.sectionOrder.lockedNotice')}
+      </div>
 
-            const sectionContent = section.isDefault
-              ? renderDefaultSection(section, isFirst, isLast)
-              : renderCustomSection(section, isFirst, isLast);
+      {sortedAllSections.map((section) => (
+        <React.Fragment key={section.id}>
+          {section.isDefault ? renderDefaultSection(section) : renderCustomSection(section)}
+        </React.Fragment>
+      ))}
 
-            return (
-              <DraggableSectionWrapper key={section.id} id={section.id} disabled={isPersonalInfo}>
-                {sectionContent}
-              </DraggableSectionWrapper>
-            );
-          })}
-
-          {/* Add Section Button */}
-          <AddSectionButton onAdd={handleAddSection} />
-        </div>
-      </SortableContext>
-    </DndContext>
+      {/* Add Section Button */}
+      <AddSectionButton onAdd={handleAddSection} existingSections={allSections} />
+    </div>
   );
 };

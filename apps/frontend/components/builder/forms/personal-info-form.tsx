@@ -59,6 +59,66 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
         </div>
         <div className="space-y-2">
           <Label
+            htmlFor="gender"
+            className="font-mono text-xs uppercase tracking-wider text-steel-grey"
+          >
+            {t('resume.personalInfo.gender')}
+          </Label>
+          <Input
+            id="gender"
+            value={data.gender || ''}
+            onChange={(e) => handleChange('gender', e.target.value)}
+            placeholder={t('builder.personalInfoForm.placeholders.gender')}
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label
+            htmlFor="age"
+            className="font-mono text-xs uppercase tracking-wider text-steel-grey"
+          >
+            {t('resume.personalInfo.age')}
+          </Label>
+          <Input
+            id="age"
+            value={data.age || ''}
+            onChange={(e) => handleChange('age', e.target.value)}
+            placeholder={t('builder.personalInfoForm.placeholders.age')}
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label
+            htmlFor="educationLevel"
+            className="font-mono text-xs uppercase tracking-wider text-steel-grey"
+          >
+            {t('resume.personalInfo.educationLevel')}
+          </Label>
+          <Input
+            id="educationLevel"
+            value={data.educationLevel || ''}
+            onChange={(e) => handleChange('educationLevel', e.target.value)}
+            placeholder={t('builder.personalInfoForm.placeholders.educationLevel')}
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label
+            htmlFor="workYears"
+            className="font-mono text-xs uppercase tracking-wider text-steel-grey"
+          >
+            {t('resume.personalInfo.workYears')}
+          </Label>
+          <Input
+            id="workYears"
+            value={data.workYears || ''}
+            onChange={(e) => handleChange('workYears', e.target.value)}
+            placeholder={t('builder.personalInfoForm.placeholders.workYears')}
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label
             htmlFor="email"
             className="font-mono text-xs uppercase tracking-wider text-steel-grey"
           >

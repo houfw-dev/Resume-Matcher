@@ -1,11 +1,19 @@
 'use client';
 
-import { useMemo } from 'react';
+import { Fragment, useMemo } from 'react';
 import { type ResumeData } from '@/components/dashboard/resume-component';
 import { segmentTextByKeywords } from '@/lib/utils/keyword-matcher';
 import { FileUser, Briefcase, GraduationCap, FolderKanban, Wrench } from 'lucide-react';
 import { useTranslations } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import {
+  stripPointMarker,
+  looksLikeSubLabel,
+  canonicalizeProjectSubLabel,
+  canonicalizeProjectSubLabelPrefix,
+  isProjectDescriptiveLabel,
+  splitProjectPlainPrefix,
+} from '@/components/resume/list-format';
 
 interface HighlightedResumeViewProps {
   resumeData: ResumeData;
@@ -21,18 +29,20 @@ export function HighlightedResumeView({ resumeData, keywords }: HighlightedResum
 
   // Drop blank/whitespace-only entries so empty lines (e.g. from editing in the
   // builder) never render in the preview (issue #763).
+  // Source numbering is stripped everywhere: this preview renders its own
+  // markers, so kept prefixes would double-number rows.
   const visibleTechnicalSkills =
-    resumeData.additional?.technicalSkills?.filter(
-      (item): item is string => typeof item === 'string' && item.trim() !== ''
-    ) ?? [];
+    resumeData.additional?.technicalSkills
+      ?.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+      .map(stripPointMarker) ?? [];
   const visibleLanguages =
-    resumeData.additional?.languages?.filter(
-      (item): item is string => typeof item === 'string' && item.trim() !== ''
-    ) ?? [];
+    resumeData.additional?.languages
+      ?.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+      .map(stripPointMarker) ?? [];
   const visibleCertificationsTraining =
-    resumeData.additional?.certificationsTraining?.filter(
-      (item): item is string => typeof item === 'string' && item.trim() !== ''
-    ) ?? [];
+    resumeData.additional?.certificationsTraining
+      ?.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+      .map(stripPointMarker) ?? [];
 
   return (
     <div className="h-full flex flex-col">
@@ -74,18 +84,31 @@ export function HighlightedResumeView({ resumeData, keywords }: HighlightedResum
                 {exp.description && (
                   <ul className="space-y-1 text-sm">
                     {exp.description.map((bullet, i) => {
-                      // M-02: honour the per-row bullet/plain setting so this
-                      // preview agrees with the resume preview and the PDF.
-                      const showMarker = exp.descriptionStyles?.[i] !== 'plain';
+                      // M-02: honour the per-row bullet/plain/label setting so
+                      // this preview agrees with the resume preview and the
+                      // PDF: only bullet rows carry a marker, label rows are
+                      // bold sub-module headings (legacy "plain" headings
+                      // included).
+                      const style = exp.descriptionStyles?.[i];
+                      const isLabel =
+                        style === 'label' || (style === 'plain' && looksLikeSubLabel(bullet));
+                      const showMarker = style !== 'plain' && !isLabel;
                       return (
-                        <li key={i} className={cn('flex text-ink-soft', showMarker && 'ml-4')}>
+                        <li
+                          key={i}
+                          className={cn(
+                            'flex text-ink-soft',
+                            showMarker && 'ml-4',
+                            isLabel && 'font-bold'
+                          )}
+                        >
                           {showMarker && (
                             <span className="mr-1.5 flex-shrink-0" aria-hidden="true">
                               &bull;&nbsp;
                             </span>
                           )}
                           <span>
-                            <HighlightedText text={bullet} keywords={keywords} />
+                            <HighlightedText text={stripPointMarker(bullet)} keywords={keywords} />
                           </span>
                         </li>
                       );
@@ -140,21 +163,80 @@ export function HighlightedResumeView({ resumeData, keywords }: HighlightedResum
                 {proj.years && <div className="text-xs text-steel-grey mb-1">{proj.years}</div>}
                 {proj.description && (
                   <ul className="space-y-1 text-sm">
-                    {proj.description.map((bullet, i) => {
-                      const showMarker = proj.descriptionStyles?.[i] !== 'plain';
-                      return (
-                        <li key={i} className={cn('flex text-ink-soft', showMarker && 'ml-4')}>
-                          {showMarker && (
-                            <span className="mr-1.5 flex-shrink-0" aria-hidden="true">
-                              &bull;&nbsp;
+                    {(() => {
+                      // Forward pass: descriptive labels (项目背景/技术栈) own
+                      // an unnumbered body until the next label, and legacy
+                      // glued rows ("项目简介：面向…") split into a bold
+                      // canonical label plus aligned content — mirroring the
+                      // PDF/DescriptionList rendering.
+                      type RowView =
+                        | { kind: 'label'; text: string }
+                        | { kind: 'glued'; label: string; content: string }
+                        | { kind: 'point'; text: string; showMarker: boolean };
+                      const views: RowView[] = [];
+                      let descriptiveActive = false;
+                      proj.description!.forEach((bullet, i) => {
+                        const style = proj.descriptionStyles?.[i];
+                        const isLabelRow =
+                          style === 'label' || (style === 'plain' && looksLikeSubLabel(bullet));
+                        if (isLabelRow) {
+                          const text = canonicalizeProjectSubLabel(stripPointMarker(bullet));
+                          descriptiveActive = isProjectDescriptiveLabel(text);
+                          views.push({ kind: 'label', text });
+                          return;
+                        }
+                        const glued = splitProjectPlainPrefix(bullet);
+                        if (glued) {
+                          descriptiveActive = true;
+                          views.push({ kind: 'glued', label: glued.label, content: glued.content });
+                          return;
+                        }
+                        views.push({
+                          kind: 'point',
+                          text: canonicalizeProjectSubLabelPrefix(stripPointMarker(bullet)),
+                          showMarker: style !== 'plain' && !descriptiveActive,
+                        });
+                      });
+                      return views.map((view, i) => {
+                        if (view.kind === 'glued') {
+                          return (
+                            <Fragment key={i}>
+                              <li className="flex text-ink-soft font-bold">
+                                <span>
+                                  <HighlightedText text={view.label} keywords={keywords} />
+                                </span>
+                              </li>
+                              <li className="flex text-ink-soft">
+                                <span>
+                                  <HighlightedText text={view.content} keywords={keywords} />
+                                </span>
+                              </li>
+                            </Fragment>
+                          );
+                        }
+                        if (view.kind === 'label') {
+                          return (
+                            <li key={i} className="flex text-ink-soft font-bold">
+                              <span>
+                                <HighlightedText text={view.text} keywords={keywords} />
+                              </span>
+                            </li>
+                          );
+                        }
+                        return (
+                          <li key={i} className="flex text-ink-soft">
+                            {view.showMarker && (
+                              <span className="mr-1.5 flex-shrink-0" aria-hidden="true">
+                                &bull;&nbsp;
+                              </span>
+                            )}
+                            <span>
+                              <HighlightedText text={view.text} keywords={keywords} />
                             </span>
-                          )}
-                          <span>
-                            <HighlightedText text={bullet} keywords={keywords} />
-                          </span>
-                        </li>
-                      );
-                    })}
+                          </li>
+                        );
+                      });
+                    })()}
                   </ul>
                 )}
               </div>

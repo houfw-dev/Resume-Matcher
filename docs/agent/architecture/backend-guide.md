@@ -132,6 +132,15 @@ bounded Markdown → LLM parse → token-guarded JSON/status commit → SQLite (
   timeout, the caller returns promptly; the worker retains its capacity slot and
   removes its temporary file in `finally`. Threads cannot be forcibly terminated,
   so a stuck converter retains its slot until it exits.
+- MarkItDown only handles PDF and OOXML (`.docx`); a legacy OLE2 `.doc` that it
+  rejects (`UnsupportedFormatException`) falls back to a local converter inside
+  the same bounded worker: headless LibreOffice (`soffice`/`libreoffice`,
+  private user profile) or macOS `textutil`, discovered in that order, with a
+  60-second timeout. No backend, failure or timeout raises
+  `LegacyDocConversionError`, which the upload router maps to an actionable 422
+  ("re-save as PDF or DOCX"); structurally invalid containers still get the
+  generic parse 422. The slim Docker image bundles neither tool, so server
+  deployments return the re-save 422 for legacy `.doc`.
 - Each upload/retry claims a private processing token. Only the latest token may
   commit `ready` or `failed`; superseded requests receive 409. If the row is
   deleted while parsing, completion receives 404 and does not recreate or update it.
@@ -166,4 +175,6 @@ uv run uvicorn app.main:app --reload --port 8000
 2. Add Pydantic models to `app/schemas/models.py`
 3. Register router in `app/main.py`
 
-Legacy `.doc` files pass compound-file header validation, but the bundled MarkItDown DOCX converter does not guarantee binary Word conversion. Convert legacy Word documents to PDF or DOCX for reliable upload.
+Legacy `.doc` (OLE2 binary Word) is supported opportunistically via the local
+LibreOffice/textutil fallback (see "Upload validation and resource policy"
+above); when neither tool exists the user gets an actionable re-save 422.

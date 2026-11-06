@@ -5,7 +5,7 @@
 **Design System:** Swiss International Style
 
 ## Overview
-The Swiss Two Column template optimizes for space efficiency. It places the most critical information (experience, projects) in a main left column, and supporting details (education, skills, summary) in a right sidebar. Ideal for technical roles or one-page resumes.
+The Swiss Two Column template optimizes for space efficiency. It places the narrative content (summary, experience, projects, custom sections, and the late 培训与证书 / 荣誉奖项 modules) in a main left column, and supporting details (education, skills, languages, links) in a right sidebar. Ideal for technical roles or one-page resumes.
 
 ## Typography
 Uses the system font stack defined in `_base.module.css`.
@@ -22,8 +22,8 @@ Uses the system font stack defined in `_base.module.css`.
 ## Layout Structure
 - **Header:** Full width, centered (outside grid).
 - **Grid:** CSS Grid with `65% 35%` columns.
-- **Main Column:** Left side. Contains Experience, Projects, Custom Sections.
-- **Sidebar:** Right side. Contains Summary, Education, Skills, Languages, Awards, Links.
+- **Main Column:** Left side. Contains Summary, Experience, Projects, Custom Sections, then Certifications/Training and Awards (independent modules after every custom section).
+- **Sidebar:** Right side. Contains Education, Skills, Languages, Links (Awards no longer render here).
 - **Separation:** Vertical border on the right of the main column.
 
 ## CSS Modules

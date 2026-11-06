@@ -17,7 +17,7 @@ const RichTextEditor = dynamic(
   }
 );
 import { Project } from '@/components/dashboard/resume-component';
-import { AlignLeft, List, Plus, Trash2, Github, Globe } from 'lucide-react';
+import { AlignLeft, Heading, List, Plus, Trash2, Github, Globe } from 'lucide-react';
 import { useTranslations } from '@/lib/i18n';
 import { alignDescriptionStyles, toggleDescriptionStyle } from '@/lib/utils/description-styles';
 
@@ -38,6 +38,7 @@ export const ProjectsForm: React.FC<ProjectsFormProps> = ({ data, onChange }) =>
         name: '',
         role: '',
         years: '',
+        scale: '',
         github: '',
         website: '',
         description: [''],
@@ -186,6 +187,18 @@ export const ProjectsForm: React.FC<ProjectsFormProps> = ({ data, onChange }) =>
               </div>
               <div className="space-y-2">
                 <Label className="font-mono text-xs uppercase tracking-wider text-steel-grey">
+                  {t('builder.forms.projects.fields.scale')}{' '}
+                  <span className="text-steel-grey">({t('common.optional')})</span>
+                </Label>
+                <Input
+                  value={item.scale || ''}
+                  onChange={(e) => handleChange(item.id, 'scale', e.target.value)}
+                  placeholder={t('builder.forms.projects.placeholders.scale')}
+                  className="rounded-none border-black bg-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="font-mono text-xs uppercase tracking-wider text-steel-grey">
                   <Github className="w-3 h-3 inline mr-1" />
                   GitHub <span className="text-steel-grey">({t('common.optional')})</span>
                 </Label>
@@ -245,6 +258,8 @@ export const ProjectsForm: React.FC<ProjectsFormProps> = ({ data, onChange }) =>
                   >
                     {item.descriptionStyles?.[idx] === 'plain' ? (
                       <AlignLeft className="w-3 h-3" />
+                    ) : item.descriptionStyles?.[idx] === 'label' ? (
+                      <Heading className="w-3 h-3" />
                     ) : (
                       <List className="w-3 h-3" />
                     )}

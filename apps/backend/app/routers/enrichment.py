@@ -684,8 +684,19 @@ async def apply_regenerated_items(
             detail="Resume has no processed data.",
         )
 
-    # Make a copy to modify
-    updated_data = copy.deepcopy(processed_data)
+    # Match against the SAME read-healed form the UI snapshotted: GET heals
+    # processed_data in the response only (routers/resumes.py), and the
+    # builder builds regenerate items from that healed view without ever
+    # saving it. For a resume stored before a healing rule was added, raw
+    # stored rows differ from the rows the user saw (trailing list
+    # punctuation, leaked Markdown emphasis, radical glyphs, whitespace); an
+    # exact comparison rejected the apply even though nothing was edited.
+    # Healing here compares like with like; the healed copy is also what we
+    # persist, completing the lazy migration.
+    from app.schemas.models import normalize_resume_data
+    from app.services.parser import normalize_cjk_compat, strip_markdown_emphasis
+
+    updated_data = normalize_resume_data(copy.deepcopy(processed_data))
 
     def _normalize_match_value(value: str | None) -> str:
         return (value or "").strip().casefold()
@@ -703,9 +714,26 @@ async def apply_regenerated_items(
         text = str(value).strip()
         return [text] if text else []
 
+    # Per-line presentation canonical form for content comparison. Mirrors the
+    # line-level healing in parser.py (_WHITESPACE_RUN_RE /
+    # _LIST_TRAILING_PUNCT_RE plus the CJK-compat and Markdown-emphasis
+    # strips): rows count as equal when they differ only by normalization,
+    # never when their wording differs. Applied symmetrically to both the
+    # stored (healed) row and the snapshotted row.
+    _match_whitespace_re = re.compile(r"[ \t　]+")
+    _match_trailing_punct_re = re.compile(r"[。.；;！？!?]+[ 　\t]*$")
+
+    def _canonical_match_line(value: object) -> str:
+        text = value if isinstance(value, str) else str(value)
+        text = normalize_cjk_compat(text)
+        text = strip_markdown_emphasis(text)
+        text = _match_whitespace_re.sub(" ", text).strip()
+        text = _match_trailing_punct_re.sub("", text).rstrip()
+        return text.casefold()
+
     def _lines_equal(left: object, right: object) -> bool:
-        left_norm = [line.casefold() for line in _normalize_lines(left)]
-        right_norm = [line.casefold() for line in _normalize_lines(right)]
+        left_norm = [_canonical_match_line(line) for line in _normalize_lines(left)]
+        right_norm = [_canonical_match_line(line) for line in _normalize_lines(right)]
         return left_norm == right_norm
 
     def _find_unique_index_by_metadata(

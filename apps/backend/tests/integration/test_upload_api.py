@@ -75,3 +75,22 @@ class TestUploadGuards:
             )
         assert resp.status_code == 422
         assert "Failed to parse" in resp.json()["detail"]
+
+    @patch("app.routers.resumes.parse_document", new_callable=AsyncMock)
+    async def test_legacy_doc_validation_error_is_actionable_422(self, mock_parse, client):
+        """The legacy .doc fallback's client-safe message is shown verbatim."""
+        from app.services.parser import LegacyDocConversionError
+
+        mock_parse.side_effect = LegacyDocConversionError(
+            "Legacy binary Word (.doc) is not supported on this server. "
+            "Please open the file in Word and save it as PDF or DOCX, then upload again."
+        )
+        async with client:
+            resp = await client.post(
+                "/api/v1/resumes/upload",
+                files={"file": ("old.doc", b"\xd0\xcf\x11\xe0old", "application/msword")},
+            )
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert "Legacy binary Word (.doc)" in detail
+        assert "PDF or DOCX" in detail

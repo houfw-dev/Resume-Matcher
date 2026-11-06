@@ -19,6 +19,80 @@ def test_skill_add_remove_case_insensitive() -> None:
     assert summary.high_risk_changes == 1
 
 
+def test_skill_elaboration_is_one_modified_change() -> None:
+    # elaborate_skill turns a bare name into "Name: <=2-line detail"; the user
+    # should see one modification, not a removed skill plus an added skill.
+    original = {"additional": {"technicalSkills": ["Python", "Redis"]}}
+    improved = {
+        "additional": {
+            "technicalSkills": [
+                "Python",
+                "Redis：分布式缓存与会话存储，负责热点数据读写、过期策略与高可用设计",
+            ]
+        }
+    }
+
+    summary, changes = calculate_resume_diff(original, improved)
+
+    skill_changes = [c for c in changes if c.field_type == "skill"]
+    assert len(skill_changes) == 1
+    change = skill_changes[0]
+    assert change.change_type == "modified"
+    assert change.original_value == "Redis"
+    assert change.new_value.startswith("Redis：")
+    assert change.confidence == "high"
+    assert summary.skills_added == 0
+    assert summary.skills_removed == 0
+
+
+def test_skill_prefix_without_boundary_is_not_elaboration() -> None:
+    # "Redis" -> "RedisExporter" is a different technology, not an elaboration:
+    # the pairing requires an elaboration boundary right after the bare name.
+    original = {"additional": {"technicalSkills": ["Redis"]}}
+    improved = {"additional": {"technicalSkills": ["RedisExporter observability tool"]}}
+
+    _summary, changes = calculate_resume_diff(original, improved)
+
+    types = {c.change_type for c in changes if c.field_type == "skill"}
+    assert types == {"added", "removed"}
+
+
+def test_skill_proficiency_sentence_rewrite_is_one_modified_change() -> None:
+    # elaborate_skill may rewrite a bare entry as a proficiency-first sentence
+    # ("Redis" -> "熟练掌握 Redis 核心数据结构……"); the reviewer should see one
+    # modification, not a removed skill plus an added skill.
+    new_sentence = "熟练掌握 Redis 核心数据结构，以及缓存与分布式锁的典型用法"
+    original = {"additional": {"technicalSkills": ["Python", "Redis"]}}
+    improved = {"additional": {"technicalSkills": ["Python", new_sentence]}}
+
+    summary, changes = calculate_resume_diff(original, improved)
+
+    skill_changes = [c for c in changes if c.field_type == "skill"]
+    assert len(skill_changes) == 1
+    change = skill_changes[0]
+    assert change.change_type == "modified"
+    assert change.original_value == "Redis"
+    assert change.new_value == new_sentence
+    assert summary.skills_added == 0
+    assert summary.skills_removed == 0
+
+
+def test_unrelated_new_sentence_is_not_paired_with_removed_skill() -> None:
+    # The removed name must appear as a whole bounded term in the new sentence;
+    # a sentence about a different technology stays a real remove + add.
+    original = {"additional": {"technicalSkills": ["Java"]}}
+    improved = {
+        "additional": {"technicalSkills": ["熟练掌握 Kubernetes 容器编排与声明式部署"]}
+    }
+
+    summary, changes = calculate_resume_diff(original, improved)
+
+    types = {c.change_type for c in changes if c.field_type == "skill"}
+    assert types == {"added", "removed"}
+    assert summary.skills_added == 1
+    assert summary.skills_removed == 1
+
+
 def test_skill_order_is_ignored() -> None:
     original = {"additional": {"technicalSkills": ["Go", "Python"]}}
     improved = {"additional": {"technicalSkills": ["Python", "Go"]}}
@@ -273,3 +347,121 @@ def test_award_add() -> None:
 
     awards = [c for c in changes if c.field_type == "award" and c.change_type == "added"]
     assert [c.new_value for c in awards] == ["Employee of the Year 2022"]
+
+
+# --- Project descriptions (fine-tune regression: no identical before/after) ---
+
+
+def test_project_description_changes_are_diffed_per_line() -> None:
+    original = {
+        "personalProjects": [
+            {
+                "name": "AI Toolkit",
+                "role": "Core dev",
+                "years": "2023",
+                "description": ["Old bullet", "Kept bullet"],
+            }
+        ]
+    }
+    improved = {
+        "personalProjects": [
+            {
+                "name": "AI Toolkit",
+                "role": "Core dev",
+                "years": "2023",
+                "description": ["New bullet", "Kept bullet"],
+            }
+        ]
+    }
+
+    summary, changes = calculate_resume_diff(original, improved)
+
+    description_changes = [c for c in changes if c.field_type == "description"]
+    assert len(description_changes) == 1
+    assert description_changes[0].field_path == "personalProjects[0].description"
+    assert description_changes[0].original_value == "Old bullet"
+    assert description_changes[0].new_value == "New bullet"
+    assert summary.descriptions_modified == 1
+    # No entry-level "project modified" card whose before/after are the same.
+    assert [c for c in changes if c.field_type == "project"] == []
+
+
+def test_style_only_project_change_emits_nothing() -> None:
+    original = {
+        "personalProjects": [
+            {
+                "name": "P",
+                "role": "R",
+                "years": "2023",
+                "description": ["Did a thing"],
+                "descriptionStyles": ["bullet"],
+            }
+        ]
+    }
+    improved = {
+        "personalProjects": [
+            {
+                "name": "P",
+                "role": "R",
+                "years": "2023",
+                "description": ["Did a thing"],
+                "descriptionStyles": ["label"],
+            }
+        ]
+    }
+
+    summary, changes = calculate_resume_diff(original, improved)
+
+    assert changes == []
+    assert summary.total_changes == 0
+
+
+def test_entry_id_change_is_not_a_diff() -> None:
+    original = {
+        "workExperience": [
+            {"title": "Dev", "company": "A", "years": "2020", "description": [], "id": 1}
+        ]
+    }
+    improved = {
+        "workExperience": [
+            {"title": "Dev", "company": "A", "years": "2020", "description": [], "id": 7}
+        ]
+    }
+
+    _summary, changes = calculate_resume_diff(original, improved)
+
+    assert changes == []
+
+
+def test_entry_modified_card_surfaces_hidden_scalar_fields() -> None:
+    """A change to a field absent from the header line (location) must still
+    produce a card whose before/after visibly differ."""
+    original = {
+        "workExperience": [
+            {
+                "title": "Dev",
+                "company": "A",
+                "location": "NY",
+                "years": "2020",
+                "description": [],
+            }
+        ]
+    }
+    improved = {
+        "workExperience": [
+            {
+                "title": "Dev",
+                "company": "A",
+                "location": "Remote",
+                "years": "2020",
+                "description": [],
+            }
+        ]
+    }
+
+    _summary, changes = calculate_resume_diff(original, improved)
+
+    modified = [c for c in changes if c.field_type == "experience"]
+    assert len(modified) == 1
+    assert "location: NY" in (modified[0].original_value or "")
+    assert "location: Remote" in (modified[0].new_value or "")

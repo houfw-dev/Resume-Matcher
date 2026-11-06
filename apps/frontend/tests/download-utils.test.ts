@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeFilename } from '@/lib/utils/download';
+import {
+  buildDiagnosisReportFilename,
+  buildResumeFactFilename,
+  sanitizeFilename,
+} from '@/lib/utils/download';
 
 describe('sanitizeFilename', () => {
   describe('Basic functionality', () => {
@@ -400,5 +404,79 @@ describe('sanitizeFilename', () => {
       const graphemeCount = Array.from(result.slice(0, -4)).length;
       expect(graphemeCount).toBeLessThanOrEqual(100);
     });
+  });
+});
+
+describe('buildResumeFactFilename', () => {
+  it('joins all five header facts in order with hyphens', () => {
+    const result = buildResumeFactFilename(
+      {
+        name: '王浩',
+        age: '28岁',
+        workYears: '5年',
+        educationLevel: '硕士',
+        title: 'Java开发工程师',
+      },
+      'resume-id'
+    );
+    expect(result).toBe('王浩-28岁-5年-硕士-Java开发工程师.pdf');
+  });
+
+  it('supports the docx extension', () => {
+    const result = buildResumeFactFilename({ name: '王浩', title: '后端开发' }, 'id', 'docx');
+    expect(result).toBe('王浩-后端开发.docx');
+  });
+
+  it('skips empty, whitespace-only and missing facts without dangling dashes', () => {
+    const result = buildResumeFactFilename(
+      {
+        name: '王浩',
+        age: '   ',
+        workYears: undefined,
+        educationLevel: null,
+        title: 'Java开发',
+      },
+      'id'
+    );
+    expect(result).toBe('王浩-Java开发.pdf');
+  });
+
+  it('replaces filename-illegal characters inside facts', () => {
+    const result = buildResumeFactFilename({ name: '王浩', title: 'Java/大数据 | 架构师' }, 'id');
+    expect(result).toBe('王浩-Java-大数据 - 架构师.pdf');
+  });
+
+  it('falls back to resume_<id>.<ext> when no fact exists', () => {
+    expect(buildResumeFactFilename({}, 'abc-123')).toBe('resume_abc-123.pdf');
+    expect(buildResumeFactFilename({ name: '', title: '   ' }, 'abc-123', 'docx')).toBe(
+      'resume_abc-123.docx'
+    );
+  });
+
+  it('trims surrounding whitespace from each fact', () => {
+    const result = buildResumeFactFilename({ name: '  王浩 ', workYears: ' 5年 ' }, 'id');
+    expect(result).toBe('王浩-5年.pdf');
+  });
+});
+
+describe('buildDiagnosisReportFilename', () => {
+  const fixedNow = new Date(2026, 9, 30, 21, 56); // local time
+
+  it('joins report stem, candidate name and a minute stamp', () => {
+    expect(buildDiagnosisReportFilename('简历诊断报告', '王浩', fixedNow)).toBe(
+      '简历诊断报告-王浩-20261030-2156.docx'
+    );
+  });
+
+  it('skips a blank name without leaving a dangling dash', () => {
+    expect(buildDiagnosisReportFilename('简历诊断报告', '   ', fixedNow)).toBe(
+      '简历诊断报告-20261030-2156.docx'
+    );
+  });
+
+  it('sanitizes filename-illegal characters in the name', () => {
+    expect(buildDiagnosisReportFilename('报告', '王/浩:X', fixedNow)).toBe(
+      '报告-王-浩-X-20261030-2156.docx'
+    );
   });
 });

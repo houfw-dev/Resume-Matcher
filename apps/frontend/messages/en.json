@@ -187,14 +187,19 @@
       "unknownSectionType": "Unknown section type: {type}",
       "unknownDefaultSection": "Unknown default section: {section}"
     },
+    "sectionOrder": {
+      "lockedNotice": "Section order is fixed and cannot be reordered"
+    },
     "sectionHeader": {
       "renameSection": "Rename section",
+      "titleLocked": "Default section titles are locked",
+      "duplicateNameError": "A section named \"{name}\" already exists",
+      "reservedNameError": "\"{name}\" is a default section name",
+      "nameRequiredError": "Section name cannot be empty",
       "customTag": "Custom",
       "hiddenFromPdfTag": "Hidden from PDF",
       "hideSection": "Hide section",
       "showSection": "Show section",
-      "moveUp": "Move up",
-      "moveDown": "Move down",
       "deleteSection": "Delete section",
       "deleteTitle": "Delete Section",
       "deleteDescription": "Are you sure you want to delete \"{name}\"? This action cannot be undone."
@@ -329,7 +334,7 @@
         "title": "Title",
         "organization": "Organization",
         "location": "Location",
-        "years": "Jan 2020 - Present",
+        "years": "2020.03~至今",
         "description": "Describe your contribution..."
       },
       "noEntries": "// NO {label} ENTRIES",
@@ -341,13 +346,15 @@
         "addFirstJob": "Add First Job",
         "fields": {
           "jobTitle": "Job Title",
-          "company": "Company"
+          "company": "Company",
+          "department": "Department"
         },
         "placeholders": {
           "jobTitle": "Senior Developer",
           "company": "Tech Corp",
+          "department": "e.g., Engineering Department",
           "location": "Remote / City",
-          "years": "Jan 2020 - Present",
+          "years": "2020.03~至今",
           "description": "Describe your achievement..."
         }
       },
@@ -363,7 +370,7 @@
         "placeholders": {
           "institution": "University Name",
           "degree": "Bachelor of Science",
-          "years": "Aug 2016 - May 2020",
+          "years": "2016.08~2020.05",
           "description": "Additional details..."
         }
       },
@@ -373,12 +380,14 @@
         "fields": {
           "projectName": "Project Name",
           "role": "Role",
+          "scale": "Project Scale",
           "website": "Website"
         },
         "placeholders": {
           "projectName": "Resume Matcher",
           "role": "Creator",
-          "years": "Mar 2023",
+          "years": "2023.03",
+          "scale": "e.g. 10-person team",
           "github": "github.com/username/project",
           "website": "https://project-demo.com",
           "description": "Project detail..."
@@ -466,6 +475,10 @@
       "placeholders": {
         "name": "John Doe",
         "title": "Software Engineer",
+        "gender": "Male",
+        "age": "28 years",
+        "educationLevel": "Bachelor's degree",
+        "workYears": "5 years",
         "email": "john@example.com",
         "phone": "+1 (555) 000-0000",
         "location": "City, Country",
@@ -803,6 +816,7 @@
     "returnToDashboard": "Return to Dashboard",
     "enhanceResume": "Enhance Resume",
     "downloadResume": "Download Resume",
+    "downloadWord": "Download Word",
     "deletedTitle": "Resume Deleted",
     "deletedDescriptionMaster": "Your master resume has been permanently deleted from the system.",
     "deletedDescriptionRegular": "The resume has been permanently deleted from the system.",
@@ -819,7 +833,8 @@
     },
     "titlePlaceholder": "Enter resume title...",
     "downloadFailedTitle": "Download Failed",
-    "renameFailedTitle": "Rename Failed"
+    "renameFailedTitle": "Rename Failed",
+    "diagnoseResume": "Diagnose Resume"
   },
   "preview": {
     "margins": "Margins",
@@ -834,9 +849,16 @@
     "personalInfo": {
       "name": "Full Name",
       "title": "Job Title",
+      "gender": "Gender",
+      "age": "Age",
+      "educationLevel": "Education",
+      "workYears": "Years of Experience",
+      "jobIntention": "Job Objective",
+      "desiredCity": "Desired City",
       "email": "Email",
       "phone": "Phone",
       "location": "Location",
+      "foreignLanguage": "Foreign Languages",
       "website": "Website",
       "linkedin": "LinkedIn",
       "github": "GitHub"
@@ -852,7 +874,8 @@
       "certifications": "Training & Certifications",
       "languages": "Languages",
       "awards": "Awards",
-      "links": "Links"
+      "links": "Links",
+      "selfIntroduction": "Self Introduction"
     },
     "defaults": {
       "name": "Your Name"
@@ -1113,6 +1136,162 @@
       "projectFollowUps": "Project Follow-Ups",
       "skillGaps": "Skill Gaps",
       "talkingPoints": "Talking Points"
+    }
+  },
+  "diagnosis": {
+    "title": "Resume Diagnosis",
+    "subtitle": "Rubric V4 checklist: per-item verdicts plus a red-line result.",
+    "loading": "Running the checklist — the AI review of semantic items can take a few minutes…",
+    "measuringLayout": "Measuring pagination with the selected template…",
+    "layoutSkipped": "Layout measurement unavailable — page count and paragraph density are estimated from text.",
+    "error": "Diagnosis failed. Please try again.",
+    "intro": "The report combines deterministic checks with one structured AI review. Optionally paste a target job description to also assess job-fit items.",
+    "jobDescriptionLabel": "Target job description (optional)",
+    "jobDescriptionPlaceholder": "Paste the job description here to enable job-fit checks…",
+    "jdHint": "Without a job description, the job-fit check is marked N/A. The 5 role-capability checks do not need a JD, but they require a clear target intention that matches (or explicitly selects) a level model; otherwise they are N/A.",
+    "run": "Start Diagnosis",
+    "rerun": "Re-run",
+    "specVersion": "Rubric {version}",
+    "redlinePassed": "All red-line checks passed.",
+    "redlineFailed": "Red-line checks failed — do not deliver this resume as-is:",
+    "dimensionsTitle": "Results by dimension",
+    "itemsTitle": "Checklist",
+    "filterAll": "All",
+    "filterProblems": "Problems",
+    "allConform": "Every check conforms or is not applicable.",
+    "evidenceLabel": "Problem",
+    "suggestionLabel": "Fix",
+    "rating": {
+      "conform": "Conforms",
+      "partial": "Partial",
+      "nonconform": "Gap",
+      "na": "N/A"
+    },
+    "severity": {
+      "redline": "Red line"
+    },
+    "method": {
+      "objective": "Auto",
+      "subjective": "AI"
+    },
+    "downloadWord": "Download Word",
+    "downloadFailed": "Download failed. Please try again.",
+    "fileStem": "resume-diagnosis-report",
+    "targetLabel": "Target role",
+    "targetEmptyHint": "No job intention listed — the resume is diagnosed as a whole.",
+    "targetChooseHint": "Several job intentions detected — pick the target role for this diagnosis:",
+    "targetValue": "Target role: {title}",
+    "competencyValue": "Competency model: {name}",
+    "countsLabel": "Checklist result",
+    "countsSummary": "Applicable {effective} — conform {conform}, partial {partial}, nonconform {nonconform}; N/A {na}.",
+    "modelLabel": "Competency model",
+    "modelLoading": "Loading competency models…",
+    "modelLoadError": "Could not load competency models — you can still run the base checklist.",
+    "modelMatchedHint": "Auto-matched to the target role: {name}. Switch the level or run without a model.",
+    "modelNoMatchHint": "No competency model matches the target role. Pick one to confirm, or run without a model.",
+    "modelNone": "Run without a competency model",
+    "workspace": {
+      "cta": "Resume Diagnosis",
+      "dropzoneHint": "PDF, DOCX or DOC up to 4 MB — diagnosis starts automatically after parsing.",
+      "parsing": "Parsing the uploaded resume…",
+      "diagnosing": "Running the checklist — the AI review can take a few minutes…",
+      "parseFailed": "Parsing failed for this resume. Retry parsing, delete it, or upload a different file.",
+      "paneResume": "Uploaded resume",
+      "paneReport": "Diagnosis report",
+      "structuredTab": "Resume",
+      "originalTab": "Original",
+      "resizeHint": "Drag to resize panes",
+      "hideLeft": "Hide resume pane",
+      "showLeft": "Show resume pane",
+      "hideRight": "Hide report pane",
+      "showRight": "Show report pane",
+      "deleteResume": "Delete resume",
+      "deleteConfirmTitle": "Delete this resume?",
+      "deleteConfirmDescription": "The uploaded resume and its parsed data will be permanently removed. The diagnosis report is only kept after you export it.",
+      "backToUpload": "Upload another file",
+      "jdToggle": "Re-diagnose with a job description",
+      "jdRun": "Re-run with JD",
+      "exporting": "Exporting…"
+    }
+  },
+  "fineTune": {
+    "buttonLabel": "AI Fine-Tune",
+    "sectionButtonLabel": "Fine-tune this section",
+    "generating": {
+      "title": "Fine-tuning your resume…",
+      "body": "The AI is restructuring and polishing the selected content. This can take up to a few minutes."
+    },
+    "dialog": {
+      "title": "AI Fine-Tune",
+      "subtitle": "Sharpen logic and emphasis using your original upload and the parsed resume. No new facts are invented.",
+      "scopeAll": "Entire resume",
+      "scopeAllHint": "Restructure and strengthen every module as one coherent document.",
+      "scopeModules": "Selected modules",
+      "scopeModulesHint": "Only the modules and entries you pick are changed; everything else stays untouched.",
+      "modules": {
+        "summary": "Summary",
+        "workExperience": "Work Experience",
+        "education": "Education",
+        "personalProjects": "Projects",
+        "additional": "Skills & Additional",
+        "customSections": "Custom Sections"
+      },
+      "selectEntries": "Select entries in {module}",
+      "selectRegions": "Select sub-modules in {module}",
+      "regions": {
+        "techStack": "Tech Stack",
+        "background": "Background",
+        "duties": "Responsibilities",
+        "highlights": "Highlights",
+        "achievements": "Achievements",
+        "role": "Role"
+      },
+      "selectAtLeastOne": "Select at least one module.",
+      "instructionLabel": "Instructions (optional)",
+      "instructionPlaceholder": "e.g. Quantify achievements, put the most impactful work first, tighten wording.",
+      "cancel": "Cancel",
+      "generate": "Generate Preview"
+    },
+    "preview": {
+      "title": "Fine-Tune Preview",
+      "subtitle": "Review the fine-tuned result before saving.",
+      "highlightHint": "Outlined modules are within the selected scope.",
+      "tabRendered": "Rendered",
+      "tabChanges": "Changes",
+      "warningsTitle": "Please review",
+      "groundingWarning": "Unverified statement kept for your review: {detail}",
+      "ignoredTarget": "An out-of-range selection was ignored: {target}",
+      "diffUnavailable": "The detailed change list is temporarily unavailable; compare using the rendered preview.",
+      "relocationHint": "The selected sections contain items that belong elsewhere (awards, certificates, languages). Choose an all-section fine-tune to move them into the proper section.",
+      "changesCount": "{count} changes",
+      "descriptionsModified": "{count} descriptions modified",
+      "skillsAdded": "{count} skills added",
+      "skillsRemoved": "{count} skills removed",
+      "noChanges": "No textual changes detected.",
+      "originalLabel": "Before",
+      "newLabel": "After",
+      "changeAdded": "Added",
+      "changeRemoved": "Removed",
+      "changeModified": "Modified",
+      "cancel": "Cancel",
+      "overwrite": "Overwrite original",
+      "saveCopy": "Save as copy",
+      "createCopy": "Create copy",
+      "copyTitleLabel": "Copy title",
+      "copyTitlePlaceholder": "Title for the fine-tuned copy",
+      "applying": "Applying…",
+      "overwriteConfirmTitle": "Overwrite this resume?",
+      "overwriteConfirmBody": "The structured content will be replaced with the fine-tuned version. Your original upload text is kept and you can fine-tune again, but this cannot be undone. Choose \"Save as copy\" to keep the current version untouched.",
+      "regionAppendDropped": "Sub-module editing keeps the original number of lines; extra rewritten lines were not applied."
+    },
+    "toast": {
+      "overwritten": "Resume updated with the fine-tuned version."
+    },
+    "errors": {
+      "networkError": "Network error while fine-tuning. Please try again.",
+      "resumeChanged": "The resume changed after the preview was generated. Please generate a new preview.",
+      "generationFailed": "Fine-tuning failed. Please try again.",
+      "confirmFailed": "Could not save the fine-tuned resume. Please try again."
     }
   }
 }

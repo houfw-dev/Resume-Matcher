@@ -205,6 +205,10 @@ function normalizeResumeData(value: unknown, fallback: ResumeData): ResumeData {
     personalInfo: {
       name: stringValue(personalInfo.name),
       title: stringValue(personalInfo.title),
+      gender: stringValue(personalInfo.gender),
+      age: stringValue(personalInfo.age),
+      educationLevel: stringValue(personalInfo.educationLevel),
+      workYears: stringValue(personalInfo.workYears),
       email: stringValue(personalInfo.email),
       phone: stringValue(personalInfo.phone),
       location: stringValue(personalInfo.location),

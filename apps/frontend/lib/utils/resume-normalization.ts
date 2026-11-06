@@ -5,6 +5,11 @@ import type {
   Project,
   ResumeData,
 } from '@/components/dashboard/resume-component';
+import { canonicalizeDatePeriod } from '@/lib/utils/date-period';
+import { canonicalizeSectionMeta } from '@/lib/utils/section-order';
+import { sortTimelineNewestFirst } from '@/lib/utils/timeline-sort';
+import { canonicalizeTechTerms } from '@/lib/utils/tech-terms';
+import { normalizeTextHygiene } from '@/lib/utils/text-hygiene';
 
 type DescribedItem = {
   description?: unknown;
@@ -31,6 +36,16 @@ const normalizeStringList = (items?: unknown): string[] | undefined => {
 const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+// Canonical "yyyy.MM~yyyy.MM" / "yyyy.MM~至今" presentation on every years
+// field; mirrors normalize_date_periods() in the backend parser, which also
+// runs in the read-time self-heal chain. Colloquial values pass through.
+const withCanonicalYears = <T>(item: T): T => {
+  if (isObjectRecord(item) && typeof item.years === 'string') {
+    return { ...item, years: canonicalizeDatePeriod(item.years) } as T;
+  }
+  return item;
+};
+
 const normalizeDescriptionFields = <T extends DescribedItem>(item: T): T => {
   // A null element inside an otherwise-valid array throws on property access.
   // Guarding the container was not enough — persisted arrays can hold nulls.
@@ -52,7 +67,10 @@ const normalizeDescriptionFields = <T extends DescribedItem>(item: T): T => {
 
     nextDescriptions.push(description.trim());
     if (styles) {
-      nextStyles.push(styles[index] === 'plain' ? 'plain' : 'bullet');
+      // "label" (bold sub-module heading) must survive save; anything unknown
+      // falls back to "bullet".
+      const style = styles[index];
+      nextStyles.push(style === 'plain' || style === 'label' ? style : 'bullet');
     }
   });
 
@@ -70,6 +88,7 @@ const hasExperienceContent = (item: Experience): boolean => {
   return Boolean(
     isMeaningfulText(item.title) ||
     isMeaningfulText(item.company) ||
+    isMeaningfulText(item.department) ||
     isMeaningfulText(item.location) ||
     isMeaningfulText(item.years) ||
     (Array.isArray(item.description) && item.description.length)
@@ -81,6 +100,7 @@ const hasProjectContent = (item: Project): boolean => {
     isMeaningfulText(item.name) ||
     isMeaningfulText(item.role) ||
     isMeaningfulText(item.years) ||
+    isMeaningfulText(item.scale) ||
     isMeaningfulText(item.github) ||
     isMeaningfulText(item.website) ||
     (Array.isArray(item.description) && item.description.length)
@@ -111,7 +131,7 @@ const normalizeCustomSection = (section: CustomSection): CustomSection => {
       // from hand-edited storage) reaches .map and throws.
       items: (Array.isArray(section.items) ? section.items : [])
         .filter(isObjectRecord)
-        .map(normalizeDescriptionFields)
+        .map((item) => withCanonicalYears(normalizeDescriptionFields(item)))
         .filter(hasCustomItemContent),
     };
   }
@@ -126,7 +146,13 @@ const normalizeCustomSection = (section: CustomSection): CustomSection => {
   return section;
 };
 
-export const normalizeResumeForSave = (resume: ResumeData): ResumeData => {
+export const normalizeResumeForSave = (resumeInput: ResumeData): ResumeData => {
+  // Mirrors the backend parse/heal chain order: canonical tech-term casing
+  // first, THEN presentation hygiene (trim, whitespace collapse, lockstep
+  // blank-row drops, unified list-point endings, summary/custom-text blank-
+  // line removal) so casing-only duplicates collapse in later steps.
+  const resume = normalizeTextHygiene(canonicalizeTechTerms(resumeInput));
+
   const customSections = resume.customSections
     ? Object.fromEntries(
         Object.entries(resume.customSections).map(([key, section]) => [
@@ -136,20 +162,29 @@ export const normalizeResumeForSave = (resume: ResumeData): ResumeData => {
       )
     : resume.customSections;
 
-  return {
+  const normalized: ResumeData = {
     ...resume,
-    workExperience: (Array.isArray(resume.workExperience) ? resume.workExperience : [])
-      .filter(isObjectRecord)
-      .map(normalizeDescriptionFields)
-      .filter(hasExperienceContent),
+    // Entries persist newest-first, mirroring the render-time order.
+    workExperience:
+      sortTimelineNewestFirst(
+        (Array.isArray(resume.workExperience) ? resume.workExperience : [])
+          .filter(isObjectRecord)
+          .map((item) => withCanonicalYears(normalizeDescriptionFields(item)))
+          .filter(hasExperienceContent)
+      ) ?? [],
     personalProjects: (Array.isArray(resume.personalProjects) ? resume.personalProjects : [])
       .filter(isObjectRecord)
-      .map(normalizeDescriptionFields)
+      .map((item) => withCanonicalYears(normalizeDescriptionFields(item)))
       .filter(hasProjectContent),
     // education was the one top-level collection left unguarded, so a null or
     // primitive entry survived normalization and reached the render path.
     // Education.description is a scalar, so there are no styles to align here.
-    education: (Array.isArray(resume.education) ? resume.education : []).filter(isObjectRecord),
+    education:
+      sortTimelineNewestFirst(
+        (Array.isArray(resume.education) ? resume.education : [])
+          .filter(isObjectRecord)
+          .map(withCanonicalYears)
+      ) ?? [],
     additional: resume.additional
       ? {
           ...resume.additional,
@@ -161,6 +196,12 @@ export const normalizeResumeForSave = (resume: ResumeData): ResumeData => {
       : resume.additional,
     customSections,
   };
+
+  // Fixed canonical section order + title governance: rewrite meta order for
+  // the degree branch, reset renamed default titles, and hide empty optional
+  // blocks. Runs against the NORMALIZED content so emptiness sees the same
+  // pruned data the resume renders.
+  return { ...normalized, sectionMeta: canonicalizeSectionMeta(normalized) };
 };
 
 export const normalizeResumeForRender = (resume: ResumeData): ResumeData => {

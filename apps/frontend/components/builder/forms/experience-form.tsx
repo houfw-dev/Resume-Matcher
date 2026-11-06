@@ -18,7 +18,7 @@ const RichTextEditor = dynamic(
   }
 );
 import { Experience } from '@/components/dashboard/resume-component';
-import { AlignLeft, List, Plus, Trash2 } from 'lucide-react';
+import { AlignLeft, Heading, List, Plus, Trash2 } from 'lucide-react';
 import { useTranslations } from '@/lib/i18n';
 import { alignDescriptionStyles, toggleDescriptionStyle } from '@/lib/utils/description-styles';
 import {
@@ -78,6 +78,7 @@ export const ExperienceForm: React.FC<ExperienceFormProps> = ({ data, onChange }
         id: newId,
         title: '',
         company: '',
+        department: '',
         location: '',
         years: '',
         description: [''],
@@ -240,6 +241,17 @@ export const ExperienceForm: React.FC<ExperienceFormProps> = ({ data, onChange }
                       </div>
                       <div className="space-y-2">
                         <Label className="font-mono text-xs uppercase tracking-wider text-steel-grey">
+                          {t('builder.forms.experience.fields.department')}
+                        </Label>
+                        <Input
+                          value={item.department || ''}
+                          onChange={(e) => handleChange(item.id, 'department', e.target.value)}
+                          placeholder={t('builder.forms.experience.placeholders.department')}
+                          className="rounded-none border-black bg-white"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="font-mono text-xs uppercase tracking-wider text-steel-grey">
                           {t('builder.genericItemForm.fields.location')}
                         </Label>
                         <Input
@@ -297,6 +309,8 @@ export const ExperienceForm: React.FC<ExperienceFormProps> = ({ data, onChange }
                           >
                             {item.descriptionStyles?.[idx] === 'plain' ? (
                               <AlignLeft className="w-3 h-3" />
+                            ) : item.descriptionStyles?.[idx] === 'label' ? (
+                              <Heading className="w-3 h-3" />
                             ) : (
                               <List className="w-3 h-3" />
                             )}

@@ -9,6 +9,8 @@ import { getSortedSections, getSectionMeta } from '@/lib/utils/section-helpers';
 import { formatDateRange } from '@/lib/utils';
 import { DynamicResumeSection } from './dynamic-resume-section';
 import { DescriptionList } from './description-list';
+import { stripPointMarker } from './list-format';
+import { PointTextList } from './point-text-list';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/modern-two-column.module.css';
 
@@ -25,8 +27,8 @@ interface ResumeModernTwoColumnProps {
  * Two-column layout with modern colorful accents and customizable theme colors.
  * Combines the efficiency of two-column layout with vibrant modern design.
  *
- * Main Column (65%): Summary, Experience, Projects, Certifications/Training, Custom Sections
- * Sidebar (35%): Education, Skills, Languages, Awards, Links
+ * Main Column (65%): Summary, Experience, Projects, Custom Sections, Certifications/Training, Awards
+ * Sidebar (35%): Education, Skills, Languages, Links
  *
  * Best for professionals who want modern aesthetics with space-efficient layout.
  */
@@ -158,7 +160,7 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
         {personalInfo && (
           <div className={`${baseStyles['resume-meta']} flex flex-wrap gap-x-3 gap-y-1 mt-2`}>
             {renderContactDetail('Email', personalInfo.email, 'mailto:')}
-            {renderContactDetail('Phone', personalInfo.phone, 'tel:')}
+            {renderContactDetail('Phone', personalInfo.phone)}
             {renderContactDetail('Location', personalInfo.location)}
             {renderContactDetail('Website', personalInfo.website)}
             {renderContactDetail('LinkedIn', personalInfo.linkedin)}
@@ -177,7 +179,7 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
               <h3 className={styles.sectionTitleAccent}>
                 {getSectionDisplayName('summary', headingFallbacks.summary)}
               </h3>
-              <p className={`text-justify ${baseStyles['resume-text']}`}>{summary}</p>
+              <PointTextList text={summary} />
             </div>
           )}
 
@@ -293,6 +295,8 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
                         items={project.description}
                         styles={project.descriptionStyles}
                         textClassName={baseStyles['resume-text-xs']}
+                        canonicalizeLabels
+                        flushLabels
                       />
                     </div>
                   ))}
@@ -300,7 +304,12 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
               </div>
             )}
 
-          {/* Certifications/Training - Main column */}
+          {/* Custom Sections - Main column */}
+          {customSections.map((section) => (
+            <DynamicResumeSection key={section.id} sectionMeta={section} resumeData={data} />
+          ))}
+
+          {/* Certifications/Training - Main column, after every custom section */}
           {isSectionVisible('additional') && certificationsTraining.length > 0 && (
             <div className={baseStyles['resume-section']}>
               <h3 className={styles.sectionTitleAccent}>{headingFallbacks.certifications}</h3>
@@ -308,17 +317,27 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
                 {certificationsTraining.map((cert, index) => (
                   <li key={index} className="flex">
                     <span className="mr-1.5 flex-shrink-0">•&nbsp;</span>
-                    <span>{cert}</span>
+                    <span>{stripPointMarker(cert)}</span>
                   </li>
                 ))}
               </ul>
             </div>
           )}
 
-          {/* Custom Sections - Main column */}
-          {customSections.map((section) => (
-            <DynamicResumeSection key={section.id} sectionMeta={section} resumeData={data} />
-          ))}
+          {/* Awards - Main column, directly after certifications/training */}
+          {isSectionVisible('additional') && awards.length > 0 && (
+            <div className={baseStyles['resume-section']}>
+              <h3 className={styles.sectionTitleAccent}>{headingFallbacks.awards}</h3>
+              <ul className={`ml-4 ${baseStyles['resume-list']} ${baseStyles['resume-text-xs']}`}>
+                {awards.map((award, index) => (
+                  <li key={index} className="flex">
+                    <span className="mr-1.5 flex-shrink-0">•&nbsp;</span>
+                    <span>{stripPointMarker(award)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Sidebar Column - Right */}
@@ -370,7 +389,7 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
               <div className="flex flex-wrap gap-1">
                 {technicalSkills.map((skill, index) => (
                   <span key={index} className={baseStyles['resume-skill-pill']}>
-                    {skill}
+                    {stripPointMarker(skill)}
                   </span>
                 ))}
               </div>
@@ -386,24 +405,6 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
                 {headingFallbacks.languages}
               </h3>
               <p className={baseStyles['resume-text-xs']}>{languages.join(' • ')}</p>
-            </div>
-          )}
-
-          {/* Awards Section */}
-          {isSectionVisible('additional') && awards.length > 0 && (
-            <div className={baseStyles['resume-section']}>
-              <h3
-                className={`${baseStyles['resume-section-title-sm']} text-[var(--resume-accent-primary)]`}
-              >
-                {headingFallbacks.awards}
-              </h3>
-              <ul className={baseStyles['resume-list']}>
-                {awards.map((award, index) => (
-                  <li key={index} className={baseStyles['resume-text-xs']}>
-                    {award}
-                  </li>
-                ))}
-              </ul>
             </div>
           )}
 

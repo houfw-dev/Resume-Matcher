@@ -144,6 +144,63 @@ These paths are rejected by the applier regardless of what the LLM outputs:
 | `customSections.*` | Protected separately |
 | `education[*].*` | Rarely relevant to tailoring. Note: `education[*].description` could benefit from coursework rephrasing in some cases — this is a deliberate design choice to keep education immutable for now. Can be revisited if users request it. |
 
+### 3.5 Assertive three-place skill loop (`elaborate_skill`, `insert_row`)
+
+The keywords/full strategies must visibly reflect every JD-core technology the
+candidate can substantiate in **three** places. Two additional actions make
+this deterministic; `nudge` never emits them.
+
+| Action | Path | What it does | Deterministic gates (in `apply_diffs`) |
+|---|---|---|---|
+| `add_skill` | `additional.technicalSkills` | Add a verified target as a **proficiency-positioned sentence** (`熟悉 Kafka 高吞吐事件流……` / `Familiar with Kubernetes…`) matching the resume's existing style | Verified-target allow-list; sentence MUST open with a proficiency marker (`_starts_with_proficiency_marker`: 精通/深入理解/熟练掌握·使用·运用/熟悉/了解/具备 or Expert in/Proficient in/Familiar with/Working knowledge of…); a `"Name: detail"` label prefix and bare names are rejected; names at most two verified techs (`_skills_named_in_entry`, longest-match drops substrings); single line ≤ 90 CJK / 160 Latin chars; no new digits; duplicate rejected when the tech is already listed in **any** form — bare entry, elaborated entry, marker sentence, or embedded in a category/group row (`_skill_already_listed`, boundary-aware term scan); reorder salvage applies the same check |
+| `elaborate_skill` | `additional.technicalSkills[i]` | Expand a bare single-tech entry in place, in one of two forms: legacy `"Name：核心能力描述"` OR a proficiency-first sentence naming the bare tech (`熟练掌握 Redis 核心数据结构……`) | The current entry must be a verified bare single-tech line (category rows with `、`/`:`/`：` rejected); the new text must contain the current name as a whole bounded term; at most two verified techs named; no new digits/versions/years; ≤ two-line budget; rejected when another entry already elaborates the same tech (prefix form or marker sentence) |
+| `insert_row` | `personalProjects[i].description` with `anchor: "tech_stack" \| "highlight"` | Insert one row into the project's 技术栈 / 项目亮点 sub-module, auto-creating a canonical localized bold label when the region is missing | `tech_stack`: bare verified tech name only (≤ 40 chars, no separator punctuation, no digits); rejected when the **stack region** already lists it on its own row, inside a combined row (`Kafka、RocketMQ`), or qualified (`Kafka（消息队列）`), AND when the project's own narrative rows do not already name the technology (`_project_mentions_tech` — a mention in another project or only in global skills is not evidence). `highlight`: one digit-free sentence naming a verified tech, accepted only when `_highlight_rejection_reason` passes three conditions: (1) a named tech appears in THAT project's existing rows; (2) the bullet reuses ≥ 2 of the project's own **distinctive scenario tokens** (`_distinctive_scenario_tokens`: Latin ≥3-char terms + CJK bigrams, minus tech names and a resume-boilerplate stop table — 提升/性能/保障/系统/服务/高效/稳定…), so generic filler any Kafka project could carry is rejected; (3) no existing row shares ≥ 2 tokens making up ≥ 50 % of the new bullet (restatement — the model should `replace` that row instead). The same tech may anchor bullets about genuinely different scenarios that are already visible in the project's text. Exact whole-row duplicates are always rejected. All checks are region- and project-scoped, and also see rows inserted earlier in the same batch |
+
+`ResumeChange` gained `anchor: Literal["tech_stack","highlight"] | None`,
+valid only on `insert_row` (Pydantic rejects every other combination).
+
+Planner prompt constraint: `SKILL_TARGET_PLAN_PROMPT` must stay short and
+imperative. Even with `response_format: json_object`, a verbose multi-paragraph
+brief made DeepSeek-style models emit chain-of-thought prose instead of JSON;
+the router catches the planner's parse failure and continues with an EMPTY
+verified-target list, which silently zeroes every `add_skill`/`insert_row`
+gate (symptom: the review modal shows all-zero change counts). Keep rules as
+terse numbered lines; `test_prompt_guardrails.py` locks the JSON-first shape.
+
+Downstream contracts:
+
+- `calculate_resume_diff` pairs a removed bare skill with its elaboration into
+  a single high-confidence `modified` skill change: first prefix + boundary
+  match, then a fallback that pairs a bare removed entry with an added
+  proficiency sentence naming it as a bounded term (one-to-one, greedy on
+  `difflib` ratio with a 0.15 floor — the bounded-name match carries the
+  evidence, since the add_skill gate forbids a second entry for a listed tech).
+- `finalize_ai_resume(..., approved_appended_rows=set[str] | None)` accepts an
+  **opt-in** approval channel: normalized `insert_row` texts (and auto-created
+  sub-module labels) survive at their model positions without consuming source
+  rows; the default `None` path stays byte-identical for the refiner and
+  fine-tune. A later LLM rewrite that introduces a digit into an approved row
+  voids the exemption and sends it through the ordinary gates.
+- `_merge_additional` and `_preserve_original_skills` treat a bare source
+  skill as preserved when an entry covers it via prefix+boundary OR the bare
+  name appears as a bounded term anywhere in the entry (marker-first
+  rewrites); category source rows (`、`/`：`) keep the strict prefix rule, so
+  a single-tech sentence never drops a whole group row. Elaborations are
+  never force-restored as duplicate bare names.
+- `validate_confirmed_resume(..., approved_project_rows=...)` understands the
+  same exempt rows (project sections only).
+- The confirm endpoint trusts no client metadata: because the payload is
+  bound to the registered preview hash, `approved_preview_project_rows()`
+  re-derives the set structurally (digit-free extras inside labeled
+  tech-stack/highlight regions; bare-name restrictions re-checked for stack
+  rows). Ordinary `append` bullets keep going through the grounding gate.
+- Refiner master alignment treats both `"Name: detail"` and proficiency-first
+  sentences as allowed JD/master skills when the bare name is allowed or
+  already present (`_skill_is_elaboration_of`, prefix-boundary or bounded
+  mid-sentence term via `_keyword_in_text`). `KEYWORD_INJECTION_PROMPT`
+  instructs the model to preserve elaborated entries, inserted rows, labels
+  and aligned `descriptionStyles`.
+
 ---
 
 ## 4. Diff Applier

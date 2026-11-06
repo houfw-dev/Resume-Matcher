@@ -72,7 +72,10 @@ interface TemplateSettings {
 3. Work Experience
 4. Projects
 5. Education
-6. Additional (skills, languages, certs, awards)
+6. Additional — skills only (languages also appear here as a labeled line in modern/latex/clean; swiss-single puts languages only in the header fact grid)
+7. Custom-section cluster, then the render-only late modules **培训与证书 / 荣誉奖项** (independent titled sections; data stays in `additional.certificationsTraining` / `additional.awards`, projected after custom sections by `getRenderSections` — no meta rows, not persisted; in the two-column templates both modules render at the end of the main column and the sidebar no longer shows awards), then honors / self-evaluation
+
+The degree-based canonical sequences (formal places education second; the other branch parks it after the late modules) and the exact anchor rules live in [custom-sections.md](../features/custom-sections.md).
 
 ## ResumeData Schema
 

@@ -28,8 +28,17 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
 from app.db_engine import init_models_sync, make_async_engine, make_sync_engine
-from app.models import ApiKey, Application, Improvement, Job, Resume, TailoringPreview
+from app.models import (
+    ApiKey,
+    Application,
+    FineTunePreview,
+    Improvement,
+    Job,
+    Resume,
+    TailoringPreview,
+)
 from app.preview import (
+    FineTuneClaim,
     PreviewBusyError,
     PreviewClaim,
     PreviewConflictError,
@@ -472,6 +481,18 @@ class Database:
             await session.execute(
                 delete(TailoringPreview).where(TailoringPreview.source_id == resume_id)
             )
+            fine_tune_consumed = await session.execute(
+                select(FineTunePreview).where(
+                    FineTunePreview.result_resume_id == resume_id,
+                )
+            )
+            for preview in fine_tune_consumed.scalars():
+                preview.response_data = None
+            await session.execute(
+                delete(FineTunePreview).where(
+                    FineTunePreview.source_id == resume_id
+                )
+            )
             await session.delete(row)
             await session.commit()
             return True
@@ -773,6 +794,198 @@ class Database:
             )
             preview.response_data = result
             preview.result_resume_id = row.resume_id
+            preview.claim_token = None
+            preview.claim_expires_at = None
+            await session.commit()
+            return result
+
+    # -- Fine-tune preview and confirmation operations ----------------------
+
+    async def register_fine_tune_preview(
+        self,
+        *,
+        source_id: str,
+        scope_kind: str,
+        scope_targets: list[str],
+        instruction: str,
+        payload_hash: str,
+        source_hash: str,
+        prompt_id: str | None,
+        ttl_seconds: int,
+        response_data: dict[str, Any],
+    ) -> dict[str, str]:
+        """Persist a fine-tune preview snapshot; reuse identical active rows."""
+        now = _now()
+        expires_at = (
+            datetime.fromisoformat(now) + timedelta(seconds=ttl_seconds)
+        ).isoformat()
+        async with self._write_session() as session:
+            source = await session.get(Resume, source_id)
+            if source is None:
+                raise PreviewConflictError("Resume was deleted. Please retry.")
+            if (
+                resume_fingerprint(
+                    source.content, source.processed_data, source.original_markdown
+                )
+                != source_hash
+            ):
+                raise PreviewConflictError(
+                    "Resume changed. Please retry preview."
+                )
+            await session.execute(
+                delete(FineTunePreview).where(
+                    FineTunePreview.expires_at <= now,
+                    FineTunePreview.result_resume_id.is_(None),
+                    or_(
+                        FineTunePreview.claim_token.is_(None),
+                        FineTunePreview.claim_expires_at <= now,
+                    ),
+                )
+            )
+            existing = (
+                await session.execute(
+                    select(FineTunePreview)
+                    .where(
+                        FineTunePreview.source_id == source_id,
+                        FineTunePreview.payload_hash == payload_hash,
+                        FineTunePreview.result_resume_id.is_(None),
+                        FineTunePreview.expires_at > now,
+                    )
+                    .order_by(FineTunePreview.created_at.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                existing.response_data = copy.deepcopy(response_data)
+                existing.scope_kind = scope_kind
+                existing.scope_targets = copy.deepcopy(scope_targets)
+                existing.instruction = instruction
+                existing.expires_at = expires_at
+                await session.commit()
+                return {
+                    "preview_id": existing.preview_id,
+                    "expires_at": existing.expires_at,
+                }
+            row = FineTunePreview(
+                preview_id=str(uuid4()),
+                source_id=source_id,
+                scope_kind=scope_kind,
+                scope_targets=copy.deepcopy(scope_targets),
+                instruction=instruction,
+                payload_hash=payload_hash,
+                source_hash=source_hash,
+                prompt_id=prompt_id,
+                created_at=now,
+                expires_at=expires_at,
+                response_data=copy.deepcopy(response_data),
+            )
+            session.add(row)
+            await session.commit()
+        return {"preview_id": row.preview_id, "expires_at": row.expires_at}
+
+    async def claim_fine_tune_preview(
+        self,
+        *,
+        preview_id: str,
+        source_id: str,
+        payload_hash: str,
+        lease_seconds: int,
+    ) -> FineTuneClaim:
+        """Bind a fine-tune confirmation to its preview with an exclusive lease."""
+        async with self._write_session() as session:
+            row = await session.get(FineTunePreview, preview_id)
+            if row is None or row.source_id != source_id:
+                raise PreviewValidationError(
+                    "Preview required before confirmation. Please retry preview."
+                )
+            if row.payload_hash != payload_hash:
+                raise PreviewValidationError(
+                    "Invalid fine-tuned resume data. Please retry preview."
+                )
+            now = _now()
+            source = await session.get(Resume, source_id)
+            if source is None:
+                raise PreviewConflictError("Resume was deleted. Please retry.")
+            if (
+                resume_fingerprint(
+                    source.content, source.processed_data, source.original_markdown
+                )
+                != row.source_hash
+            ):
+                raise PreviewConflictError(
+                    "Resume changed after preview. Please retry preview."
+                )
+            if row.result_resume_id is not None:
+                if (
+                    row.response_data is None
+                    or await session.get(Resume, row.result_resume_id) is None
+                ):
+                    raise PreviewConflictError(
+                        "Confirmed resume was deleted. Please retry preview."
+                    )
+                return FineTuneClaim(
+                    row.preview_id,
+                    response=copy.deepcopy(row.response_data),
+                    completed=True,
+                )
+            if row.expires_at <= now:
+                raise PreviewConflictError("Preview expired. Please retry preview.")
+            if (
+                row.claim_token
+                and row.claim_expires_at
+                and row.claim_expires_at > now
+            ):
+                raise PreviewBusyError(
+                    "Confirmation is already in progress. Please retry shortly."
+                )
+            row.claim_token = str(uuid4())
+            row.claim_expires_at = (
+                datetime.fromisoformat(now) + timedelta(seconds=lease_seconds)
+            ).isoformat()
+            await session.commit()
+            return FineTuneClaim(
+                row.preview_id,
+                token=row.claim_token,
+                response=copy.deepcopy(row.response_data),
+            )
+
+    async def release_fine_tune_preview_claim(self, claim: FineTuneClaim) -> None:
+        """Release an uncommitted fine-tune claim, including on cancellation."""
+        if not claim.token:
+            return
+        async with self._write_session() as session:
+            row = await session.get(FineTunePreview, claim.preview_id)
+            if row is not None and claim.token and row.claim_token == claim.token:
+                row.claim_token = None
+                row.claim_expires_at = None
+                await session.commit()
+
+    async def complete_fine_tune_preview(
+        self,
+        *,
+        claim: FineTuneClaim,
+        result_resume_id: str | None,
+        response_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Store the committed confirmation snapshot and release the lease."""
+        async with self._write_session() as session:
+            preview = await session.get(FineTunePreview, claim.preview_id)
+            now = _now()
+            if (
+                preview is None
+                or not claim.token
+                or preview.claim_token != claim.token
+                or not preview.claim_expires_at
+                or preview.claim_expires_at <= now
+            ):
+                raise PreviewConflictError(
+                    "Confirmation ownership expired. Please retry preview."
+                )
+            result = copy.deepcopy(response_data)
+            if result_resume_id is not None:
+                result["resume_id"] = result_resume_id
+            preview.response_data = result
+            preview.result_resume_id = result_resume_id
             preview.claim_token = None
             preview.claim_expires_at = None
             await session.commit()
@@ -1229,6 +1442,7 @@ class Database:
         """
         async with self._write_session() as session:
             await session.execute(delete(TailoringPreview))
+            await session.execute(delete(FineTunePreview))
             await session.execute(delete(Application))
             await session.execute(delete(Improvement))
             await session.execute(delete(Job))

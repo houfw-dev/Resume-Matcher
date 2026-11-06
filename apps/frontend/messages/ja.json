@@ -187,14 +187,19 @@
       "unknownSectionType": "不明なセクションタイプ：{type}",
       "unknownDefaultSection": "不明なデフォルトセクション：{section}"
     },
+    "sectionOrder": {
+      "lockedNotice": "セクションの順序は固定されており、並べ替えできません"
+    },
     "sectionHeader": {
       "renameSection": "セクション名を変更",
+      "titleLocked": "既定のセクション名は変更できません",
+      "duplicateNameError": "「{name}」という名前のセクションはすでに存在します",
+      "reservedNameError": "「{name}」は既定のセクション名です",
+      "nameRequiredError": "セクション名を入力してください",
       "customTag": "カスタム",
       "hiddenFromPdfTag": "PDFに含めない",
       "hideSection": "セクションを非表示",
       "showSection": "セクションを表示",
-      "moveUp": "上へ移動",
-      "moveDown": "下へ移動",
       "deleteSection": "セクションを削除",
       "deleteTitle": "セクションを削除",
       "deleteDescription": "「{name}」を削除しますか？この操作は元に戻せません。"
@@ -329,7 +334,7 @@
         "title": "タイトル",
         "organization": "組織",
         "location": "場所",
-        "years": "2020年1月 - 現在",
+        "years": "2020.03~至今",
         "description": "あなたの貢献を説明..."
       },
       "noEntries": "// {label} の項目はありません",
@@ -341,13 +346,15 @@
         "addFirstJob": "最初の職歴を追加",
         "fields": {
           "jobTitle": "職種",
-          "company": "会社"
+          "company": "会社",
+          "department": "部署"
         },
         "placeholders": {
           "jobTitle": "シニアエンジニア",
           "company": "Tech Corp",
+          "department": "例：技術部",
           "location": "リモート / 都市",
-          "years": "2020年1月 - 現在",
+          "years": "2020.03~至今",
           "description": "実績を説明..."
         }
       },
@@ -363,7 +370,7 @@
         "placeholders": {
           "institution": "大学名",
           "degree": "学士（理学）",
-          "years": "2016年8月 - 2020年5月",
+          "years": "2016.08~2020.05",
           "description": "追加の詳細..."
         }
       },
@@ -373,12 +380,14 @@
         "fields": {
           "projectName": "プロジェクト名",
           "role": "役割",
+          "scale": "プロジェクト規模",
           "website": "Webサイト"
         },
         "placeholders": {
           "projectName": "Resume Matcher",
           "role": "作成者",
-          "years": "2023年3月",
+          "years": "2023.03",
+          "scale": "例：10人チーム",
           "github": "github.com/username/project",
           "website": "https://project-demo.com",
           "description": "プロジェクト詳細..."
@@ -466,6 +475,10 @@
       "placeholders": {
         "name": "山田 太郎",
         "title": "ソフトウェアエンジニア",
+        "gender": "男",
+        "age": "28歳",
+        "educationLevel": "学士",
+        "workYears": "5年",
         "email": "taro@example.com",
         "phone": "+81 90-0000-0000",
         "location": "都市、国",
@@ -803,6 +816,7 @@
     "returnToDashboard": "ダッシュボードに戻る",
     "enhanceResume": "履歴書を強化",
     "downloadResume": "履歴書をダウンロード",
+    "downloadWord": "Wordをダウンロード",
     "deletedTitle": "履歴書を削除しました",
     "deletedDescriptionMaster": "マスター履歴書はシステムから完全に削除されました。",
     "deletedDescriptionRegular": "履歴書はシステムから完全に削除されました。",
@@ -819,7 +833,8 @@
     },
     "titlePlaceholder": "履歴書のタイトルを入力...",
     "downloadFailedTitle": "ダウンロードに失敗しました",
-    "renameFailedTitle": "名前の変更に失敗しました"
+    "renameFailedTitle": "名前の変更に失敗しました",
+    "diagnoseResume": "履歴書を診断"
   },
   "preview": {
     "margins": "余白",
@@ -834,9 +849,16 @@
     "personalInfo": {
       "name": "氏名",
       "title": "職種",
+      "gender": "性別",
+      "age": "年齢",
+      "educationLevel": "学歴",
+      "workYears": "実務年数",
+      "jobIntention": "希望職種",
+      "desiredCity": "希望勤務地",
       "email": "メールアドレス",
       "phone": "電話番号",
       "location": "所在地",
+      "foreignLanguage": "語学スキル",
       "website": "ウェブサイト",
       "linkedin": "LinkedIn",
       "github": "GitHub"
@@ -852,7 +874,8 @@
       "certifications": "研修・資格",
       "languages": "言語",
       "awards": "受賞歴",
-      "links": "リンク"
+      "links": "リンク",
+      "selfIntroduction": "自己紹介"
     },
     "defaults": {
       "name": "あなたの名前"
@@ -1113,6 +1136,162 @@
       "projectFollowUps": "プロジェクト深掘り質問",
       "skillGaps": "スキルギャップ",
       "talkingPoints": "話すべき要点"
+    }
+  },
+  "diagnosis": {
+    "title": "履歴書診断",
+    "subtitle": "V4 ルーブリックのチェックリスト：項目ごとの判定とレッドライン結果。",
+    "loading": "チェックリストを実行中——意味項目の AI レビューには数分かかる場合があります……",
+    "measuringLayout": "選択したテンプレートでレイアウトを測定中…",
+    "layoutSkipped": "レイアウト測定を利用できません。ページ数と段落密度はテキストから推定されます。",
+    "error": "診断に失敗しました。もう一度お試しください。",
+    "intro": "このレポートは決定論的チェックと 1 回の構造化 AI レビューを組み合わせます。任意で応募先の職務記述を貼り付けると、適合度項目も評価します。",
+    "jobDescriptionLabel": "応募先の職務記述（任意）",
+    "jobDescriptionPlaceholder": "職務記述を貼り付けて適合度チェックを有効化……",
+    "jdHint": "職務記述（JD）がない場合、職務適合度の項目は非適用として扱われます。役割コンピテンシー5項目は JD 不要ですが、職級モデルに一致する（または明示的に選択した）明確な志望意向が必要で、それがない場合は非適用となります。",
+    "run": "診断を開始",
+    "rerun": "再診断",
+    "specVersion": "ルーブリック {version}",
+    "redlinePassed": "すべてのレッドライン項目を通過しました。",
+    "redlineFailed": "不合格のレッドラインがあります。このまま提出しないでください：",
+    "dimensionsTitle": "軸別の結果",
+    "itemsTitle": "チェック詳細",
+    "filterAll": "すべて",
+    "filterProblems": "問題のみ",
+    "allConform": "すべての項目が適合または非適用です。",
+    "evidenceLabel": "問題点",
+    "suggestionLabel": "改善アクション",
+    "rating": {
+      "conform": "適合",
+      "partial": "部分的",
+      "nonconform": "不適合",
+      "na": "非適用"
+    },
+    "severity": {
+      "redline": "レッドライン"
+    },
+    "method": {
+      "objective": "自動",
+      "subjective": "AI"
+    },
+    "downloadWord": "Word 文書をダウンロード",
+    "downloadFailed": "ダウンロードに失敗しました。もう一度お試しください。",
+    "fileStem": "履歴書診断レポート",
+    "targetLabel": "診断対象ポジション",
+    "targetEmptyHint": "希望職種が未記入のため、履歴書全体を対象に診断します。",
+    "targetChooseHint": "複数の希望職種が見つかりました。この診断の対象ポジションを選択してください：",
+    "targetValue": "診断対象ポジション：{title}",
+    "competencyValue": "コンピテンシーモデル：{name}",
+    "countsLabel": "チェック結果",
+    "countsSummary": "適用 {effective} 項目 —— 適合 {conform}、部分的 {partial}、不適合 {nonconform}；非適用 {na}。",
+    "modelLabel": "職務能力モデル",
+    "modelLoading": "能力モデルを読み込み中……",
+    "modelLoadError": "能力モデルを読み込めませんでした。基本チェックリストで診断できます。",
+    "modelMatchedHint": "対象ポジションに自動一致：{name}。レベルを変更するか、モデルなしで実行できます。",
+    "modelNoMatchHint": "対象ポジションに一致する能力モデルがありません。手動で選択するか、モデルなしで実行してください。",
+    "modelNone": "能力モデルを使用しない",
+    "workspace": {
+      "cta": "履歴書診断",
+      "dropzoneHint": "PDF / DOCX / DOC（4MB以下）— 解析後に自動で診断が始まります",
+      "parsing": "アップロードした履歴書を解析中…",
+      "diagnosing": "チェックリストを実行中。AIによる確認には数分かかる場合があります…",
+      "parseFailed": "この履歴書の解析に失敗しました。再解析、削除、または別のファイルをアップロードしてください。",
+      "paneResume": "アップロードした履歴書",
+      "paneReport": "診断レポート",
+      "structuredTab": "履歴書",
+      "originalTab": "原文",
+      "resizeHint": "ドラッグしてペイン幅を調整",
+      "hideLeft": "履歴書ペインを非表示",
+      "showLeft": "履歴書ペインを表示",
+      "hideRight": "レポートペインを非表示",
+      "showRight": "レポートペインを表示",
+      "deleteResume": "履歴書を削除",
+      "deleteConfirmTitle": "この履歴書を削除しますか？",
+      "deleteConfirmDescription": "アップロードした履歴書と解析データは完全に削除されます。診断レポートはエクスポート後にのみ保存されます。",
+      "backToUpload": "別のファイルをアップロード",
+      "jdToggle": "職務記述書（JD）を使って再診断",
+      "jdRun": "JDで再実行",
+      "exporting": "エクスポート中…"
+    }
+  },
+  "fineTune": {
+    "buttonLabel": "AI微調整",
+    "sectionButtonLabel": "このセクションを微調整",
+    "generating": {
+      "title": "履歴書を微調整しています…",
+      "body": "AIが選択した内容を再構成して磨き上げています。数分かかる場合があります。"
+    },
+    "dialog": {
+      "title": "AI微調整",
+      "subtitle": "元のアップロード内容と解析済み履歴書を使って論理と強調点を改善します。新しい事実は創作しません。",
+      "scopeAll": "履歴書全体",
+      "scopeAllHint": "すべてのモジュールを一貫した文書として再構成し強化します。",
+      "scopeModules": "選択したモジュール",
+      "scopeModulesHint": "選択したモジュールと項目のみ変更され、その他はそのまま残ります。",
+      "modules": {
+        "summary": "要約",
+        "workExperience": "職務経歴",
+        "education": "学歴",
+        "personalProjects": "プロジェクト",
+        "additional": "スキルとその他",
+        "customSections": "カスタムセクション"
+      },
+      "selectEntries": "{module}の項目を選択",
+      "selectRegions": "{module}のサブモジュールを選択",
+      "regions": {
+        "techStack": "使用技術",
+        "background": "プロジェクト概要",
+        "duties": "担当業務",
+        "highlights": "主な成果",
+        "achievements": "実績",
+        "role": "役割"
+      },
+      "selectAtLeastOne": "モジュールを1つ以上選択してください。",
+      "instructionLabel": "指示（任意）",
+      "instructionPlaceholder": "例：実績を数値化し、最もインパクトのある経験を先頭にし、表現を簡潔にする。",
+      "cancel": "キャンセル",
+      "generate": "プレビューを生成"
+    },
+    "preview": {
+      "title": "微調整プレビュー",
+      "subtitle": "保存前に微調整結果を確認してください。",
+      "highlightHint": "枠線で囲まれたモジュールが選択範囲です。",
+      "tabRendered": "表示",
+      "tabChanges": "変更点",
+      "warningsTitle": "要確認",
+      "groundingWarning": "確認できない記述をレビュー用に残しました：{detail}",
+      "ignoredTarget": "範囲外の選択を無視しました：{target}",
+      "diffUnavailable": "詳細な変更リストは一時的に利用できません。表示プレビューで比較してください。",
+      "relocationHint": "選択したモジュールに、受賞歴・資格・言語など本来は別セクションに属する項目が含まれています。「全体微調整」で再生成すると、正しいセクションへ自動で移動できます。",
+      "changesCount": "変更 {count} 件",
+      "descriptionsModified": "説明 {count} 件を変更",
+      "skillsAdded": "スキル {count} 件を追加",
+      "skillsRemoved": "スキル {count} 件を削除",
+      "noChanges": "テキストの変更は検出されませんでした。",
+      "originalLabel": "変更前",
+      "newLabel": "変更後",
+      "changeAdded": "追加",
+      "changeRemoved": "削除",
+      "changeModified": "変更",
+      "cancel": "キャンセル",
+      "overwrite": "元の履歴書を上書き",
+      "saveCopy": "コピーとして保存",
+      "createCopy": "コピーを作成",
+      "copyTitleLabel": "コピーのタイトル",
+      "copyTitlePlaceholder": "微調整コピーのタイトル",
+      "applying": "適用中…",
+      "overwriteConfirmTitle": "この履歴書を上書きしますか？",
+      "overwriteConfirmBody": "構造化データが微調整版に置き換えられます。元のアップロードテキストは保持され、再度微調整できますが、この操作は元に戻せません。現在のバージョンを残すには「コピーとして保存」を選んでください。",
+      "regionAppendDropped": "サブモジュールの調整では元の行数を維持します。モデルが追加した行は反映されませんでした。"
+    },
+    "toast": {
+      "overwritten": "履歴書が微調整版に更新されました。"
+    },
+    "errors": {
+      "networkError": "微調整中にネットワークエラーが発生しました。もう一度お試しください。",
+      "resumeChanged": "プレビュー生成後に履歴書が変更されました。新しくプレビューを生成してください。",
+      "generationFailed": "微調整に失敗しました。もう一度お試しください。",
+      "confirmFailed": "微調整した履歴書を保存できませんでした。もう一度お試しください。"
     }
   }
 }

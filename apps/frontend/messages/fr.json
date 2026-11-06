@@ -187,14 +187,19 @@
       "unknownSectionType": "Type de section inconnu : {type}",
       "unknownDefaultSection": "Section par défaut inconnue : {section}"
     },
+    "sectionOrder": {
+      "lockedNotice": "L'ordre des sections est fixe et ne peut pas être modifié"
+    },
     "sectionHeader": {
       "renameSection": "Renommer la section",
+      "titleLocked": "Les titres des sections par défaut sont verrouillés",
+      "duplicateNameError": "Une section nommée « {name} » existe déjà",
+      "reservedNameError": "« {name} » est un nom de section par défaut",
+      "nameRequiredError": "Le nom de la section ne peut pas être vide",
       "customTag": "Personnalisée",
       "hiddenFromPdfTag": "Masquée du PDF",
       "hideSection": "Masquer la section",
       "showSection": "Afficher la section",
-      "moveUp": "Déplacer vers le haut",
-      "moveDown": "Déplacer vers le bas",
       "deleteSection": "Supprimer la section",
       "deleteTitle": "Supprimer la section",
       "deleteDescription": "Êtes-vous sûr de vouloir supprimer \"{name}\" ? Cette action est irréversible."
@@ -341,11 +346,13 @@
         "addFirstJob": "Ajouter le premier emploi",
         "fields": {
           "jobTitle": "Intitulé du poste",
-          "company": "Entreprise"
+          "company": "Entreprise",
+          "department": "Département"
         },
         "placeholders": {
           "jobTitle": "Développeur senior",
           "company": "Tech Corp",
+          "department": "p. ex., Département Ingénierie",
           "location": "Télétravail / Ville",
           "years": "Janv. 2020 - Présent",
           "description": "Décrivez votre réalisation..."
@@ -373,12 +380,14 @@
         "fields": {
           "projectName": "Nom du projet",
           "role": "Rôle",
+          "scale": "Taille du projet",
           "website": "Site web"
         },
         "placeholders": {
           "projectName": "Resume Matcher",
           "role": "Créateur",
           "years": "Mars 2023",
+          "scale": "ex. : équipe de 10 personnes",
           "github": "github.com/utilisateur/projet",
           "website": "https://demo-projet.com",
           "description": "Détail du projet..."
@@ -466,6 +475,10 @@
       "placeholders": {
         "name": "Jean Dupont",
         "title": "Ingénieur logiciel",
+        "gender": "Homme",
+        "age": "28 ans",
+        "educationLevel": "Licence",
+        "workYears": "5 ans",
         "email": "jean@example.com",
         "phone": "+33 6 00 00 00 00",
         "location": "Ville, Pays",
@@ -803,6 +816,7 @@
     "returnToDashboard": "Retourner au tableau de bord",
     "enhanceResume": "Améliorer le CV",
     "downloadResume": "Télécharger le CV",
+    "downloadWord": "Télécharger Word",
     "deletedTitle": "CV supprimé",
     "deletedDescriptionMaster": "Votre CV principal a été définitivement supprimé du système.",
     "deletedDescriptionRegular": "Le CV a été définitivement supprimé du système.",
@@ -819,7 +833,8 @@
     },
     "titlePlaceholder": "Saisissez le titre du CV...",
     "downloadFailedTitle": "Échec du téléchargement",
-    "renameFailedTitle": "Échec du renommage"
+    "renameFailedTitle": "Échec du renommage",
+    "diagnoseResume": "Diagnostiquer le CV"
   },
   "preview": {
     "margins": "Marges",
@@ -834,9 +849,16 @@
     "personalInfo": {
       "name": "Nom complet",
       "title": "Intitulé du poste",
+      "gender": "Sexe",
+      "age": "Âge",
+      "educationLevel": "Formation",
+      "workYears": "Années d'expérience",
+      "jobIntention": "Objectif professionnel",
+      "desiredCity": "Ville souhaitée",
       "email": "E-mail",
       "phone": "Téléphone",
       "location": "Lieu",
+      "foreignLanguage": "Langues étrangères",
       "website": "Site web",
       "linkedin": "LinkedIn",
       "github": "GitHub"
@@ -852,7 +874,8 @@
       "certifications": "Formation et certifications",
       "languages": "Langues",
       "awards": "Récompenses",
-      "links": "Liens"
+      "links": "Liens",
+      "selfIntroduction": "Présentation personnelle"
     },
     "defaults": {
       "name": "Votre nom"
@@ -1113,6 +1136,162 @@
       "projectFollowUps": "Questions de suivi sur les projets",
       "skillGaps": "Écarts de compétences",
       "talkingPoints": "Arguments clés"
+    }
+  },
+  "diagnosis": {
+    "title": "Diagnostic du CV",
+    "subtitle": "Check-list du barème V4 : verdict par critère et résultat des lignes rouges.",
+    "loading": "Exécution de la check-list — l'analyse IA des éléments sémantiques peut prendre quelques minutes…",
+    "measuringLayout": "Mesure de la pagination avec le modèle sélectionné…",
+    "layoutSkipped": "Mesure de la mise en page indisponible — le nombre de pages et la densité des paragraphes sont estimés à partir du texte.",
+    "error": "Échec du diagnostic. Veuillez réessayer.",
+    "intro": "Le rapport combine des contrôles déterministes avec une revue IA structurée. Collez éventuellement la description du poste cible pour également évaluer l'adéquation au poste.",
+    "jobDescriptionLabel": "Description du poste cible (facultatif)",
+    "jobDescriptionPlaceholder": "Collez la description du poste pour activer les critères d'adéquation…",
+    "jdHint": "Sans description de poste, le critère d'adéquation au poste est marqué non applicable. Les 5 critères de compétences du rôle ne nécessitent pas de fiche de poste, mais exigent une intention professionnelle claire correspondant à un modèle de niveau (ou sélectionné explicitement) ; sinon, ils sont marqués non applicables.",
+    "run": "Lancer le diagnostic",
+    "rerun": "Relancer",
+    "specVersion": "Barème {version}",
+    "redlinePassed": "Tous les critères de ligne rouge sont réussis.",
+    "redlineFailed": "Des lignes rouges ne sont pas validées — n'envoyez pas ce CV en l'état :",
+    "dimensionsTitle": "Résultats par dimension",
+    "itemsTitle": "Détail des critères",
+    "filterAll": "Tout",
+    "filterProblems": "Problèmes",
+    "allConform": "Tous les critères sont conformes ou non applicables.",
+    "evidenceLabel": "Problème",
+    "suggestionLabel": "Action corrective",
+    "rating": {
+      "conform": "Conforme",
+      "partial": "Partiel",
+      "nonconform": "Non conforme",
+      "na": "N/A"
+    },
+    "severity": {
+      "redline": "Ligne rouge"
+    },
+    "method": {
+      "objective": "Auto",
+      "subjective": "IA"
+    },
+    "downloadWord": "Télécharger le document Word",
+    "downloadFailed": "Échec du téléchargement. Veuillez réessayer.",
+    "fileStem": "rapport-diagnostic-cv",
+    "targetLabel": "Poste visé",
+    "targetEmptyHint": "Aucune intention professionnelle renseignée — le CV est diagnostiqué dans son ensemble.",
+    "targetChooseHint": "Plusieurs intentions professionnelles détectées — choisissez le poste visé pour ce diagnostic :",
+    "targetValue": "Poste visé : {title}",
+    "competencyValue": "Modèle de compétences : {name}",
+    "countsLabel": "Résultat de la check-list",
+    "countsSummary": "{effective} applicables — conforme {conform}, partiel {partial}, non conforme {nonconform} ; N/A {na}.",
+    "modelLabel": "Modèle de compétences",
+    "modelLoading": "Chargement des modèles de compétences…",
+    "modelLoadError": "Impossible de charger les modèles de compétences ; vous pouvez quand même exécuter la check-list de base.",
+    "modelMatchedHint": "Correspondance automatique avec le poste visé : {name}. Changez de niveau ou lancez sans modèle.",
+    "modelNoMatchHint": "Aucun modèle de compétences ne correspond au poste visé. Choisissez-en un pour confirmer, ou lancez sans modèle.",
+    "modelNone": "Lancer sans modèle de compétences",
+    "workspace": {
+      "cta": "Diagnostic de CV",
+      "dropzoneHint": "PDF, DOCX ou DOC jusqu'à 4 Mo — le diagnostic démarre automatiquement après l'analyse.",
+      "parsing": "Analyse du CV téléversé…",
+      "diagnosing": "Exécution de la liste de vérification ; la revue IA peut prendre quelques minutes…",
+      "parseFailed": "L'analyse de ce CV a échoué. Réessayez, supprimez-le ou téléversez un autre fichier.",
+      "paneResume": "CV téléversé",
+      "paneReport": "Rapport de diagnostic",
+      "structuredTab": "CV",
+      "originalTab": "Original",
+      "resizeHint": "Glisser pour redimensionner les panneaux",
+      "hideLeft": "Masquer le panneau CV",
+      "showLeft": "Afficher le panneau CV",
+      "hideRight": "Masquer le panneau rapport",
+      "showRight": "Afficher le panneau rapport",
+      "deleteResume": "Supprimer le CV",
+      "deleteConfirmTitle": "Supprimer ce CV ?",
+      "deleteConfirmDescription": "Le CV téléversé et ses données analysées seront définitivement supprimés. Le rapport n'est conservé qu'après export.",
+      "backToUpload": "Téléverser un autre fichier",
+      "jdToggle": "Relancer le diagnostic avec une offre d'emploi",
+      "jdRun": "Relancer avec l'offre",
+      "exporting": "Exportation…"
+    }
+  },
+  "fineTune": {
+    "buttonLabel": "Ajustement IA",
+    "sectionButtonLabel": "Ajuster cette section",
+    "generating": {
+      "title": "Ajustement de votre CV en cours…",
+      "body": "L'IA restructure et perfectionne le contenu sélectionné. Cela peut prendre quelques minutes."
+    },
+    "dialog": {
+      "title": "Ajustement IA",
+      "subtitle": "Améliorez la logique et les points forts en utilisant votre fichier d'origine et le CV analysé. Aucune information inventée.",
+      "scopeAll": "CV entier",
+      "scopeAllHint": "Restructure et renforce tous les modules en un document cohérent.",
+      "scopeModules": "Modules sélectionnés",
+      "scopeModulesHint": "Seuls les modules et entrées cochés sont modifiés ; le reste reste inchangé.",
+      "modules": {
+        "summary": "Profil",
+        "workExperience": "Expérience professionnelle",
+        "education": "Formation",
+        "personalProjects": "Projets",
+        "additional": "Compétences et supplément",
+        "customSections": "Sections personnalisées"
+      },
+      "selectEntries": "Sélectionner les entrées dans {module}",
+      "selectRegions": "Sélectionner les sous-modules de {module}",
+      "regions": {
+        "techStack": "Stack technique",
+        "background": "Contexte",
+        "duties": "Responsabilités",
+        "highlights": "Points forts",
+        "achievements": "Réalisations",
+        "role": "Rôle"
+      },
+      "selectAtLeastOne": "Sélectionnez au moins un module.",
+      "instructionLabel": "Instructions (facultatif)",
+      "instructionPlaceholder": "Ex. : quantifiez les résultats, placez l'expérience la plus marquante en premier, resserrez le texte.",
+      "cancel": "Annuler",
+      "generate": "Générer l'aperçu"
+    },
+    "preview": {
+      "title": "Aperçu de l'ajustement",
+      "subtitle": "Vérifiez le résultat ajusté avant d'enregistrer.",
+      "highlightHint": "Les modules encadrés font partie de la portée sélectionnée.",
+      "tabRendered": "Rendu",
+      "tabChanges": "Modifications",
+      "warningsTitle": "À vérifier",
+      "groundingWarning": "Affirmation non vérifiée conservée pour vérification : {detail}",
+      "ignoredTarget": "Une sélection hors champ a été ignorée : {target}",
+      "diffUnavailable": "La liste détaillée des modifications est temporairement indisponible ; comparez via l'aperçu rendu.",
+      "relocationHint": "Les sections sélectionnées contiennent des éléments relevant d'autres sections (récompenses, certificats, langues). Relancez un réglage global pour les replacer dans la bonne section.",
+      "changesCount": "{count} modifications",
+      "descriptionsModified": "{count} descriptions modifiées",
+      "skillsAdded": "{count} compétences ajoutées",
+      "skillsRemoved": "{count} compétences supprimées",
+      "noChanges": "Aucune modification textuelle détectée.",
+      "originalLabel": "Avant",
+      "newLabel": "Après",
+      "changeAdded": "Ajouté",
+      "changeRemoved": "Supprimé",
+      "changeModified": "Modifié",
+      "cancel": "Annuler",
+      "overwrite": "Remplacer l'original",
+      "saveCopy": "Enregistrer une copie",
+      "createCopy": "Créer la copie",
+      "copyTitleLabel": "Titre de la copie",
+      "copyTitlePlaceholder": "Titre de la copie ajustée",
+      "applying": "Application…",
+      "overwriteConfirmTitle": "Remplacer ce CV ?",
+      "overwriteConfirmBody": "Le contenu structuré sera remplacé par la version ajustée. Le texte de votre fichier d'origine est conservé et vous pouvez réajuster, mais cette action est irréversible. Choisissez « Enregistrer une copie » pour conserver la version actuelle intacte.",
+      "regionAppendDropped": "L'édition par sous-module conserve le nombre de lignes d'origine ; les lignes réécrites supplémentaires n'ont pas été appliquées."
+    },
+    "toast": {
+      "overwritten": "CV mis à jour avec la version ajustée."
+    },
+    "errors": {
+      "networkError": "Erreur réseau lors de l'ajustement. Veuillez réessayer.",
+      "resumeChanged": "Le CV a changé après la génération de l'aperçu. Veuillez générer un nouvel aperçu.",
+      "generationFailed": "Échec de l'ajustement. Veuillez réessayer.",
+      "confirmFailed": "Impossible d'enregistrer le CV ajusté. Veuillez réessayer."
     }
   }
 }

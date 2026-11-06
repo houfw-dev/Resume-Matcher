@@ -187,14 +187,19 @@
       "unknownSectionType": "Tipo de seção desconhecido: {type}",
       "unknownDefaultSection": "Seção padrão desconhecida: {section}"
     },
+    "sectionOrder": {
+      "lockedNotice": "A ordem das seções é fixa e não pode ser reordenada"
+    },
     "sectionHeader": {
       "renameSection": "Renomear seção",
+      "titleLocked": "Os títulos das seções padrão estão bloqueados",
+      "duplicateNameError": "Já existe uma seção chamada \"{name}\"",
+      "reservedNameError": "\"{name}\" é um nome de seção padrão",
+      "nameRequiredError": "O nome da seção não pode ficar vazio",
       "customTag": "Personalizado",
       "hiddenFromPdfTag": "Oculto do PDF",
       "hideSection": "Ocultar seção",
       "showSection": "Mostrar seção",
-      "moveUp": "Mover para cima",
-      "moveDown": "Mover para baixo",
       "deleteSection": "Excluir seção",
       "deleteTitle": "Excluir Seção",
       "deleteDescription": "Tem certeza que deseja excluir \"{name}\"? Esta ação não pode ser desfeita."
@@ -329,7 +334,7 @@
         "title": "Título",
         "organization": "Organização",
         "location": "Localização",
-        "years": "Jan 2020 - Presente",
+        "years": "2020.03~至今",
         "description": "Descreva sua contribuição..."
       },
       "noEntries": "// NENHUMA ENTRADA DE {label}",
@@ -341,13 +346,15 @@
         "addFirstJob": "Adicionar Primeiro Emprego",
         "fields": {
           "jobTitle": "Cargo",
-          "company": "Empresa"
+          "company": "Empresa",
+          "department": "Departamento"
         },
         "placeholders": {
           "jobTitle": "Desenvolvedor Sênior",
           "company": "Tech Corp",
+          "department": "ex.: Departamento de Engenharia",
           "location": "Remoto / Cidade",
-          "years": "Jan 2020 - Presente",
+          "years": "2020.03~至今",
           "description": "Descreva sua conquista..."
         }
       },
@@ -363,7 +370,7 @@
         "placeholders": {
           "institution": "Nome da Universidade",
           "degree": "Bacharelado em Ciência da Computação",
-          "years": "Ago 2016 - Mai 2020",
+          "years": "2016.08~2020.05",
           "description": "Detalhes adicionais..."
         }
       },
@@ -373,12 +380,14 @@
         "fields": {
           "projectName": "Nome do Projeto",
           "role": "Função",
+          "scale": "Escala do projeto",
           "website": "Website"
         },
         "placeholders": {
           "projectName": "Resume Matcher",
           "role": "Criador",
-          "years": "Mar 2023",
+          "years": "2023.03",
+          "scale": "ex.: equipe de 10 pessoas",
           "github": "github.com/usuario/projeto",
           "website": "https://projeto-demo.com",
           "description": "Detalhe do projeto..."
@@ -466,6 +475,10 @@
       "placeholders": {
         "name": "João Silva",
         "title": "Engenheiro de Software",
+        "gender": "Masculino",
+        "age": "28 anos",
+        "educationLevel": "Graduação",
+        "workYears": "5 anos",
         "email": "joao@exemplo.com",
         "phone": "+55 (11) 99999-0000",
         "location": "São Paulo, Brasil",
@@ -803,6 +816,7 @@
     "returnToDashboard": "Voltar ao Painel",
     "enhanceResume": "Aprimorar Currículo",
     "downloadResume": "Baixar Currículo",
+    "downloadWord": "Baixar Word",
     "deletedTitle": "Currículo Excluído",
     "deletedDescriptionMaster": "Seu currículo principal foi permanentemente excluído do sistema.",
     "deletedDescriptionRegular": "O currículo foi permanentemente excluído do sistema.",
@@ -819,7 +833,8 @@
     },
     "titlePlaceholder": "Digite o título do currículo...",
     "downloadFailedTitle": "Falha no download",
-    "renameFailedTitle": "Falha ao renomear"
+    "renameFailedTitle": "Falha ao renomear",
+    "diagnoseResume": "Diagnosticar currículo"
   },
   "preview": {
     "margins": "Margens",
@@ -834,9 +849,16 @@
     "personalInfo": {
       "name": "Nome Completo",
       "title": "Cargo",
+      "gender": "Gênero",
+      "age": "Idade",
+      "educationLevel": "Formação acadêmica",
+      "workYears": "Anos de experiência",
+      "jobIntention": "Objetivo profissional",
+      "desiredCity": "Cidade desejada",
       "email": "Email",
       "phone": "Telefone",
       "location": "Localização",
+      "foreignLanguage": "Idiomas estrangeiros",
       "website": "Website",
       "linkedin": "LinkedIn",
       "github": "GitHub"
@@ -852,7 +874,8 @@
       "skillsOnly": "Habilidades",
       "languages": "Idiomas",
       "awards": "Prêmios",
-      "links": "Links"
+      "links": "Links",
+      "selfIntroduction": "Apresentação pessoal"
     },
     "defaults": {
       "name": "Seu Nome"
@@ -1113,6 +1136,162 @@
       "projectFollowUps": "Perguntas sobre projetos",
       "skillGaps": "Lacunas de habilidades",
       "talkingPoints": "Pontos de conversa"
+    }
+  },
+  "diagnosis": {
+    "title": "Diagnóstico do currículo",
+    "subtitle": "Checklist da rubrica V4: veredictos por item e resultado das linhas vermelhas.",
+    "loading": "Executando o checklist — a análise da IA nos itens semânticos pode levar alguns minutos…",
+    "measuringLayout": "Medindo a paginação com o modelo selecionado…",
+    "layoutSkipped": "A medição do layout não está disponível — o número de páginas e a densidade dos parágrafos são estimados a partir do texto.",
+    "error": "Falha no diagnóstico. Tente novamente.",
+    "intro": "O relatório combina verificações determinísticas com uma revisão estruturada da IA. Cole opcionalmente a descrição da vaga-alvo para também avaliar os itens de aderência à vaga.",
+    "jobDescriptionLabel": "Descrição da vaga-alvo (opcional)",
+    "jobDescriptionPlaceholder": "Cole a descrição da vaga para ativar as verificações de aderência…",
+    "jdHint": "Sem descrição da vaga, a verificação de aderência à vaga é marcada como não aplicável. Os 5 itens de competência do cargo não precisam do JD, mas exigem uma intenção profissional clara que corresponda a um modelo de nível (ou selecionado explicitamente); caso contrário, são marcados como não aplicáveis.",
+    "run": "Iniciar diagnóstico",
+    "rerun": "Repetir",
+    "specVersion": "Rubrica {version}",
+    "redlinePassed": "Todas as verificações de linha vermelha foram aprovadas.",
+    "redlineFailed": "Há linhas vermelhas reprovadas — não envie este currículo no estado atual:",
+    "dimensionsTitle": "Resultados por dimensão",
+    "itemsTitle": "Lista de verificações",
+    "filterAll": "Tudo",
+    "filterProblems": "Problemas",
+    "allConform": "Todos os itens estão em conformidade ou não se aplicam.",
+    "evidenceLabel": "Problema",
+    "suggestionLabel": "Ação de melhoria",
+    "rating": {
+      "conform": "Conforme",
+      "partial": "Parcial",
+      "nonconform": "Não conforme",
+      "na": "N/A"
+    },
+    "severity": {
+      "redline": "Linha vermelha"
+    },
+    "method": {
+      "objective": "Auto",
+      "subjective": "IA"
+    },
+    "downloadWord": "Baixar documento Word",
+    "downloadFailed": "Falha ao baixar. Tente novamente.",
+    "fileStem": "relatorio-diagnostico-curriculo",
+    "targetLabel": "Cargo-alvo",
+    "targetEmptyHint": "Nenhum cargo de interesse informado — o currículo é diagnosticado como um todo.",
+    "targetChooseHint": "Vários cargos de interesse detectados — escolha o cargo-alvo deste diagnóstico:",
+    "targetValue": "Cargo-alvo: {title}",
+    "competencyValue": "Modelo de competências: {name}",
+    "countsLabel": "Resultado do checklist",
+    "countsSummary": "{effective} aplicáveis — em conformidade {conform}, parcial {partial}, em não conformidade {nonconform}; N/A {na}.",
+    "modelLabel": "Modelo de competências",
+    "modelLoading": "Carregando modelos de competências…",
+    "modelLoadError": "Não foi possível carregar os modelos de competências; você ainda pode executar o checklist básico.",
+    "modelMatchedHint": "Correspondência automática com o cargo-alvo: {name}. Troque de nível ou execute sem modelo.",
+    "modelNoMatchHint": "Nenhum modelo de competências corresponde ao cargo-alvo. Escolha um para confirmar ou execute sem modelo.",
+    "modelNone": "Executar sem modelo de competências",
+    "workspace": {
+      "cta": "Diagnóstico de currículo",
+      "dropzoneHint": "PDF, DOCX ou DOC com até 4 MB — o diagnóstico começa automaticamente após a análise.",
+      "parsing": "Analisando o currículo enviado…",
+      "diagnosing": "Executando a checklist; a revisão por IA pode levar alguns minutos…",
+      "parseFailed": "A análise deste currículo falhou. Tente novamente, exclua ou envie outro arquivo.",
+      "paneResume": "Currículo enviado",
+      "paneReport": "Relatório de diagnóstico",
+      "structuredTab": "Currículo",
+      "originalTab": "Original",
+      "resizeHint": "Arraste para redimensionar os painéis",
+      "hideLeft": "Ocultar painel do currículo",
+      "showLeft": "Mostrar painel do currículo",
+      "hideRight": "Ocultar painel do relatório",
+      "showRight": "Mostrar painel do relatório",
+      "deleteResume": "Excluir currículo",
+      "deleteConfirmTitle": "Excluir este currículo?",
+      "deleteConfirmDescription": "O currículo enviado e seus dados analisados serão excluídos permanentemente. O relatório só é preservado após a exportação.",
+      "backToUpload": "Enviar outro arquivo",
+      "jdToggle": "Refazer o diagnóstico com uma descrição de vaga",
+      "jdRun": "Refazer com JD",
+      "exporting": "Exportando…"
+    }
+  },
+  "fineTune": {
+    "buttonLabel": "Ajuste fino com IA",
+    "sectionButtonLabel": "Ajustar esta seção",
+    "generating": {
+      "title": "Ajustando seu currículo…",
+      "body": "A IA está reestruturando e refinando o conteúdo selecionado. Pode levar alguns minutos."
+    },
+    "dialog": {
+      "title": "Ajuste fino com IA",
+      "subtitle": "Melhore a lógica e o foco usando o envio original e o currículo analisado. Nenhum dado novo é inventado.",
+      "scopeAll": "Currículo inteiro",
+      "scopeAllHint": "Reestrutura e fortalece todos os módulos como um documento coeso.",
+      "scopeModules": "Módulos selecionados",
+      "scopeModulesHint": "Apenas os módulos e itens marcados são alterados; o restante permanece intacto.",
+      "modules": {
+        "summary": "Resumo",
+        "workExperience": "Experiência profissional",
+        "education": "Formação acadêmica",
+        "personalProjects": "Projetos",
+        "additional": "Habilidades e adicional",
+        "customSections": "Seções personalizadas"
+      },
+      "selectEntries": "Selecionar itens em {module}",
+      "selectRegions": "Selecionar submódulos em {module}",
+      "regions": {
+        "techStack": "Stack tecnológica",
+        "background": "Contexto",
+        "duties": "Responsabilidades",
+        "highlights": "Destaques",
+        "achievements": "Conquistas",
+        "role": "Cargo"
+      },
+      "selectAtLeastOne": "Selecione pelo menos um módulo.",
+      "instructionLabel": "Instruções (opcional)",
+      "instructionPlaceholder": "Ex.: quantifique resultados, coloque o trabalho mais relevante primeiro, enxugue o texto.",
+      "cancel": "Cancelar",
+      "generate": "Gerar visualização"
+    },
+    "preview": {
+      "title": "Visualização do ajuste",
+      "subtitle": "Revise o resultado do ajuste antes de salvar.",
+      "highlightHint": "Os módulos com contorno estão dentro do escopo selecionado.",
+      "tabRendered": "Renderizado",
+      "tabChanges": "Alterações",
+      "warningsTitle": "Por favor, revise",
+      "groundingWarning": "Afirmação não verificada mantida para sua revisão: {detail}",
+      "ignoredTarget": "Uma seleção fora do intervalo foi ignorada: {target}",
+      "diffUnavailable": "A lista detalhada de alterações está temporariamente indisponível; compare pela visualização renderizada.",
+      "relocationHint": "As seções selecionadas contêm itens que pertencem a outras seções (prêmios, certificados, idiomas). Execute um ajuste geral para movê-los para a seção correta.",
+      "changesCount": "{count} alterações",
+      "descriptionsModified": "{count} descrições modificadas",
+      "skillsAdded": "{count} habilidades adicionadas",
+      "skillsRemoved": "{count} habilidades removidas",
+      "noChanges": "Nenhuma alteração textual detectada.",
+      "originalLabel": "Antes",
+      "newLabel": "Depois",
+      "changeAdded": "Adicionado",
+      "changeRemoved": "Removido",
+      "changeModified": "Modificado",
+      "cancel": "Cancelar",
+      "overwrite": "Substituir original",
+      "saveCopy": "Salvar como cópia",
+      "createCopy": "Criar cópia",
+      "copyTitleLabel": "Título da cópia",
+      "copyTitlePlaceholder": "Título para a cópia ajustada",
+      "applying": "Aplicando…",
+      "overwriteConfirmTitle": "Substituir este currículo?",
+      "overwriteConfirmBody": "O conteúdo estruturado será substituído pela versão ajustada. O texto do envio original é mantido e você pode ajustar novamente, mas esta ação não pode ser desfeita. Escolha «Salvar como cópia» para manter a versão atual intacta.",
+      "regionAppendDropped": "A edição por submódulo mantém o número original de linhas; as linhas extras reescritas não foram aplicadas."
+    },
+    "toast": {
+      "overwritten": "Currículo atualizado com a versão ajustada."
+    },
+    "errors": {
+      "networkError": "Erro de rede durante o ajuste. Tente novamente.",
+      "resumeChanged": "O currículo mudou após a geração da visualização. Gere uma nova visualização.",
+      "generationFailed": "Falha no ajuste. Tente novamente.",
+      "confirmFailed": "Não foi possível salvar o currículo ajustado. Tente novamente."
     }
   }
 }

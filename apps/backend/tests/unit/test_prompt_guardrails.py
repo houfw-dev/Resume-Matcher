@@ -12,8 +12,33 @@ from app.prompts.templates import (
     COVER_LETTER_PROMPT,
     DIFF_IMPROVE_PROMPT,
     INTERVIEW_PREP_PROMPT,
+    SKILL_TARGET_PLAN_PROMPT,
 )
 from app.prompts.refinement import KEYWORD_INJECTION_PROMPT
+
+
+class TestSkillTargetPlannerPromptIsJsonFirst:
+    """A verbose prose-brief planner prompt made DeepSeek emit chain-of-thought
+    instead of JSON even in json_object mode; the router swallowed the parse
+    failure, passed an empty allow-list, and the preview modal showed all-zero
+    change counts. Lock the JSON-first imperative shape."""
+
+    def test_planner_demands_raw_json_only(self):
+        assert "Return ONLY a raw JSON object" in SKILL_TARGET_PLAN_PROMPT
+
+    def test_planner_rules_are_terse_not_prose_paragraphs(self):
+        # Each non-empty line before the JSON example stays short; a wall of
+        # wrapped prose is what switched the model into reasoning-text mode.
+        header = SKILL_TARGET_PLAN_PROMPT.split("Output this exact JSON format")[0]
+        long_lines = [
+            line
+            for line in header.splitlines()
+            if line.strip() and len(line) > 320
+        ]
+        assert long_lines == []
+
+    def test_planner_keeps_any_form_dedup_instruction(self):
+        assert "ANY form" in SKILL_TARGET_PLAN_PROMPT
 
 
 class TestJdIncorporationIsDefault:

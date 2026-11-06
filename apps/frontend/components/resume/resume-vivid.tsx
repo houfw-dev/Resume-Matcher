@@ -9,6 +9,8 @@ import type {
 import { getSortedSections, getSectionMeta } from '@/lib/utils/section-helpers';
 import { formatDateRange } from '@/lib/utils';
 import { DescriptionList } from './description-list';
+import { stripPointMarker } from './list-format';
+import { OrderedStringList, PointTextList } from './point-text-list';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/vivid.module.css';
 
@@ -27,8 +29,8 @@ interface ResumeVividProps {
  * headers, and accent arrow (➜) bullet markers. Reads the accent-color control
  * (default blue). ATS-safe (all text is real DOM nodes).
  *
- * Main Column (63%): Summary, Experience, Projects, Certifications/Training, Custom Sections
- * Sidebar (37%): Skills, Languages, Education, Awards, Links
+ * Main Column (63%): Summary, Experience, Projects, Custom Sections, Certifications/Training, Awards
+ * Sidebar (37%): Skills, Languages, Education, Links
  */
 export const ResumeVivid: React.FC<ResumeVividProps> = ({
   data,
@@ -135,14 +137,15 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
   const renderArrowBullets = (
     items?: string[],
     textClass: string = baseStyles['resume-text-xs'],
-    itemStyles?: ('bullet' | 'plain')[]
+    itemStyles?: ('bullet' | 'plain' | 'label')[],
+    canonicalizeLabels = false
   ) => (
     <DescriptionList
       items={items}
       styles={itemStyles}
       textClassName={textClass}
-      marker="➜"
-      markerClassName={`mr-1.5 ${styles.arrow}`}
+      canonicalizeLabels={canonicalizeLabels}
+      flushLabels={canonicalizeLabels}
     />
   );
 
@@ -161,7 +164,7 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
             {renderContactDetail('LinkedIn', personalInfo.linkedin)}
             {renderContactDetail('GitHub', personalInfo.github)}
             {renderContactDetail('Email', personalInfo.email, 'mailto:')}
-            {renderContactDetail('Phone', personalInfo.phone, 'tel:')}
+            {renderContactDetail('Phone', personalInfo.phone)}
             {renderContactDetail('Location', personalInfo.location)}
           </div>
         )}
@@ -176,7 +179,7 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
               <h3 className={styles.sectionTitle}>
                 {getSectionDisplayName('summary', headingFallbacks.summary)}
               </h3>
-              <p className={`text-justify ${baseStyles['resume-text']}`}>{summary}</p>
+              <PointTextList text={summary} />
             </div>
           )}
 
@@ -286,20 +289,14 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
                       {renderArrowBullets(
                         project.description,
                         baseStyles['resume-text-xs'],
-                        project.descriptionStyles
+                        project.descriptionStyles,
+                        true
                       )}
                     </div>
                   ))}
                 </div>
               </div>
             )}
-
-          {isSectionVisible('additional') && certificationsTraining.length > 0 && (
-            <div className={baseStyles['resume-section']}>
-              <h3 className={styles.sectionTitle}>{headingFallbacks.certifications}</h3>
-              {renderArrowBullets(certificationsTraining)}
-            </div>
-          )}
 
           {customSections.map((section) => (
             <DynamicResumeSectionVivid
@@ -309,6 +306,22 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
               renderArrowBullets={renderArrowBullets}
             />
           ))}
+
+          {/* Certifications/Training - main column, after every custom section */}
+          {isSectionVisible('additional') && certificationsTraining.length > 0 && (
+            <div className={baseStyles['resume-section']}>
+              <h3 className={styles.sectionTitle}>{headingFallbacks.certifications}</h3>
+              {renderArrowBullets(certificationsTraining)}
+            </div>
+          )}
+
+          {/* Awards - main column, directly after certifications/training */}
+          {isSectionVisible('additional') && awards.length > 0 && (
+            <div className={baseStyles['resume-section']}>
+              <h3 className={styles.sectionTitle}>{headingFallbacks.awards}</h3>
+              {renderArrowBullets(awards)}
+            </div>
+          )}
         </div>
 
         {/* Sidebar Column - Right */}
@@ -316,7 +329,9 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
           {isSectionVisible('additional') && technicalSkills.length > 0 && (
             <div className={baseStyles['resume-section']}>
               <h3 className={styles.sectionTitleSm}>{headingFallbacks.skills}</h3>
-              <p className={baseStyles['resume-text-xs']}>{technicalSkills.join(' • ')}</p>
+              <p className={baseStyles['resume-text-xs']}>
+                {technicalSkills.map(stripPointMarker).join(' • ')}
+              </p>
             </div>
           )}
 
@@ -357,19 +372,6 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
             </div>
           )}
 
-          {isSectionVisible('additional') && awards.length > 0 && (
-            <div className={baseStyles['resume-section']}>
-              <h3 className={styles.sectionTitleSm}>{headingFallbacks.awards}</h3>
-              <ul className={baseStyles['resume-list']}>
-                {awards.map((award, index) => (
-                  <li key={index} className={baseStyles['resume-text-xs']}>
-                    {award}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
           {personalInfo &&
             (personalInfo.website || personalInfo.linkedin || personalInfo.github) && (
               <div className={baseStyles['resume-section']}>
@@ -406,7 +408,8 @@ const DynamicResumeSectionVivid: React.FC<{
   renderArrowBullets: (
     items?: string[],
     textClass?: string,
-    itemStyles?: ('bullet' | 'plain')[]
+    itemStyles?: ('bullet' | 'plain' | 'label')[],
+    canonicalizeLabels?: boolean
   ) => React.ReactNode;
 }> = ({ sectionMeta, resumeData, renderArrowBullets }) => {
   const customSection = resumeData.customSections?.[sectionMeta.key];
@@ -431,7 +434,7 @@ const DynamicResumeSectionVivid: React.FC<{
     <div className={baseStyles['resume-section']}>
       <h3 className={styles.sectionTitle}>{sectionMeta.displayName}</h3>
       {sectionMeta.sectionType === 'text' && customSection.text?.trim() && (
-        <p className={`text-justify ${baseStyles['resume-text']}`}>{customSection.text}</p>
+        <PointTextList text={customSection.text} />
       )}
       {sectionMeta.sectionType === 'itemList' && customSection.items?.length ? (
         <div className={baseStyles['resume-items']}>
@@ -465,7 +468,10 @@ const DynamicResumeSectionVivid: React.FC<{
         </div>
       ) : null}
       {sectionMeta.sectionType === 'stringList' && customSection.strings?.length ? (
-        <p className={baseStyles['resume-text-xs']}>{customSection.strings.join(' • ')}</p>
+        <OrderedStringList
+          items={customSection.strings}
+          textClassName={baseStyles['resume-text-xs']}
+        />
       ) : null}
     </div>
   );

@@ -7,6 +7,7 @@ import type {
 } from '@/components/dashboard/resume-component';
 import { formatDateRange } from '@/lib/utils';
 import { DescriptionList } from './description-list';
+import { OrderedStringList, PointTextList } from './point-text-list';
 import baseStyles from './styles/_base.module.css';
 
 interface DynamicResumeSectionProps {
@@ -48,7 +49,7 @@ export const DynamicResumeSection: React.FC<DynamicResumeSectionProps> = ({
   return (
     <div className={baseStyles['resume-section']}>
       <h3 className={baseStyles['resume-section-title']}>{sectionMeta.displayName}</h3>
-      {renderContent(sectionMeta.sectionType, customSection)}
+      {renderContent(sectionMeta, customSection)}
     </div>
   );
 };
@@ -56,10 +57,12 @@ export const DynamicResumeSection: React.FC<DynamicResumeSectionProps> = ({
 /**
  * Render section content based on type
  */
-function renderContent(sectionType: SectionMeta['sectionType'], customSection: CustomSection) {
-  switch (sectionType) {
+function renderContent(sectionMeta: SectionMeta, customSection: CustomSection) {
+  switch (sectionMeta.sectionType) {
     case 'text':
-      return <TextSectionContent text={customSection.text || ''} />;
+      // Every custom text block keeps the source line structure: one source
+      // line per numbered point, single-line blocks render as a paragraph.
+      return <PointTextList text={customSection.text || ''} />;
     case 'itemList':
       return <ItemListSectionContent items={customSection.items || []} />;
     case 'stringList':
@@ -68,15 +71,6 @@ function renderContent(sectionType: SectionMeta['sectionType'], customSection: C
       return null;
   }
 }
-
-/**
- * Text Section Content (like Summary)
- */
-const TextSectionContent: React.FC<{ text: string }> = ({ text }) => {
-  if (!text.trim()) return null;
-
-  return <p className={`text-justify ${baseStyles['resume-text']}`}>{text}</p>;
-};
 
 /**
  * Item List Section Content (like Experience)
@@ -117,12 +111,10 @@ const ItemListSectionContent: React.FC<{ items: CustomSectionItem[] }> = ({ item
 };
 
 /**
- * String List Section Content (like Skills)
+ * String List Section Content (honors/certificates/hobbies)
  */
-const StringListSectionContent: React.FC<{ strings: string[] }> = ({ strings }) => {
-  if (strings.length === 0) return null;
-
-  return <div className={baseStyles['resume-text-sm']}>{strings.join(', ')}</div>;
-};
+const StringListSectionContent: React.FC<{ strings: string[] }> = ({ strings }) => (
+  <OrderedStringList items={strings} textClassName={baseStyles['resume-text-sm']} />
+);
 
 export default DynamicResumeSection;

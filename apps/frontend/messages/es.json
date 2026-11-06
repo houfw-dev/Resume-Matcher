@@ -187,14 +187,19 @@
       "unknownSectionType": "Tipo de sección desconocido: {type}",
       "unknownDefaultSection": "Sección predeterminada desconocida: {section}"
     },
+    "sectionOrder": {
+      "lockedNotice": "El orden de las secciones es fijo y no se puede reordenar"
+    },
     "sectionHeader": {
       "renameSection": "Renombrar sección",
+      "titleLocked": "Los títulos de las secciones predeterminadas están bloqueados",
+      "duplicateNameError": "Ya existe una sección llamada «{name}»",
+      "reservedNameError": "«{name}» es un nombre de sección predeterminado",
+      "nameRequiredError": "El nombre de la sección no puede estar vacío",
       "customTag": "Personalizada",
       "hiddenFromPdfTag": "Oculta en PDF",
       "hideSection": "Ocultar sección",
       "showSection": "Mostrar sección",
-      "moveUp": "Mover arriba",
-      "moveDown": "Mover abajo",
       "deleteSection": "Eliminar sección",
       "deleteTitle": "Eliminar sección",
       "deleteDescription": "¿Seguro que quieres eliminar \"{name}\"? Esta acción no se puede deshacer."
@@ -329,7 +334,7 @@
         "title": "Título",
         "organization": "Organización",
         "location": "Ubicación",
-        "years": "Ene 2020 - Actualidad",
+        "years": "2020.03~至今",
         "description": "Describe tu aportación..."
       },
       "noEntries": "// SIN {label}",
@@ -341,13 +346,15 @@
         "addFirstJob": "Agregar primer trabajo",
         "fields": {
           "jobTitle": "Puesto",
-          "company": "Empresa"
+          "company": "Empresa",
+          "department": "Departamento"
         },
         "placeholders": {
           "jobTitle": "Desarrollador senior",
           "company": "Tech Corp",
+          "department": "p. ej., Departamento de Ingeniería",
           "location": "Remoto / Ciudad",
-          "years": "Ene 2020 - Actualidad",
+          "years": "2020.03~至今",
           "description": "Describe tu logro..."
         }
       },
@@ -363,7 +370,7 @@
         "placeholders": {
           "institution": "Nombre de la universidad",
           "degree": "Grado en ...",
-          "years": "Ago 2016 - May 2020",
+          "years": "2016.08~2020.05",
           "description": "Detalles adicionales..."
         }
       },
@@ -373,12 +380,14 @@
         "fields": {
           "projectName": "Nombre del proyecto",
           "role": "Rol",
+          "scale": "Escala del proyecto",
           "website": "Sitio web"
         },
         "placeholders": {
           "projectName": "Resume Matcher",
           "role": "Creador",
-          "years": "Mar 2023",
+          "years": "2023.03",
+          "scale": "p. ej., equipo de 10 personas",
           "github": "github.com/usuario/proyecto",
           "website": "https://demo-proyecto.com",
           "description": "Detalle del proyecto..."
@@ -466,6 +475,10 @@
       "placeholders": {
         "name": "Juan Pérez",
         "title": "Ingeniero de software",
+        "gender": "Masculino",
+        "age": "28 años",
+        "educationLevel": "Grado universitario",
+        "workYears": "5 años",
         "email": "juan@example.com",
         "phone": "+34 600 000 000",
         "location": "Ciudad, País",
@@ -803,6 +816,7 @@
     "returnToDashboard": "Volver al Panel",
     "enhanceResume": "Mejorar currículum",
     "downloadResume": "Descargar currículum",
+    "downloadWord": "Descargar Word",
     "deletedTitle": "Currículum eliminado",
     "deletedDescriptionMaster": "Tu currículum maestro se ha eliminado permanentemente del sistema.",
     "deletedDescriptionRegular": "El currículum se ha eliminado permanentemente del sistema.",
@@ -819,7 +833,8 @@
     },
     "titlePlaceholder": "Ingrese el título del currículum...",
     "downloadFailedTitle": "Error de descarga",
-    "renameFailedTitle": "Error al cambiar el nombre"
+    "renameFailedTitle": "Error al cambiar el nombre",
+    "diagnoseResume": "Diagnosticar CV"
   },
   "preview": {
     "margins": "Márgenes",
@@ -834,9 +849,16 @@
     "personalInfo": {
       "name": "Nombre Completo",
       "title": "Título del Puesto",
+      "gender": "Género",
+      "age": "Edad",
+      "educationLevel": "Educación",
+      "workYears": "Años de experiencia",
+      "jobIntention": "Objetivo profesional",
+      "desiredCity": "Ciudad deseada",
       "email": "Correo Electrónico",
       "phone": "Teléfono",
       "location": "Ubicación",
+      "foreignLanguage": "Idiomas extranjeros",
       "website": "Sitio Web",
       "linkedin": "LinkedIn",
       "github": "GitHub"
@@ -852,7 +874,8 @@
       "certifications": "Formación y Certificaciones",
       "languages": "Idiomas",
       "awards": "Premios",
-      "links": "Enlaces"
+      "links": "Enlaces",
+      "selfIntroduction": "Presentación personal"
     },
     "defaults": {
       "name": "Tu nombre"
@@ -1113,6 +1136,162 @@
       "projectFollowUps": "Seguimiento de proyectos",
       "skillGaps": "Brechas de habilidades",
       "talkingPoints": "Puntos clave"
+    }
+  },
+  "diagnosis": {
+    "title": "Diagnóstico de CV",
+    "subtitle": "Lista de comprobación de la rúbrica V4: veredictos por ítem y resultado de líneas rojas.",
+    "loading": "Ejecutando la lista de comprobación; la revisión con IA de los ítems semánticos puede tardar unos minutos…",
+    "measuringLayout": "Midiendo la paginación con la plantilla seleccionada…",
+    "layoutSkipped": "La medición de la composición no está disponible; el número de páginas y la densidad de párrafos se estiman a partir del texto.",
+    "error": "El diagnóstico falló. Inténtalo de nuevo.",
+    "intro": "El informe combina comprobaciones deterministas con una revisión estructurada con IA. Pega opcionalmente la descripción del puesto objetivo para evaluar también la adecuación al empleo.",
+    "jobDescriptionLabel": "Descripción del puesto objetivo (opcional)",
+    "jobDescriptionPlaceholder": "Pega aquí la descripción del puesto para activar las comprobaciones de adecuación…",
+    "jdHint": "Sin descripción del puesto, la comprobación de adecuación al puesto se marca como no aplicable. Los 5 ítems de competencia del rol no necesitan la JD, pero exigen una intención profesional clara que coincida con un modelo de nivel (o que lo seleccione explícitamente); de lo contrario, se marcan como no aplicables.",
+    "run": "Iniciar diagnóstico",
+    "rerun": "Repetir",
+    "specVersion": "Rúbrica {version}",
+    "redlinePassed": "Todas las comprobaciones de línea roja han pasado.",
+    "redlineFailed": "Hay líneas rojas no superadas; no envíes este CV tal cual:",
+    "dimensionsTitle": "Resultados por dimensión",
+    "itemsTitle": "Lista de comprobación",
+    "filterAll": "Todo",
+    "filterProblems": "Problemas",
+    "allConform": "Todas las comprobaciones se cumplen o no aplican.",
+    "evidenceLabel": "Problema",
+    "suggestionLabel": "Acción de mejora",
+    "rating": {
+      "conform": "Conforme",
+      "partial": "Parcial",
+      "nonconform": "No conforme",
+      "na": "N/A"
+    },
+    "severity": {
+      "redline": "Línea roja"
+    },
+    "method": {
+      "objective": "Auto",
+      "subjective": "IA"
+    },
+    "downloadWord": "Descargar documento Word",
+    "downloadFailed": "Error al descargar. Inténtalo de nuevo.",
+    "fileStem": "informe-diagnostico-cv",
+    "targetLabel": "Puesto objetivo",
+    "targetEmptyHint": "No hay intención profesional indicada: el CV se diagnostica en su conjunto.",
+    "targetChooseHint": "Se detectaron varias intenciones profesionales; elige el puesto objetivo de este diagnóstico:",
+    "targetValue": "Puesto objetivo: {title}",
+    "competencyValue": "Modelo de competencias: {name}",
+    "countsLabel": "Resultado de la lista",
+    "countsSummary": "{effective} aplicables — conforme {conform}, parcial {partial}, no conforme {nonconform}; N/A {na}.",
+    "modelLabel": "Modelo de competencias",
+    "modelLoading": "Cargando modelos de competencias…",
+    "modelLoadError": "No se pudieron cargar los modelos de competencias; puedes ejecutar la lista de comprobación básica.",
+    "modelMatchedHint": "Asignado automáticamente al puesto objetivo: {name}. Cambia de nivel o ejecuta sin modelo.",
+    "modelNoMatchHint": "Ningún modelo de competencias coincide con el puesto objetivo. Elige uno para confirmar, o ejecuta sin modelo.",
+    "modelNone": "Ejecutar sin modelo de competencias",
+    "workspace": {
+      "cta": "Diagnóstico de CV",
+      "dropzoneHint": "PDF, DOCX o DOC de hasta 4 MB: el diagnóstico comienza automáticamente tras el análisis.",
+      "parsing": "Analizando el CV subido…",
+      "diagnosing": "Ejecutando la lista de comprobación; la revisión con IA puede tardar unos minutos…",
+      "parseFailed": "Falló el análisis de este CV. Reinténtalo, elimínalo o sube otro archivo.",
+      "paneResume": "CV subido",
+      "paneReport": "Informe de diagnóstico",
+      "structuredTab": "CV",
+      "originalTab": "Original",
+      "resizeHint": "Arrastra para ajustar los paneles",
+      "hideLeft": "Ocultar panel del CV",
+      "showLeft": "Mostrar panel del CV",
+      "hideRight": "Ocultar panel del informe",
+      "showRight": "Mostrar panel del informe",
+      "deleteResume": "Eliminar CV",
+      "deleteConfirmTitle": "¿Eliminar este CV?",
+      "deleteConfirmDescription": "El CV subido y sus datos analizados se eliminarán de forma permanente. El informe solo se conserva si lo exportas.",
+      "backToUpload": "Subir otro archivo",
+      "jdToggle": "Volver a diagnosticar con una descripción de puesto",
+      "jdRun": "Repetir con JD",
+      "exporting": "Exportando…"
+    }
+  },
+  "fineTune": {
+    "buttonLabel": "Ajuste fino con IA",
+    "sectionButtonLabel": "Ajustar esta sección",
+    "generating": {
+      "title": "Ajustando tu currículum…",
+      "body": "La IA está reestructurando y puliendo el contenido seleccionado. Puede tardar unos minutos."
+    },
+    "dialog": {
+      "title": "Ajuste fino con IA",
+      "subtitle": "Mejora la lógica y el énfasis usando tu carga original y el currículum analizado. No se inventan datos nuevos.",
+      "scopeAll": "Currículum completo",
+      "scopeAllHint": "Reestructura y refuerza todos los módulos como un documento coherente.",
+      "scopeModules": "Módulos seleccionados",
+      "scopeModulesHint": "Solo cambian los módulos y entradas seleccionados; el resto permanece intacto.",
+      "modules": {
+        "summary": "Perfil profesional",
+        "workExperience": "Experiencia laboral",
+        "education": "Educación",
+        "personalProjects": "Proyectos",
+        "additional": "Habilidades y adicional",
+        "customSections": "Secciones personalizadas"
+      },
+      "selectEntries": "Seleccionar entradas en {module}",
+      "selectRegions": "Seleccionar submódulos en {module}",
+      "regions": {
+        "techStack": "Pila tecnológica",
+        "background": "Contexto",
+        "duties": "Responsabilidades",
+        "highlights": "Resultados destacados",
+        "achievements": "Logros",
+        "role": "Rol"
+      },
+      "selectAtLeastOne": "Selecciona al menos un módulo.",
+      "instructionLabel": "Instrucciones (opcional)",
+      "instructionPlaceholder": "p. ej.: cuantifica los logros, coloca primero el trabajo más relevante, simplifica el texto.",
+      "cancel": "Cancelar",
+      "generate": "Generar vista previa"
+    },
+    "preview": {
+      "title": "Vista previa del ajuste",
+      "subtitle": "Revisa el resultado ajustado antes de guardar.",
+      "highlightHint": "Los módulos con borde están dentro del alcance seleccionado.",
+      "tabRendered": "Renderizado",
+      "tabChanges": "Cambios",
+      "warningsTitle": "Revisa por favor",
+      "groundingWarning": "Afirmación no verificada conservada para tu revisión: {detail}",
+      "ignoredTarget": "Se ignoró una selección fuera de rango: {target}",
+      "diffUnavailable": "La lista detallada de cambios no está disponible temporalmente; compara con la vista previa renderizada.",
+      "relocationHint": "Las secciones seleccionadas contienen elementos que pertenecen a otras secciones (premios, certificados, idiomas). Ejecuta una optimización global para moverlos a la sección correspondiente.",
+      "changesCount": "{count} cambios",
+      "descriptionsModified": "{count} descripciones modificadas",
+      "skillsAdded": "{count} habilidades añadidas",
+      "skillsRemoved": "{count} habilidades eliminadas",
+      "noChanges": "No se detectaron cambios textuales.",
+      "originalLabel": "Antes",
+      "newLabel": "Después",
+      "changeAdded": "Añadido",
+      "changeRemoved": "Eliminado",
+      "changeModified": "Modificado",
+      "cancel": "Cancelar",
+      "overwrite": "Sobrescribir original",
+      "saveCopy": "Guardar como copia",
+      "createCopy": "Crear copia",
+      "copyTitleLabel": "Título de la copia",
+      "copyTitlePlaceholder": "Título para la copia ajustada",
+      "applying": "Aplicando…",
+      "overwriteConfirmTitle": "¿Sobrescribir este currículum?",
+      "overwriteConfirmBody": "El contenido estructurado se sustituirá por la versión ajustada. El texto de tu carga original se conserva y puedes volver a ajustar, pero esta acción no se puede deshacer. Elige «Guardar como copia» para mantener intacta la versión actual.",
+      "regionAppendDropped": "La edición por submódulo mantiene el número original de líneas; las líneas adicionales reescritas no se aplicaron."
+    },
+    "toast": {
+      "overwritten": "Currículum actualizado con la versión ajustada."
+    },
+    "errors": {
+      "networkError": "Error de red durante el ajuste. Inténtalo de nuevo.",
+      "resumeChanged": "El currículum cambió después de generar la vista previa. Genera una nueva vista previa.",
+      "generationFailed": "El ajuste falló. Inténtalo de nuevo.",
+      "confirmFailed": "No se pudo guardar el currículum ajustado. Inténtalo de nuevo."
     }
   }
 }

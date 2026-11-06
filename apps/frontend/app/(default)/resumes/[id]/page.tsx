@@ -9,6 +9,8 @@ import {
   fetchResume,
   downloadResumePdf,
   getResumePdfUrl,
+  downloadResumeDocx,
+  getResumeDocxUrl,
   deleteResume,
   retryProcessing,
   renameResume,
@@ -18,20 +20,31 @@ import {
   ArrowLeft,
   Edit,
   Download,
+  FileText,
   Loader2,
   AlertCircle,
   Sparkles,
   Pencil,
   MessagesSquare,
+  Stethoscope,
 } from 'lucide-react';
 import { EnrichmentModal } from '@/components/enrichment/enrichment-modal';
+import { DiagnosisModal } from '@/components/diagnosis/diagnosis-modal';
 import { useTranslations } from '@/lib/i18n';
 import { withLocalizedDefaultSections } from '@/lib/utils/section-helpers';
+import { buildResumeHeadingProps } from '@/lib/utils/resume-headings';
+import { loadTemplateSettings } from '@/lib/utils/template-settings-storage';
 import { useLanguage } from '@/lib/context/language-context';
-import { downloadBlobAsFile, openUrlInNewTab, sanitizeFilename } from '@/lib/utils/download';
+import { buildResumeFactFilename, downloadBlobAsFile, openUrlInNewTab } from '@/lib/utils/download';
 import { useOperationOwner } from '@/hooks/use-operation-owner';
 
 type ProcessingStatus = 'pending' | 'processing' | 'ready' | 'failed';
+
+// Two parallel resume exports. DOCX chrome follows the resume CONTENT
+// language (auto-detected server-side), so its request carries no lang.
+type DownloadKind = 'pdf' | 'docx';
+
+type DownloadErrorState = { kind: DownloadKind; message: string } | null;
 
 export default function ResumeViewerPage() {
   const { t } = useTranslations();
@@ -52,11 +65,12 @@ export default function ResumeViewerPage() {
   const [showDeleteSuccessDialog, setShowDeleteSuccessDialog] = useState(false);
   const [showDownloadSuccessDialog, setShowDownloadSuccessDialog] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<DownloadErrorState>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [showEnrichmentModal, setShowEnrichmentModal] = useState(false);
+  const [showDiagnosisModal, setShowDiagnosisModal] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadingKind, setDownloadingKind] = useState<DownloadKind | null>(null);
   const [resumeTitle, setResumeTitle] = useState<string | null>(null);
   const renameBusyRef = useRef(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -79,11 +93,17 @@ export default function ResumeViewerPage() {
     return withLocalizedDefaultSections(resumeData, t);
   }, [resumeData, t]);
 
+  // The builder's template/typography choice is a single global setting.
+  // Screen preview, PDF and diagnosis all read the same snapshot so the
+  // rendered result the user sees is exactly what gets diagnosed.
+  const templateSettings = useMemo(() => loadTemplateSettings(), []);
+
   useEffect(() => {
     if (!resumeId) return;
     setShowEnrichmentModal(false);
+    setShowDiagnosisModal(false);
     setIsRetrying(false);
-    setIsDownloading(false);
+    setDownloadingKind(null);
     renameBusyRef.current = false;
     setIsEditingTitle(false);
     setEditingTitleValue('');
@@ -254,31 +274,54 @@ export default function ResumeViewerPage() {
     setShowEnrichmentModal(false);
   };
 
-  const handleDownload = async () => {
+  const handleDownload = async (kind: DownloadKind = 'pdf') => {
     const token = beginDownload();
     if (token === null) return;
-    setIsDownloading(true);
+    setDownloadingKind(kind);
     try {
       setDownloadError(null);
-      const blob = await downloadResumePdf(resumeId, undefined, uiLanguage);
-      const filename = sanitizeFilename(resumeTitle, resumeId, 'resume');
+      const blob =
+        kind === 'pdf'
+          ? await downloadResumePdf(resumeId, templateSettings, uiLanguage)
+          : // DOCX chrome follows the content language (server auto-detect).
+            await downloadResumeDocx(resumeId);
+      // Filename: 姓名-年龄-工作年限-学历-求职意向 for both PDF and Word.
+      const personalInfo = resumeData?.personalInfo;
+      const educationLevel =
+        personalInfo?.educationLevel?.trim() ||
+        resumeData?.education?.find((edu) => edu.degree?.trim())?.degree?.trim() ||
+        null;
+      const filename = buildResumeFactFilename(
+        {
+          name: personalInfo?.name,
+          age: personalInfo?.age,
+          workYears: personalInfo?.workYears,
+          educationLevel,
+          title: personalInfo?.title,
+        },
+        resumeId,
+        kind
+      );
       downloadBlobAsFile(blob, filename);
       if (!isCurrentDownload(token)) return;
       setShowDownloadSuccessDialog(true);
     } catch (err) {
       if (!isCurrentDownload(token)) return;
-      console.error('Failed to download resume:', err);
+      console.error(`Failed to download resume ${kind}:`, err);
       if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
-        const fallbackUrl = getResumePdfUrl(resumeId, undefined, uiLanguage);
+        const fallbackUrl =
+          kind === 'pdf'
+            ? getResumePdfUrl(resumeId, templateSettings, uiLanguage)
+            : getResumeDocxUrl(resumeId);
         const didOpen = openUrlInNewTab(fallbackUrl);
         if (!didOpen) {
-          setDownloadError(t('common.popupBlocked', { url: fallbackUrl }));
+          setDownloadError({ kind, message: t('common.popupBlocked', { url: fallbackUrl }) });
         }
         return;
       }
-      setDownloadError(t('resumeViewer.errors.failedToDownload'));
+      setDownloadError({ kind, message: t('resumeViewer.errors.failedToDownload') });
     } finally {
-      if (isCurrentDownload(token)) setIsDownloading(false);
+      if (isCurrentDownload(token)) setDownloadingKind(null);
     }
   };
 
@@ -458,6 +501,10 @@ export default function ResumeViewerPage() {
                 {t('resumeViewer.enhanceResume')}
               </Button>
             )}
+            <Button variant="outline" onClick={() => setShowDiagnosisModal(true)}>
+              <Stethoscope className="w-4 h-4" />
+              {t('resumeViewer.diagnoseResume')}
+            </Button>
             <Button variant="outline" onClick={handleEdit}>
               <Edit className="w-4 h-4" />
               {t('dashboard.editResume')}
@@ -468,9 +515,29 @@ export default function ResumeViewerPage() {
                 {t('interviewPrep.title')}
               </Button>
             )}
-            <Button variant="success" onClick={handleDownload} disabled={isDownloading}>
-              <Download className="w-4 h-4" />
-              {isDownloading ? t('common.generating') : t('resumeViewer.downloadResume')}
+            <Button
+              variant="success"
+              onClick={() => handleDownload('pdf')}
+              disabled={downloadingKind === 'pdf'}
+            >
+              {downloadingKind === 'pdf' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              {downloadingKind === 'pdf' ? t('common.generating') : t('dashboard.downloadPdf')}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleDownload('docx')}
+              disabled={downloadingKind === 'docx'}
+            >
+              {downloadingKind === 'docx' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileText className="w-4 h-4" />
+              )}
+              {downloadingKind === 'docx' ? t('common.generating') : t('resumeViewer.downloadWord')}
             </Button>
           </div>
         </div>
@@ -516,24 +583,10 @@ export default function ResumeViewerPage() {
           <div className="resume-print w-full max-w-[250mm] shadow-sw-lg border-2 border-black bg-white">
             <Resume
               resumeData={localizedResumeData || resumeData}
-              additionalSectionLabels={{
-                technicalSkills: t('resume.additionalLabels.technicalSkills'),
-                languages: t('resume.additionalLabels.languages'),
-                certifications: t('resume.additionalLabels.certifications'),
-                awards: t('resume.additionalLabels.awards'),
-              }}
-              sectionHeadings={{
-                summary: t('resume.sections.summary'),
-                experience: t('resume.sections.experience'),
-                education: t('resume.sections.education'),
-                projects: t('resume.sections.projects'),
-                certifications: t('resume.sections.certifications'),
-                skills: t('resume.sections.skillsOnly'),
-                languages: t('resume.sections.languages'),
-                awards: t('resume.sections.awards'),
-                links: t('resume.sections.links'),
-              }}
-              fallbackLabels={{ name: t('resume.defaults.name') }}
+              template={templateSettings.template}
+              settings={templateSettings}
+              locale={uiLanguage}
+              {...buildResumeHeadingProps(t)}
             />
           </div>
         </div>
@@ -553,10 +606,10 @@ export default function ResumeViewerPage() {
         open={downloadError !== null}
         onOpenChange={(open) => !open && setDownloadError(null)}
         title={t('resumeViewer.downloadFailedTitle')}
-        description={downloadError ?? ''}
+        description={downloadError?.message ?? ''}
         confirmLabel={t('common.retry')}
         cancelLabel={t('common.cancel')}
-        onConfirm={handleDownload}
+        onConfirm={() => downloadError && handleDownload(downloadError.kind)}
         onCancel={() => setDownloadError(null)}
         variant="danger"
       />
@@ -593,6 +646,14 @@ export default function ResumeViewerPage() {
           onComplete={handleEnrichmentComplete}
         />
       )}
+
+      <DiagnosisModal
+        resumeId={resumeId}
+        open={showDiagnosisModal}
+        onOpenChange={setShowDiagnosisModal}
+        intentionTitle={resumeData?.personalInfo?.title ?? ''}
+        resumeData={localizedResumeData || resumeData}
+      />
     </div>
   );
 }

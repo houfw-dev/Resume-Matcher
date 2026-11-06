@@ -33,11 +33,12 @@ export function openUrlInNewTab(url: string): boolean {
 export function sanitizeFilename(
   title: string | null | undefined,
   fallbackId: string,
-  type: 'resume' | 'cover-letter' = 'resume'
+  type: 'resume' | 'cover-letter' = 'resume',
+  ext: 'pdf' | 'docx' = 'pdf'
 ): string {
   // Use fallback if no title
   if (!title?.trim()) {
-    return type === 'resume' ? `resume_${fallbackId}.pdf` : `cover_letter_${fallbackId}.pdf`;
+    return type === 'resume' ? `resume_${fallbackId}.${ext}` : `cover_letter_${fallbackId}.${ext}`;
   }
 
   // Normalize Unicode to NFC form to ensure consistent representation
@@ -57,8 +58,61 @@ export function sanitizeFilename(
     sanitized = chars.slice(0, 100).join('').trim();
   }
 
-  // Add .pdf extension
-  return `${sanitized}.pdf`;
+  // Add the requested extension
+  return `${sanitized}.${ext}`;
+}
+
+/** Header facts used for resume download filenames (all optional). */
+export interface ResumeFilenameFacts {
+  /** 姓名 */
+  name?: string | null;
+  /** 年龄 */
+  age?: string | null;
+  /** 工作年限 */
+  workYears?: string | null;
+  /** 学历 (callers may fall back to the latest education degree) */
+  educationLevel?: string | null;
+  /** 求职意向 */
+  title?: string | null;
+}
+
+/**
+ * Build the resume PDF/DOCX download filename from header facts.
+ * Format: 姓名-年龄-工作年限-学历-求职意向 (e.g. "王浩-28岁-5年-硕士-Java开发工程师.pdf").
+ * Empty facts are skipped (no dangling dashes); falls back to resume_<id>.<ext>
+ * when none exist. Mirrors the backend ``_resume_download_stem`` helper.
+ */
+export function buildResumeFactFilename(
+  facts: ResumeFilenameFacts,
+  fallbackId: string,
+  ext: 'pdf' | 'docx' = 'pdf'
+): string {
+  const orderedFacts = [facts.name, facts.age, facts.workYears, facts.educationLevel, facts.title];
+  const parts = orderedFacts
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+  if (parts.length === 0) return `resume_${fallbackId}.${ext}`;
+  return sanitizeFilename(parts.join('-'), fallbackId, 'resume', ext);
+}
+
+/**
+ * Build the diagnosis Word report filename.
+ * Format: <报告名>-<姓名>-<YYYYMMDD-HHmm>.docx
+ * (e.g. "简历诊断报告-王浩-20261030-2156.docx"); a blank name is skipped.
+ * The stamp uses local time and contains no filename-illegal characters.
+ * Mirrors the backend ``diagnosis_docx_stem`` helper.
+ */
+export function buildDiagnosisReportFilename(
+  fileStem: string,
+  candidateName?: string | null,
+  now: Date = new Date()
+): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const stem = fileStem.trim();
+  const name = candidateName?.trim();
+  const raw = name ? `${stem}-${name}-${stamp}` : `${stem}-${stamp}`;
+  return sanitizeFilename(raw, 'diagnosis', 'resume', 'docx');
 }
 
 /**

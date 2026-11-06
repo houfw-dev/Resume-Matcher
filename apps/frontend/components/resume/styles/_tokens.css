@@ -1,9 +1,10 @@
 .resume-body {
   /* Typography */
-  /* CJK faces appended so dates, contact lines and pills (which all use this
-     token, not the header/body font maps) stay inside the declared cascade for
-     Chinese/Japanese/Korean text instead of falling through to the browser's
-     last-resort font with different metrics in the same PDF. */
+  /* Deliberate monospace accent for the vivid template ONLY (its title /
+     contact row / entry metadata are designed in a typewriter face). Every
+     other template renders dates, facts, pills and numbers in the body font
+     so digits never look like a different typeface than the surrounding text
+     ("简历中的数字用与文字一样的字体风格"). */
   --resume-font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, var(--font-noto-sans-sc),
     var(--font-noto-sans-jp), var(--font-noto-sans-kr), monospace;

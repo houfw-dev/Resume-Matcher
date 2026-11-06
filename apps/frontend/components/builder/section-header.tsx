@@ -1,23 +1,29 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { ChevronUp, ChevronDown, Trash2, Eye, EyeOff, Pencil, Check, X } from 'lucide-react';
+import { Trash2, Eye, EyeOff, Pencil, Check, X, Lock, Wand2 } from 'lucide-react';
 import type { SectionMeta } from '@/components/dashboard/resume-component';
 import { useTranslations } from '@/lib/i18n';
 
 interface SectionHeaderProps {
   section: SectionMeta;
-  onRename: (newName: string) => void;
+  onRename?: (newName: string) => void;
+  /** Return a localized error string when the name is invalid, null otherwise. */
+  validateName?: (name: string) => string | null;
   onDelete: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
   onToggleVisibility: () => void;
-  isFirst: boolean;
-  isLast: boolean;
   canDelete: boolean;
+  /**
+   * Built-in blocks are always listed in the builder: their visibility is
+   * locked on, so the eye toggle is not rendered (empty optional blocks are
+   * hidden downstream at render/save time instead of by the user).
+   */
+  visibilityLocked?: boolean;
+  /** When provided, shows an "AI fine-tune this module" button. */
+  onFineTune?: () => void;
   children?: React.ReactNode;
 }
 
@@ -25,52 +31,67 @@ interface SectionHeaderProps {
  * SectionHeader Component
  *
  * Provides controls for section management:
- * - Editable display name
- * - Move up/down buttons for reordering
- * - Delete button with confirmation
+ * - Custom-section rename (default block titles are locked)
+ * - Delete button with confirmation (custom) / hide (default)
  * - Visibility toggle
+ *
+ * Section ORDER is fixed by the canonical ordering rule — no reorder
+ * controls are rendered.
  */
 export const SectionHeader: React.FC<SectionHeaderProps> = ({
   section,
   onRename,
+  validateName,
   onDelete,
-  onMoveUp,
-  onMoveDown,
   onToggleVisibility,
-  isFirst,
-  isLast,
   canDelete,
+  visibilityLocked = false,
+  onFineTune,
   children,
 }) => {
   const { t } = useTranslations();
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState(section.displayName);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleStartEdit = () => {
     setEditedName(section.displayName);
+    setNameError(null);
     setIsEditing(true);
   };
 
+  const handleNameChange = (value: string) => {
+    setEditedName(value);
+    setNameError(validateName ? validateName(value) : null);
+  };
+
+  const canSave = editedName.trim().length > 0 && !nameError;
+
   const handleSaveEdit = () => {
-    if (editedName.trim()) {
-      onRename(editedName.trim());
-    }
+    if (!canSave || !onRename) return;
+    onRename(editedName.trim());
     setIsEditing(false);
   };
 
   const handleCancelEdit = () => {
     setEditedName(section.displayName);
+    setNameError(null);
     setIsEditing(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && canSave) {
       handleSaveEdit();
     } else if (e.key === 'Escape') {
       handleCancelEdit();
     }
   };
+
+  // Reset edit state when the section is renamed elsewhere / remounted.
+  useEffect(() => {
+    if (!isEditing) setEditedName(section.displayName);
+  }, [section.displayName, isEditing]);
 
   const handleDeleteClick = () => {
     if (section.isDefault) {
@@ -84,6 +105,7 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
 
   const isPersonalInfo = section.id === 'personalInfo';
   const isHidden = !section.isVisible;
+  const titleLocked = section.isDefault;
 
   return (
     <div
@@ -93,50 +115,61 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
     >
       {/* Section Header */}
       <div className="flex justify-between items-center border-b border-black pb-2 mb-4">
-        {/* Section Name (editable) */}
+        {/* Section Name (custom sections editable; defaults locked) */}
         <div className="flex items-center gap-2">
           {isEditing ? (
-            <div className="flex items-center gap-1">
-              <Input
-                value={editedName}
-                onChange={(e) => setEditedName(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="h-8 w-48 rounded-none border-black font-serif text-lg font-bold"
-                autoFocus
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-green-700 hover:text-green-800 hover:bg-green-50"
-                onClick={handleSaveEdit}
-                aria-label={t('common.save')}
-                title={t('common.save')}
-              >
-                <Check className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-steel-grey hover:text-ink-soft hover:bg-paper-tint"
-                onClick={handleCancelEdit}
-                aria-label={t('common.cancel')}
-                title={t('common.cancel')}
-              >
-                <X className="w-4 h-4" />
-              </Button>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1">
+                <Input
+                  value={editedName}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  className="h-8 w-48 rounded-none border-black font-serif text-lg font-bold"
+                  autoFocus
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-green-700 hover:text-green-800 hover:bg-green-50"
+                  onClick={handleSaveEdit}
+                  disabled={!canSave}
+                  aria-label={t('common.save')}
+                  title={t('common.save')}
+                >
+                  <Check className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-steel-grey hover:text-ink-soft hover:bg-paper-tint"
+                  onClick={handleCancelEdit}
+                  aria-label={t('common.cancel')}
+                  title={t('common.cancel')}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              {nameError && <p className="font-mono text-xs text-destructive">{nameError}</p>}
             </div>
           ) : (
             <>
               <h3 className="font-serif text-xl font-bold">{section.displayName}</h3>
-              {!isPersonalInfo && (
+              {titleLocked ? (
+                <span
+                  role="img"
+                  aria-label={t('builder.sectionHeader.titleLocked')}
+                  title={t('builder.sectionHeader.titleLocked')}
+                  className="inline-flex text-steel-grey"
+                >
+                  <Lock className="w-3 h-3" />
+                </span>
+              ) : (
                 <Button
                   variant="ghost"
                   size="icon"
                   // Visible 24×24 (matches the small inline pencil aesthetic
                   // next to the section title), but the touch area is
                   // extended to 44×44 via -inset-[10px] to meet WCAG 2.5.8.
-                  // The default Button overlay (-inset-1.5) only gives 36×36
-                  // for h-6 buttons; this override adds 4 more px per side.
                   className="h-6 w-6 text-steel-grey hover:text-ink-soft before:-inset-[10px]"
                   onClick={handleStartEdit}
                   aria-label={t('builder.sectionHeader.renameSection')}
@@ -161,11 +194,24 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
 
         {/* Section Controls */}
         <div className="flex items-center gap-1">
+          {onFineTune && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-blue-700 hover:text-blue-800"
+              onClick={onFineTune}
+              aria-label={t('fineTune.sectionButtonLabel')}
+              title={t('fineTune.sectionButtonLabel')}
+            >
+              <Wand2 className="w-4 h-4" />
+            </Button>
+          )}
+
           {/* Visibility Toggle. The parent container already applies
-              opacity-60 when hidden (line 91), which carries the visual
-              "faded" cue for the hidden state. A conditional text color
-              here would be redundant — just use steel-grey. */}
-          {!isPersonalInfo && (
+              opacity-60 when hidden (line above), which carries the visual
+              "faded" cue for the hidden state. Built-in blocks lock
+              visibility on — the builder always lists them. */}
+          {!isPersonalInfo && !visibilityLocked && (
             <Button
               variant="ghost"
               size="icon"
@@ -184,36 +230,6 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
               }
             >
               {section.isVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-            </Button>
-          )}
-
-          {/* Move Up */}
-          {!isPersonalInfo && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-steel-grey hover:text-ink-soft disabled:opacity-30"
-              onClick={onMoveUp}
-              disabled={isFirst}
-              aria-label={t('builder.sectionHeader.moveUp')}
-              title={t('builder.sectionHeader.moveUp')}
-            >
-              <ChevronUp className="w-4 h-4" />
-            </Button>
-          )}
-
-          {/* Move Down */}
-          {!isPersonalInfo && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-steel-grey hover:text-ink-soft disabled:opacity-30"
-              onClick={onMoveDown}
-              disabled={isLast}
-              aria-label={t('builder.sectionHeader.moveDown')}
-              title={t('builder.sectionHeader.moveDown')}
-            >
-              <ChevronDown className="w-4 h-4" />
             </Button>
           )}
 

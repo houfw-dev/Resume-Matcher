@@ -16,6 +16,10 @@ interface ProcessedResume {
     email?: string;
     phone?: string;
     location?: string;
+    gender?: string;
+    age?: string;
+    workYears?: string;
+    educationLevel?: string;
     website?: string | null;
     linkedin?: string | null;
     github?: string | null;
@@ -25,10 +29,11 @@ interface ProcessedResume {
     id: number;
     title?: string;
     company?: string;
+    department?: string | null;
     location?: string | null;
     years?: string;
     description?: string[];
-    descriptionStyles?: ('bullet' | 'plain')[];
+    descriptionStyles?: ('bullet' | 'plain' | 'label')[];
   }>;
   education?: Array<{
     id: number;
@@ -42,10 +47,11 @@ interface ProcessedResume {
     name?: string;
     role?: string;
     years?: string;
+    scale?: string;
     github?: string | null;
     website?: string | null;
     description?: string[];
-    descriptionStyles?: ('bullet' | 'plain')[];
+    descriptionStyles?: ('bullet' | 'plain' | 'label')[];
   }>;
   additional?: {
     technicalSkills?: string[];
@@ -214,7 +220,7 @@ export async function fetchResumeList(includeMaster = false): Promise<ResumeList
 
 export async function updateResume(
   resumeId: string,
-  resumeData: ProcessedResume
+  resumeData: ResumeData
 ): Promise<ResumeResponse['data']> {
   const res = await apiPatch(`/resumes/${encodeURIComponent(resumeId)}`, resumeData);
   if (!res.ok) {
@@ -271,6 +277,28 @@ export async function downloadResumePdf(
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`Failed to download resume (status ${res.status}): ${text}`);
+  }
+  return await res.blob();
+}
+
+// DOCX is a single canonical Word layout built server-side from structured
+// ResumeData (no Chromium, no template settings); lang only selects static
+// chrome and is optional (backend defaults to the content language).
+export function getResumeDocxUrl(resumeId: string, locale?: Locale): string {
+  const normalizedId = normalizeResumeId(resumeId);
+  const params = new URLSearchParams();
+  if (locale) {
+    params.set('lang', locale);
+  }
+  const query = params.toString();
+  return `${API_BASE}/resumes/${encodeURIComponent(normalizedId)}/docx${query ? `?${query}` : ''}`;
+}
+
+export async function downloadResumeDocx(resumeId: string, locale?: Locale): Promise<Blob> {
+  const res = await apiFetch(getResumeDocxUrl(resumeId, locale));
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to download resume document (status ${res.status}): ${text}`);
   }
   return await res.blob();
 }

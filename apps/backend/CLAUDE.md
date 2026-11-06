@@ -34,7 +34,7 @@ Stack: FastAPI 0.128 · Python **3.13+** · Pydantic v2 / pydantic-settings · S
 - `enrichment.py` — `/enrichment/analyze/{id}`, `/enhance`, `/apply/{id}`, `/regenerate`, `/apply-regenerated/{id}`.
 
 ### Services
-- `parser.py` — `parse_document` (markitdown bytes→Markdown), `parse_resume_to_json` (LLM→`ResumeData`), `restore_dates_from_markdown` (re-inserts months the LLM drops).
+- `parser.py` — `parse_document` (markitdown bytes→Markdown; pypdfium2 fallback for embedded-subset-font glyph loss; CJK radical normalization), `parse_resume_to_json` (LLM→`ResumeData` + 12 deterministic post-processors), `restore_dates_from_markdown` (re-inserts English-month/numeric dates and fills empty date fields).
 - `improver.py` (largest) — keyword extraction, **diff-based** improvement (`generate_resume_diffs` → `apply_diffs` with path allow/block-lists → `verify_diff_result`), skill-target planning (`generate_skill_target_plan`/`verify_skill_target_plan`), legacy full-output `improve_resume`, `calculate_resume_diff`. Sanitizes prompt-injection patterns in user input.
 - `refiner.py` — multi-pass polish: keyword injection (LLM), AI-phrase removal (local, via `refinement.py` blacklist), master-alignment validation. Driven by `RefinementConfig`.
 - `cover_letter.py` — `generate_cover_letter`, `generate_outreach_message`, `generate_resume_title`; resolves custom-vs-default feature prompts at runtime.
@@ -97,8 +97,13 @@ uv sync                                              # install deps (creates .ve
 uv run uvicorn app.main:app --reload --port 8000     # dev server on :8000
 uv run app                                           # console script (app.main:main, uses HOST/PORT/RELOAD)
 uv run playwright install chromium                   # one-time, required for PDF endpoints
+uv sync --extra ocr                                  # optional: offline OCR for scanned/outline-only PDFs
 ```
-Config via `.env` (see `.env.example`). Interactive API docs at `/docs`.
+Config via `.env` (`.env.example`). The optional `ocr` extra (`pypdfium2`
++ `rapidocr-onnxruntime`, bundled 中英文 PP-OCR 模型，纯离线、无外部服务）为
+text-less PDF（扫描件、字体全部转曲的设计软件导出 PDF）在常规文本提取为空时
+提供自动识别回退（前 10 页、200 DPI）；未安装该 extra 时维持既有 422 行为。
+Interactive API docs at `/docs`.
 
 ---
 
@@ -123,7 +128,8 @@ Config via `.env` (see `.env.example`). Interactive API docs at `/docs`.
 - **litellm ↔ python-dotenv trap:** litellm `<1.84.0` hard-pinned `python-dotenv==1.0.1`, which used to fight other pins. Resolved at the current pins (`litellm==1.86.2`, `python-dotenv==1.2.2`); do **not** downgrade litellm below 1.84 without re-checking dotenv.
 - **Keys vs non-secret config:** API **keys** live ONLY in the encrypted `api_keys` SQLite table (per-provider, via `_PROVIDER_KEY_MAP`); `load_config_file()` injects the decrypted keys into the returned dict and `save_config_file()` strips them, so secrets never round-trip to `config.json`. Non-secret provider/model/base/features stay in `config.json`. `PUT /config/llm-api-key` no longer writes any key; keys go through `PUT /config/api-keys`. `migrate_legacy_keys()` folds any legacy plaintext keys into the encrypted store (idempotent, non-clobbering). After any write to `config.json`, call `invalidate_config_cache()`.
 - **Master resume invariant:** exactly one resume has `is_master=True`. Concurrent uploads use `create_resume_atomic_master` (an `asyncio.Lock`, not threading) and auto-promote if the current master is stuck `failed`/`processing`.
-- **Dates lose months:** LLMs drop month precision; `restore_dates_from_markdown` + `_restore_original_dates` re-insert them. Preserve this when editing the parse/improve flow.
+- **Dates lose months:** LLMs drop month precision; `restore_dates_from_markdown` + `_restore_original_dates` re-insert them (incl. numeric `YYYY.MM` and empty-field fills). Preserve this when editing the parse/improve flow.
+- **Embedded-subset font PDFs:** markitdown/pdfminer can extract CJK as Kangxi-radical glyphs (U+2E80–U+2FDF) with digit runs missing. `_recover_glyph_loss` detects the signature and falls back to **pypdfium2** (core dep, pure wheel; same pin also in the `ocr` extra), gated by a CJK-ratio + digit-count quality check; `normalize_cjk_compat(_deep)` then maps radicals to simplified Han. See [resume-parsing-rules.md](../../docs/agent/features/resume-parsing-rules.md).
 - **Single-worker assumption:** caches and locks assume one uvicorn worker / cooperative async. Don't add cross-worker shared mutable state without revisiting `config_cache` and the master lock.
 - **PDF needs the frontend running** (`FRONTEND_BASE_URL`, default `http://localhost:3000`) — Chromium renders `/print/*` pages. Browser is lazily initialized on first PDF request.
 - **Improve/confirm requires a prior preview** — it validates `preview_hash`; arbitrary payloads are rejected (400).
@@ -142,6 +148,7 @@ Config via `.env` (see `.env.example`). Interactive API docs at `/docs`.
 | Coding standards | [`coding-standards.md`](../../docs/agent/coding-standards.md) |
 | Scope / principles | [`scope-and-principles.md`](../../docs/agent/scope-and-principles.md) · [`workflow.md`](../../docs/agent/workflow.md) |
 | AI enrichment | [`features/enrichment.md`](../../docs/agent/features/enrichment.md) |
+| AI fine-tune | [`features/fine-tune.md`](../../docs/agent/features/fine-tune.md) |
 | JD matching | [`features/jd-match.md`](../../docs/agent/features/jd-match.md) |
 | Custom sections | [`features/custom-sections.md`](../../docs/agent/features/custom-sections.md) |
 | i18n | [`features/i18n.md`](../../docs/agent/features/i18n.md) |

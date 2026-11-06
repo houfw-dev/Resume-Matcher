@@ -37,8 +37,9 @@ Background: #FFFFFF
 2. Summary
 3. Work Experience
 4. Projects
-5. Education
-6. Additional (skills, languages, certs, awards)
+5. Education (formal branch only; other branch parks it late)
+6. Additional — skills only (languages labeled line in modern/latex/clean; swiss-single header grid only)
+7. Custom-section cluster, then the render-only late modules Certifications/Training and Awards (independent titled sections; data stays in `additional`, projected after custom sections — never meta rows), then honors / self-evaluation
 
 ## Two-Column Layout
 
@@ -46,11 +47,12 @@ Background: #FFFFFF
 ┌────────────────────┬──────────┐
 │     Main (65%)     │ Side 35% │
 ├────────────────────┼──────────┤
-│   Experience       │ Summary  │
-│   Projects         │ Education│
-│   Certifications   │ Skills   │
-│                    │ Languages│
-│                    │ Awards   │
+│   Summary          │ Education│
+│   Experience       │ Skills   │
+│   Projects         │ Languages│
+│   Custom Sections  │ Links    │
+│   Certifications   │          │
+│   Awards           │          │
 └────────────────────┴──────────┘
 ```
 

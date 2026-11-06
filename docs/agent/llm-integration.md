@@ -42,6 +42,8 @@ The `complete_json()` function automatically enables `response_format={"type": "
 - DeepSeek
 - Major OpenRouter models
 
+The `schema_type` label selects the built-in truncation heuristic in `_appears_truncated`. Labels with a dedicated heuristic are `"resume"`, `"enrichment"`, and `"interview_prep"`; any other label (`"diff"`, `"keywords"`, `"diagnosis"`, `"fine_tune"`, …) gets no truncation special-casing, so those callers must rely on their `response_validator` (which still runs inside the content-retry budget). The fine-tune service calls `complete_json(prompt, schema_type="fine_tune", max_tokens=8192, response_validator=…)` with a validator that round-trips the payload through the `ResumeData` Pydantic model; task-level truthfulness and scope are enforced afterwards by the grounding and scope-restriction layers (see [features/fine-tune.md](features/fine-tune.md)).
+
 ## Retry Logic
 
 LiteLLM's Router owns transport retries. The effective policy on the installed
@@ -70,6 +72,26 @@ model supports sampling:
 - Initial attempt: temperature 0.1
 - First retry: temperature 0.3
 - Second retry: temperature 0.5
+
+### Provider-specific empty-content recovery
+
+LiteLLM maps any non-empty `reasoning_effort` to DeepSeek's
+`{"thinking": {"type": "enabled"}}` for **all** DeepSeek models, including
+the non-reasoner `deepseek-chat`. DeepSeek thinking shares the
+`max_tokens` budget with the final answer: on dense extraction prompts
+(long resumes) the reasoning can exhaust the budget and the API returns
+HTTP 200 with empty `content` (`finish_reason="length"`). The parser then
+raises `Empty response from LLM` and three identical attempts all fail,
+leaving the upload in `failed`.
+
+When `complete_json()` sees an empty completion from a DeepSeek
+deployment with `reasoning_effort` configured, it retries the remaining
+attempts with that parameter omitted (DeepSeek's default is
+thinking-disabled), mirroring the Azure Foundry minimal-effort and
+OpenCode Zen HY3 `no_think` recoveries. The empty-completion log line
+records `finish_reason`, reasoning length, and token usage so
+budget-exhaustion is distinguishable from a genuinely empty upstream
+response.
 
 ## Temperature Support
 
@@ -239,4 +261,6 @@ These are cooperative cancellation budgets. Owned document/PDF/database cleanup 
 | `apps/backend/app/llm.py`                | LiteLLM wrapper with JSON mode |
 | `apps/backend/app/prompts/templates.py`  | Prompt templates               |
 | `apps/backend/app/prompts/enrichment.py` | Enrichment-specific prompts    |
+| `apps/backend/app/prompts/fine_tune.py`  | Fine-tune (job-less self-improvement) prompts |
+| `apps/backend/app/services/fine_tune.py` | Fine-tune pipeline: grounding, scope restriction, diff |
 | `apps/backend/app/config.py`             | Provider configuration         |

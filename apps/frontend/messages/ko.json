@@ -165,14 +165,19 @@
       "unknownSectionType": "알 수 없는 섹션 유형: {type}",
       "unknownDefaultSection": "알 수 없는 기본 섹션: {section}"
     },
+    "sectionOrder": {
+      "lockedNotice": "섹션 순서는 고정되어 있어 순서를 변경할 수 없습니다"
+    },
     "sectionHeader": {
       "renameSection": "섹션 이름 바꾸기",
+      "titleLocked": "기본 섹션 이름은 변경할 수 없습니다",
+      "duplicateNameError": "{name} 이름의 섹션이 이미 있습니다",
+      "reservedNameError": "{name}은(는) 기본 섹션 이름입니다",
+      "nameRequiredError": "섹션 이름은 비워 둘 수 없습니다",
       "customTag": "사용자 지정",
       "hiddenFromPdfTag": "PDF에서 숨김",
       "hideSection": "섹션 숨기기",
       "showSection": "섹션 표시",
-      "moveUp": "위로 이동",
-      "moveDown": "아래로 이동",
       "deleteSection": "섹션 삭제",
       "deleteTitle": "섹션 삭제",
       "deleteDescription": "\"{name}\"을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
@@ -319,11 +324,13 @@
         "addFirstJob": "첫 경력 추가",
         "fields": {
           "jobTitle": "직함",
-          "company": "회사"
+          "company": "회사",
+          "department": "부서"
         },
         "placeholders": {
           "jobTitle": "시니어 개발자",
           "company": "테크 코퍼레이션",
+          "department": "예: 기술부",
           "location": "원격 / 도시",
           "years": "2020년 1월 - 현재",
           "description": "성과를 설명하세요..."
@@ -351,12 +358,14 @@
         "fields": {
           "projectName": "프로젝트 이름",
           "role": "역할",
+          "scale": "프로젝트 규모",
           "website": "웹사이트"
         },
         "placeholders": {
           "projectName": "Resume Matcher",
           "role": "제작자",
           "years": "2023년 3월",
+          "scale": "예: 10인 팀",
           "github": "github.com/username/project",
           "website": "https://project-demo.com",
           "description": "프로젝트 세부 내용..."
@@ -444,6 +453,10 @@
       "placeholders": {
         "name": "홍길동",
         "title": "소프트웨어 엔지니어",
+        "gender": "남성",
+        "age": "28세",
+        "educationLevel": "학사",
+        "workYears": "5년",
         "email": "john@example.com",
         "phone": "+82 10-0000-0000",
         "location": "도시, 국가",
@@ -803,6 +816,7 @@
     "returnToDashboard": "대시보드로 돌아가기",
     "enhanceResume": "이력서 개선",
     "downloadResume": "이력서 다운로드",
+    "downloadWord": "Word 다운로드",
     "deletedTitle": "이력서가 삭제되었습니다",
     "deletedDescriptionMaster": "마스터 이력서가 시스템에서 영구적으로 삭제되었습니다.",
     "deletedDescriptionRegular": "이력서가 시스템에서 영구적으로 삭제되었습니다.",
@@ -819,7 +833,8 @@
     },
     "titlePlaceholder": "이력서 제목을 입력하세요...",
     "downloadFailedTitle": "다운로드 실패",
-    "renameFailedTitle": "이름 변경 실패"
+    "renameFailedTitle": "이름 변경 실패",
+    "diagnoseResume": "이력서 진단"
   },
   "preview": {
     "margins": "여백",
@@ -834,9 +849,16 @@
     "personalInfo": {
       "name": "성명",
       "title": "직함",
+      "gender": "성별",
+      "age": "나이",
+      "educationLevel": "학력",
+      "workYears": "경력 연수",
+      "jobIntention": "희망 직무",
+      "desiredCity": "희망 근무지",
       "email": "이메일",
       "phone": "전화번호",
       "location": "위치",
+      "foreignLanguage": "외국어",
       "website": "웹사이트",
       "linkedin": "LinkedIn",
       "github": "GitHub"
@@ -852,7 +874,8 @@
       "certifications": "교육 및 자격증",
       "languages": "언어",
       "awards": "수상 내역",
-      "links": "링크"
+      "links": "링크",
+      "selfIntroduction": "자기소개"
     },
     "defaults": {
       "name": "이름"
@@ -1113,6 +1136,162 @@
       "projectFollowUps": "프로젝트 후속 질문",
       "skillGaps": "역량 격차",
       "talkingPoints": "핵심 포인트"
+    }
+  },
+  "diagnosis": {
+    "title": "이력서 진단",
+    "subtitle": "V4 루브릭 체크리스트: 항목별 판정과 레드라인 결과.",
+    "loading": "체크리스트를 실행 중 — 의미 항목에 대한 AI 검토에 몇 분 정도 걸릴 수 있습니다…",
+    "measuringLayout": "선택한 템플릿으로 레이아웃을 측정하는 중…",
+    "layoutSkipped": "레이아웃 측정을 사용할 수 없습니다. 페이지 수와 문단 밀도는 텍스트에서 추정됩니다.",
+    "error": "진단에 실패했습니다. 다시 시도해 주세요.",
+    "intro": "이 보고서는 결정론적 검사와 한 번의 구조화된 AI 검토를 결합합니다. 선택적으로 목표 직무 설명을 붙여넣으면 직무 적합도 항목도 평가합니다.",
+    "jobDescriptionLabel": "목표 직무 설명(선택)",
+    "jobDescriptionPlaceholder": "직무 설명을 붙여넣어 적합도 검사를 활성화하세요…",
+    "jdHint": "직무 설명(JD)이 없으면 직무 적합도 항목이 비해당으로 표시됩니다. 역량 5개 항목은 JD가 필요 없지만, 레벨 모델에 매칭되거나 명시적으로 선택된 명확한 지원 직무 의향이 필요하며, 없으면 비해당으로 표시됩니다.",
+    "run": "진단 시작",
+    "rerun": "다시 진단",
+    "specVersion": "루브릭 {version}",
+    "redlinePassed": "모든 레드라인 항목을 통과했습니다.",
+    "redlineFailed": "통과하지 못한 레드라인이 있습니다. 이 상태로 제출하지 마세요:",
+    "dimensionsTitle": "차원별 결과",
+    "itemsTitle": "검사 항목",
+    "filterAll": "전체",
+    "filterProblems": "문제만",
+    "allConform": "모든 항목이 적합하거나 비해당입니다.",
+    "evidenceLabel": "문제점",
+    "suggestionLabel": "개선 조치",
+    "rating": {
+      "conform": "적합",
+      "partial": "부분 적합",
+      "nonconform": "부적합",
+      "na": "비해당"
+    },
+    "severity": {
+      "redline": "레드라인"
+    },
+    "method": {
+      "objective": "자동",
+      "subjective": "AI"
+    },
+    "downloadWord": "Word 문서 다운로드",
+    "downloadFailed": "다운로드에 실패했습니다. 다시 시도해 주세요.",
+    "fileStem": "이력서-진단-리포트",
+    "targetLabel": "진단 대상 직무",
+    "targetEmptyHint": "희망 직무가 비어 있어 이력서 전체를 대상으로 진단합니다.",
+    "targetChooseHint": "여러 희망 직무가 감지되었습니다. 이번 진단의 대상 직무를 선택하세요:",
+    "targetValue": "진단 대상 직무: {title}",
+    "competencyValue": "역량 모델: {name}",
+    "countsLabel": "체크 결과",
+    "countsSummary": "적용 {effective}건 —— 적합 {conform}, 부분 적합 {partial}, 부적합 {nonconform}; 비해당 {na}건.",
+    "modelLabel": "직무 역량 모델",
+    "modelLoading": "역량 모델을 불러오는 중…",
+    "modelLoadError": "역량 모델을 불러오지 못했습니다. 기본 체크리스트로 진단할 수 있습니다.",
+    "modelMatchedHint": "대상 직무에 자동 매칭: {name}. 레벨을 변경하거나 모델 없이 실행할 수 있습니다.",
+    "modelNoMatchHint": "대상 직무와 일치하는 역량 모델이 없습니다. 하나를 직접 선택하거나 모델 없이 실행하세요.",
+    "modelNone": "역량 모델 없이 실행",
+    "workspace": {
+      "cta": "이력서 진단",
+      "dropzoneHint": "PDF, DOCX, DOC 최대 4MB — 파싱 완료 후 자동으로 진단이 시작됩니다",
+      "parsing": "업로드한 이력서를 파싱하는 중…",
+      "diagnosing": "체크리스트 실행 중 — AI 검토에 몇 분 정도 걸릴 수 있습니다…",
+      "parseFailed": "이 이력서 파싱에 실패했습니다. 다시 시도하거나, 삭제하거나, 다른 파일을 업로드하세요.",
+      "paneResume": "업로드한 이력서",
+      "paneReport": "진단 리포트",
+      "structuredTab": "이력서",
+      "originalTab": "원문",
+      "resizeHint": "드래그하여 창 크기 조정",
+      "hideLeft": "이력서 창 숨기기",
+      "showLeft": "이력서 창 보기",
+      "hideRight": "리포트 창 숨기기",
+      "showRight": "리포트 창 보기",
+      "deleteResume": "이력서 삭제",
+      "deleteConfirmTitle": "이 이력서를 삭제할까요?",
+      "deleteConfirmDescription": "업로드한 이력서와 파싱 데이터가 영구적으로 삭제됩니다. 진단 리포트는 내보낸 후에만 보관됩니다.",
+      "backToUpload": "다른 파일 업로드",
+      "jdToggle": "채용 공고(JD)로 다시 진단",
+      "jdRun": "JD로 다시 실행",
+      "exporting": "내보내는 중…"
+    }
+  },
+  "fineTune": {
+    "buttonLabel": "AI 미세 조정",
+    "sectionButtonLabel": "이 섹션 미세 조정",
+    "generating": {
+      "title": "이력서를 미세 조정하는 중…",
+      "body": "AI가 선택한 내용을 재구성하고 다듬고 있습니다. 몇 분 정도 걸릴 수 있습니다."
+    },
+    "dialog": {
+      "title": "AI 미세 조정",
+      "subtitle": "원본 업로드 내용과 파싱된 이력서를 활용해 논리와 강조점을 개선합니다. 새로운 정보를 지어내지 않습니다.",
+      "scopeAll": "전체 이력서",
+      "scopeAllHint": "모든 모듈을 하나의 일관된 문서로 재구성하고 강화합니다.",
+      "scopeModules": "선택한 모듈",
+      "scopeModulesHint": "선택한 모듈과 항목만 변경되며 나머지는 그대로 유지됩니다.",
+      "modules": {
+        "summary": "요약",
+        "workExperience": "경력",
+        "education": "학력",
+        "personalProjects": "프로젝트",
+        "additional": "기술 및 기타",
+        "customSections": "사용자 정의 섹션"
+      },
+      "selectEntries": "{module} 항목 선택",
+      "selectRegions": "{module}의 하위 모듈 선택",
+      "regions": {
+        "techStack": "기술 스택",
+        "background": "프로젝트 배경",
+        "duties": "담당 업무",
+        "highlights": "프로젝트 성과",
+        "achievements": "주요 성과",
+        "role": "프로젝트 역할"
+      },
+      "selectAtLeastOne": "모듈을 하나 이상 선택하세요.",
+      "instructionLabel": "지시 사항 (선택)",
+      "instructionPlaceholder": "예: 성과를 수치화하고, 가장 임팩트 있는 경험을 먼저 배치하고, 문장을 간결하게 다듬기.",
+      "cancel": "취소",
+      "generate": "미리보기 생성"
+    },
+    "preview": {
+      "title": "미세 조정 미리보기",
+      "subtitle": "저장하기 전에 미세 조정 결과를 검토하세요.",
+      "highlightHint": "테두리가 표시된 모듈이 선택한 범위입니다.",
+      "tabRendered": "렌더링",
+      "tabChanges": "변경 사항",
+      "warningsTitle": "검토 필요",
+      "groundingWarning": "확인되지 않은 문장을 검토용으로 보존했습니다: {detail}",
+      "ignoredTarget": "범위를 벗어난 선택은 무시되었습니다: {target}",
+      "diffUnavailable": "자세한 변경 목록을 일시적으로 사용할 수 없습니다. 렌더링된 미리보기로 비교하세요.",
+      "relocationHint": "선택한 모듈에 수상, 자격증, 언어 등 다른 섹션에 속하는 항목이 섞여 있습니다. 전체 미세 조정으로 다시 생성하면 올바른 섹션으로 자동 이동됩니다.",
+      "changesCount": "변경 {count}건",
+      "descriptionsModified": "설명 {count}건 수정",
+      "skillsAdded": "기술 {count}건 추가",
+      "skillsRemoved": "기술 {count}건 제거",
+      "noChanges": "텍스트 변경 사항이 감지되지 않았습니다.",
+      "originalLabel": "이전",
+      "newLabel": "이후",
+      "changeAdded": "추가",
+      "changeRemoved": "삭제",
+      "changeModified": "수정",
+      "cancel": "취소",
+      "overwrite": "원본 덮어쓰기",
+      "saveCopy": "사본으로 저장",
+      "createCopy": "사본 만들기",
+      "copyTitleLabel": "사본 제목",
+      "copyTitlePlaceholder": "미세 조정 사본의 제목",
+      "applying": "적용 중…",
+      "overwriteConfirmTitle": "이 이력서를 덮어쓰시겠습니까?",
+      "overwriteConfirmBody": "구조화된 콘텐츠가 미세 조정 버전으로 교체됩니다. 원본 업로드 텍스트는 보관되고 다시 미세 조정할 수 있지만, 이 작업은 되돌릴 수 없습니다. 현재 버전을 그대로 유지하려면 «사본으로 저장»을 선택하세요.",
+      "regionAppendDropped": "하위 모듈 미세 조정은 원래 줄 수를 유지합니다. 모델이 추가로 작성한 줄은 적용되지 않았습니다."
+    },
+    "toast": {
+      "overwritten": "이력서가 미세 조정 버전으로 업데이트되었습니다."
+    },
+    "errors": {
+      "networkError": "미세 조정 중 네트워크 오류가 발생했습니다. 다시 시도하세요.",
+      "resumeChanged": "미리보기 생성 후 이력서가 변경되었습니다. 새 미리보기를 생성하세요.",
+      "generationFailed": "미세 조정에 실패했습니다. 다시 시도하세요.",
+      "confirmFailed": "미세 조정된 이력서를 저장할 수 없습니다. 다시 시도하세요."
     }
   }
 }

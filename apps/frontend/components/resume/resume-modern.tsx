@@ -4,10 +4,21 @@ import type {
   ResumeData,
   SectionMeta,
   AdditionalSectionLabels,
+  ResumeSectionHeadings,
 } from '@/components/dashboard/resume-component';
-import { getSortedSections } from '@/lib/utils/section-helpers';
+import {
+  getRenderSections,
+  LATE_AWARDS_KEY,
+  LATE_CERTIFICATIONS_KEY,
+} from '@/lib/utils/section-order';
+import {
+  resolveAdditionalModuleTitle,
+  type LateAdditionalModuleKind,
+} from '@/lib/utils/resume-headings';
 import { formatDateRange } from '@/lib/utils';
 import { DescriptionList } from './description-list';
+import { stripPointMarker } from './list-format';
+import { OrderedStringList, PointTextList } from './point-text-list';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/modern.module.css';
 
@@ -15,6 +26,7 @@ interface ResumeModernProps {
   data: ResumeData;
   showContactIcons?: boolean;
   additionalSectionLabels?: Partial<AdditionalSectionLabels>;
+  sectionHeadings?: Partial<ResumeSectionHeadings>;
 }
 
 /**
@@ -30,11 +42,13 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
   data,
   showContactIcons = false,
   additionalSectionLabels,
+  sectionHeadings,
 }) => {
   const { personalInfo, summary, workExperience, education, personalProjects, additional } = data;
 
-  // Get sorted visible sections
-  const sortedSections = getSortedSections(data);
+  // Visible sections in canonical order plus the render-only late markers for
+  // 培训与证书 / 荣誉奖项 (projected to the back by getRenderSections).
+  const renderSections = getRenderSections(data);
 
   // Icon mapping for contact types
   const contactIcons: Record<string, React.ReactNode> = {
@@ -101,7 +115,7 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
         return (
           <div key={section.id} className={baseStyles['resume-section']}>
             <h3 className={styles['section-title-accent']}>{section.displayName}</h3>
-            <p className={`text-justify ${baseStyles['resume-text']}`}>{summary}</p>
+            <PointTextList text={summary} />
           </div>
         );
 
@@ -201,7 +215,12 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
                       <span>{project.role}</span>
                     </div>
                   )}
-                  <DescriptionList items={project.description} styles={project.descriptionStyles} />
+                  <DescriptionList
+                    items={project.description}
+                    styles={project.descriptionStyles}
+                    canonicalizeLabels
+                    flushLabels
+                  />
                 </div>
               ))}
             </div>
@@ -241,7 +260,7 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
       case 'additional':
         if (!additional) return null;
         return (
-          <AdditionalSection
+          <AdditionalSkillsSection
             key={section.id}
             additional={additional}
             displayName={section.displayName}
@@ -292,7 +311,7 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
             {personalInfo.phone && (
               <>
                 <span className={baseStyles['text-muted']}>,</span>
-                {renderContactDetail('Phone', personalInfo.phone, 'tel:')}
+                {renderContactDetail('Phone', personalInfo.phone)}
               </>
             )}
             {personalInfo.location && (
@@ -323,60 +342,48 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
         </header>
       )}
 
-      {/* Render sections in order based on sectionMeta */}
-      {sortedSections
-        .filter((section) => section.key !== 'personalInfo')
-        .map((section) => renderSection(section))}
+      {/* Render sections in canonical order, with the late cert/award
+          modules projected after the custom sections */}
+      {renderSections
+        .filter((item) => !(item.kind === 'meta' && item.meta.key === 'personalInfo'))
+        .map((item) => {
+          if (item.kind === 'meta') return renderSection(item.meta);
+          return (
+            <LateAdditionalModule
+              key={item.kind === 'certifications' ? LATE_CERTIFICATIONS_KEY : LATE_AWARDS_KEY}
+              additional={additional}
+              kind={item.kind}
+              labels={additionalSectionLabels}
+              headings={sectionHeadings}
+            />
+          );
+        })}
     </div>
   );
 };
 
+/** Drop blank/whitespace-only entries so empty builder lines never render (issue #763). */
+const nonBlankStrings = (items?: string[]): string[] =>
+  (items ?? []).filter((item): item is string => typeof item === 'string' && item.trim() !== '');
+
 /**
- * Additional info section (skills, languages, certifications, awards)
+ * The early `additional` slot renders ONLY the skills block (technical skills
+ * + languages). Cert/award lists are projected to the back of the resume by
+ * getRenderSections and rendered via <LateAdditionalModule>.
  */
-const AdditionalSection: React.FC<{
+const AdditionalSkillsSection: React.FC<{
   additional: ResumeData['additional'];
   displayName?: string;
   labels?: Partial<AdditionalSectionLabels>;
-}> = ({ additional, displayName = 'Skills & Awards', labels }) => {
+}> = ({ additional, displayName = 'Skills', labels }) => {
   if (!additional) return null;
 
-  const {
-    technicalSkills: rawTechnicalSkills = [],
-    languages: rawLanguages = [],
-    certificationsTraining: rawCertificationsTraining = [],
-    awards: rawAwards = [],
-  } = additional;
+  const technicalSkills = nonBlankStrings(additional.technicalSkills);
+  const languages = nonBlankStrings(additional.languages);
+  if (technicalSkills.length === 0 && languages.length === 0) return null;
 
-  // Drop blank/whitespace-only entries so empty lines (e.g. from editing in the
-  // builder) never render in the resume or PDF (issue #763).
-  const technicalSkills = rawTechnicalSkills.filter(
-    (item): item is string => typeof item === 'string' && item.trim() !== ''
-  );
-  const languages = rawLanguages.filter(
-    (item): item is string => typeof item === 'string' && item.trim() !== ''
-  );
-  const certificationsTraining = rawCertificationsTraining.filter(
-    (item): item is string => typeof item === 'string' && item.trim() !== ''
-  );
-  const awards = rawAwards.filter(
-    (item): item is string => typeof item === 'string' && item.trim() !== ''
-  );
-
-  const mergedLabels: AdditionalSectionLabels = {
-    technicalSkills: labels?.technicalSkills ?? 'Technical Skills:',
-    languages: labels?.languages ?? 'Languages:',
-    certifications: labels?.certifications ?? 'Certifications:',
-    awards: labels?.awards ?? 'Awards:',
-  };
-
-  const hasContent =
-    technicalSkills.length > 0 ||
-    languages.length > 0 ||
-    certificationsTraining.length > 0 ||
-    awards.length > 0;
-
-  if (!hasContent) return null;
+  const technicalSkillsLabel = labels?.technicalSkills ?? 'Technical Skills:';
+  const languagesLabel = labels?.languages ?? 'Languages:';
 
   return (
     <div className={baseStyles['resume-section']}>
@@ -384,28 +391,41 @@ const AdditionalSection: React.FC<{
       <div className={`${baseStyles['resume-stack']} ${baseStyles['resume-text-sm']}`}>
         {technicalSkills.length > 0 && (
           <div className="flex">
-            <span className="font-bold w-32 shrink-0">{mergedLabels.technicalSkills}</span>
-            <span>{technicalSkills.join(', ')}</span>
+            <span className="font-bold w-32 shrink-0">{technicalSkillsLabel}</span>
+            <span>{technicalSkills.map(stripPointMarker).join(', ')}</span>
           </div>
         )}
         {languages.length > 0 && (
           <div className="flex">
-            <span className="font-bold w-32 shrink-0">{mergedLabels.languages}</span>
+            <span className="font-bold w-32 shrink-0">{languagesLabel}</span>
             <span>{languages.join(', ')}</span>
           </div>
         )}
-        {certificationsTraining.length > 0 && (
-          <div className="flex">
-            <span className="font-bold w-32 shrink-0">{mergedLabels.certifications}</span>
-            <span>{certificationsTraining.join(', ')}</span>
-          </div>
-        )}
-        {awards.length > 0 && (
-          <div className="flex">
-            <span className="font-bold w-32 shrink-0">{mergedLabels.awards}</span>
-            <span>{awards.join(', ')}</span>
-          </div>
-        )}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * 培训与证书 / 荣誉奖项 render as independent accent-titled modules at the
+ * BACK of the resume (after custom sections), entries comma-joined.
+ */
+const LateAdditionalModule: React.FC<{
+  additional: ResumeData['additional'] | undefined;
+  kind: LateAdditionalModuleKind;
+  labels?: Partial<AdditionalSectionLabels>;
+  headings?: Partial<ResumeSectionHeadings>;
+}> = ({ additional, kind, labels, headings }) => {
+  const field = kind === 'certifications' ? 'certificationsTraining' : 'awards';
+  const entries = nonBlankStrings(additional?.[field]);
+  if (entries.length === 0) return null;
+  const fallbackLabel = kind === 'certifications' ? 'Certifications:' : 'Awards:';
+  const title = resolveAdditionalModuleTitle(kind, headings, labels?.[kind] ?? fallbackLabel);
+  return (
+    <div className={baseStyles['resume-section']}>
+      <h3 className={styles['section-title-accent']}>{title}</h3>
+      <div className={`${baseStyles['resume-stack']} ${baseStyles['resume-text-sm']}`}>
+        <span>{entries.map(stripPointMarker).join(', ')}</span>
       </div>
     </div>
   );
@@ -443,7 +463,7 @@ const DynamicResumeSectionModern: React.FC<{
   return (
     <div className={baseStyles['resume-section']}>
       <h3 className={styles['section-title-accent']}>{sectionMeta.displayName}</h3>
-      {renderDynamicContent(sectionMeta.sectionType, customSection)}
+      {renderDynamicContent(sectionMeta, customSection)}
     </div>
   );
 };
@@ -452,13 +472,13 @@ const DynamicResumeSectionModern: React.FC<{
  * Render dynamic section content based on type
  */
 function renderDynamicContent(
-  sectionType: SectionMeta['sectionType'],
+  sectionMeta: SectionMeta,
   customSection: NonNullable<ResumeData['customSections']>[string]
 ) {
-  switch (sectionType) {
+  switch (sectionMeta.sectionType) {
     case 'text':
       if (!customSection.text?.trim()) return null;
-      return <p className={`text-justify ${baseStyles['resume-text']}`}>{customSection.text}</p>;
+      return <PointTextList text={customSection.text} />;
 
     case 'itemList':
       if (!customSection.items?.length) return null;
@@ -492,7 +512,12 @@ function renderDynamicContent(
 
     case 'stringList':
       if (!customSection.strings?.length) return null;
-      return <div className={baseStyles['resume-text-sm']}>{customSection.strings.join(', ')}</div>;
+      return (
+        <OrderedStringList
+          items={customSection.strings}
+          textClassName={baseStyles['resume-text-sm']}
+        />
+      );
 
     default:
       return null;

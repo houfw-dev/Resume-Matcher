@@ -98,6 +98,13 @@ class TestGenerateResumeDiffs:
         assert "Verified skill targets" in prompt
         assert "Kubernetes" in prompt
         assert "add_skill" in prompt
+        # The assertive tailoring actions and their closed-loop contract are
+        # documented in the prompt the model receives.
+        assert "elaborate_skill" in prompt
+        assert "insert_row" in prompt
+        assert "tech_stack" in prompt
+        assert "highlight" in prompt
+        assert "three-place skill loop" in prompt.lower()
 
     @patch("app.services.improver.complete_json", new_callable=AsyncMock)
     async def test_handles_empty_changes(self, mock_llm, sample_resume, sample_job_keywords):

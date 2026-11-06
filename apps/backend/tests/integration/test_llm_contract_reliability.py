@@ -16,6 +16,31 @@ from app.routers import enrichment
 
 CONFIG = LLMConfig(provider="openai", model="gpt-4o", api_key="synthetic")
 
+DEEPSEEK_CONFIG = LLMConfig(
+    provider="deepseek",
+    model="deepseek-chat",
+    api_key="synthetic",
+    reasoning_effort="medium",
+)
+
+
+def _empty_thinking_response() -> litellm.ModelResponse:
+    """DeepSeek thinking mode burning the whole output budget: no answer."""
+    return litellm.ModelResponse(
+        model="deepseek-chat",
+        choices=[
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "reasoning_content": "long internal reasoning...",
+                },
+                "finish_reason": "length",
+                "index": 0,
+            }
+        ],
+    )
+
 
 def _error(kind: str) -> Exception:
     error_type = getattr(litellm, kind)
@@ -250,6 +275,132 @@ async def test_bracketed_prose_before_object_is_salvaged_without_retry(
 
     assert result == {"changes": []}
     assert router.acompletion.await_count == 1
+
+
+async def test_truncated_json_is_salvaged_only_after_retry_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Salvage runs on the final attempt and still passes the validator."""
+    router = AsyncMock()
+    truncated = '{"items": [{"id": 2, "rating": "partial"}, {"id": 3, "ratin'
+    response = _response({"unused": True})
+    response.choices[0].message.content = truncated
+    router.acompletion.return_value = response
+    monkeypatch.setattr(llm, "get_router", lambda _config=None: (router, CONFIG))
+    monkeypatch.setattr(llm, "_supports_json_mode", lambda _model: False)
+
+    def salvage(raw: str) -> dict[str, Any] | None:
+        return {"items": [{"id": 2, "rating": "partial"}]} if '"items"' in raw else None
+
+    def validator(result: dict[str, Any]) -> dict[str, Any]:
+        if not result.get("items"):
+            raise ValueError("no items")
+        return result
+
+    result = await llm.complete_json(
+        "synthetic",
+        retries=1,
+        salvage_response=salvage,
+        response_validator=validator,
+    )
+
+    assert result == {"items": [{"id": 2, "rating": "partial"}]}
+    # One normal attempt + one retry, no fourth call: salvage closed the loop.
+    assert router.acompletion.await_count == 2
+
+
+async def test_deepseek_empty_content_retries_without_thinking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Thinking-budget exhaustion recovers on retry with effort dropped."""
+    router = AsyncMock()
+    sparse = {
+        "personalInfo": {"name": "Sparse Candidate"},
+        "workExperience": [],
+        "education": [],
+    }
+    router.acompletion.side_effect = [
+        _empty_thinking_response(),
+        _response(sparse),
+    ]
+    monkeypatch.setattr(llm, "get_router", lambda _config=None: (router, DEEPSEEK_CONFIG))
+    monkeypatch.setattr(llm, "_supports_json_mode", lambda _model: False)
+
+    result = await llm.complete_json("synthetic", retries=1)
+
+    assert result == sparse
+    assert router.acompletion.await_count == 2
+    first_kwargs = router.acompletion.await_args_list[0].kwargs
+    retry_kwargs = router.acompletion.await_args_list[1].kwargs
+    assert first_kwargs["reasoning_effort"] == "medium"
+    assert "reasoning_effort" not in retry_kwargs
+    assert "extra_body" not in retry_kwargs
+
+
+async def test_deepseek_persistent_empty_content_raises_after_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only one thinking-disable retry is granted; still-empty -> original error."""
+    router = AsyncMock()
+    router.acompletion.return_value = _empty_thinking_response()
+    monkeypatch.setattr(llm, "get_router", lambda _config=None: (router, DEEPSEEK_CONFIG))
+    monkeypatch.setattr(llm, "_supports_json_mode", lambda _model: False)
+
+    with pytest.raises(ValueError, match="Empty response from LLM"):
+        await llm.complete_json("synthetic", retries=1)
+
+    assert router.acompletion.await_count == 2
+    assert "reasoning_effort" not in router.acompletion.await_args_list[1].kwargs
+
+
+async def test_non_deepseek_empty_content_uses_normal_retry_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Providers without the thinking quirk keep reasoning_effort on retry."""
+    router = AsyncMock()
+    config = LLMConfig(
+        provider="openrouter",
+        model="openrouter/anthropic/claude",
+        api_key="synthetic",
+        reasoning_effort="medium",
+    )
+    sparse = {"personalInfo": {"name": "Sparse Candidate"}}
+    router.acompletion.side_effect = [
+        _empty_thinking_response(),
+        _response(sparse),
+    ]
+    monkeypatch.setattr(llm, "get_router", lambda _config=None: (router, config))
+    monkeypatch.setattr(llm, "_supports_json_mode", lambda _model: False)
+
+    result = await llm.complete_json("synthetic", retries=1)
+
+    assert result == sparse
+    retry_kwargs = router.acompletion.await_args_list[1].kwargs
+    assert retry_kwargs["reasoning_effort"] == "medium"
+
+
+async def test_salvage_failing_validation_raises_original_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    router = AsyncMock()
+    response = _response({"unused": True})
+    response.choices[0].message.content = '{"items": [broken'
+    router.acompletion.return_value = response
+    monkeypatch.setattr(llm, "get_router", lambda _config=None: (router, CONFIG))
+    monkeypatch.setattr(llm, "_supports_json_mode", lambda _model: False)
+
+    def validator(result: dict[str, Any]) -> dict[str, Any]:
+        if result.get("items") != [{"ok": True}]:
+            raise ValueError("validator rejected salvage")
+        return result
+
+    with pytest.raises(ValueError, match="validator rejected salvage|No JSON found"):
+        await llm.complete_json(
+            "synthetic",
+            retries=0,
+            salvage_response=lambda _raw: {"items": [{"bad": True}]},
+            response_validator=validator,
+        )
 
 
 async def test_validator_must_return_an_object(

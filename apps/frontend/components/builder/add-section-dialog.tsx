@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -14,13 +14,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Plus, FileText, List, ListOrdered } from 'lucide-react';
-import type { SectionType } from '@/components/dashboard/resume-component';
+import type { SectionMeta, SectionType } from '@/components/dashboard/resume-component';
+import { validateSectionName } from '@/lib/utils/section-order';
 import { useTranslations } from '@/lib/i18n';
 
 interface AddSectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAdd: (displayName: string, sectionType: SectionType) => void;
+  existingSections: readonly SectionMeta[];
 }
 
 type SelectableSectionType = Exclude<SectionType, 'personalInfo'>;
@@ -29,28 +31,64 @@ type SelectableSectionType = Exclude<SectionType, 'personalInfo'>;
  * AddSectionDialog Component
  *
  * Dialog for creating new custom sections.
- * Allows user to enter a name and select a section type.
+ * Allows user to enter a name and select a section type. Names cannot be
+ * blank, duplicate an existing visible section, or reuse a default title.
  */
 export const AddSectionDialog: React.FC<AddSectionDialogProps> = ({
   open,
   onOpenChange,
   onAdd,
+  existingSections,
 }) => {
   const { t } = useTranslations();
   const [displayName, setDisplayName] = useState('');
   const [sectionType, setSectionType] = useState<SelectableSectionType>('text');
 
-  const handleSubmit = () => {
-    if (displayName.trim()) {
-      onAdd(displayName.trim(), sectionType);
+  // Default section titles in the active locale are reserved names.
+  const reservedNames = useMemo(
+    () => [
+      t('resume.sections.personalInfo'),
+      t('resume.sections.summary'),
+      t('resume.sections.experience'),
+      t('resume.sections.education'),
+      t('resume.sections.projects'),
+      t('resume.sections.skills'),
+    ],
+    [t]
+  );
+
+  // Reset inputs whenever the dialog finishes closing.
+  useEffect(() => {
+    if (!open) {
       setDisplayName('');
       setSectionType('text');
-      onOpenChange(false);
     }
+  }, [open]);
+
+  const trimmedName = displayName.trim();
+  const validationCode = validateSectionName(displayName, existingSections, {
+    reservedNames,
+  });
+  const nameError =
+    trimmedName.length > 0
+      ? validationCode === 'duplicate'
+        ? t('builder.sectionHeader.duplicateNameError', { name: trimmedName })
+        : validationCode === 'reserved'
+          ? t('builder.sectionHeader.reservedNameError', { name: trimmedName })
+          : null
+      : null;
+  const canSubmit = validationCode === null;
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    onAdd(trimmedName, sectionType);
+    setDisplayName('');
+    setSectionType('text');
+    onOpenChange(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && displayName.trim()) {
+    if (e.key === 'Enter' && canSubmit) {
       handleSubmit();
     }
   };
@@ -107,6 +145,7 @@ export const AddSectionDialog: React.FC<AddSectionDialogProps> = ({
               className="rounded-none border-black"
               autoFocus
             />
+            {nameError && <p className="font-mono text-xs text-destructive">{nameError}</p>}
           </div>
 
           {/* Section Type */}
@@ -158,7 +197,7 @@ export const AddSectionDialog: React.FC<AddSectionDialogProps> = ({
               {t('common.cancel')}
             </Button>
           </DialogClose>
-          <Button onClick={handleSubmit} disabled={!displayName.trim()} className="rounded-none">
+          <Button onClick={handleSubmit} disabled={!canSubmit} className="rounded-none">
             <Plus className="w-4 h-4 mr-2" />
             {t('builder.addSection')}
           </Button>
@@ -175,9 +214,10 @@ export const AddSectionDialog: React.FC<AddSectionDialogProps> = ({
  */
 interface AddSectionButtonProps {
   onAdd: (displayName: string, sectionType: SectionType) => void;
+  existingSections: readonly SectionMeta[];
 }
 
-export const AddSectionButton: React.FC<AddSectionButtonProps> = ({ onAdd }) => {
+export const AddSectionButton: React.FC<AddSectionButtonProps> = ({ onAdd, existingSections }) => {
   const { t } = useTranslations();
   const [open, setOpen] = useState(false);
 
@@ -191,7 +231,12 @@ export const AddSectionButton: React.FC<AddSectionButtonProps> = ({ onAdd }) => 
         <Plus className="w-5 h-5 mr-2" />
         {t('builder.customSections.addCustomSectionButton')}
       </Button>
-      <AddSectionDialog open={open} onOpenChange={setOpen} onAdd={onAdd} />
+      <AddSectionDialog
+        open={open}
+        onOpenChange={setOpen}
+        onAdd={onAdd}
+        existingSections={existingSections}
+      />
     </>
   );
 };

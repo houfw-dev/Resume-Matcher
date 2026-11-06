@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   ResumeSingleColumn,
   ResumeTwoColumn,
@@ -8,12 +8,16 @@ import {
   ResumeClean,
   ResumeVivid,
 } from '@/components/resume';
+import { dedupeResumeLists, stripMarkdownEmphasisDeep } from '@/lib/utils/markdown-strip';
+import { canonicalizeTechTerms } from '@/lib/utils/tech-terms';
+import { normalizeTextHygiene } from '@/lib/utils/text-hygiene';
 import {
   type TemplateSettings,
   type TemplateType,
   DEFAULT_TEMPLATE_SETTINGS,
   settingsToCssVars,
 } from '@/lib/types/template-settings';
+import type { PersonalInfoLabels } from '@/lib/utils/resume-headings';
 import baseStyles from '@/components/resume/styles/_base.module.css';
 
 export interface PersonalInfo {
@@ -22,6 +26,12 @@ export interface PersonalInfo {
   email?: string;
   phone?: string;
   location?: string;
+  // Header demographics, copied verbatim from the uploaded source
+  // (gender 性别, age 年龄, workYears 工作年限, educationLevel 最高学历).
+  gender?: string;
+  age?: string;
+  workYears?: string;
+  educationLevel?: string;
   website?: string;
   linkedin?: string;
   github?: string;
@@ -31,10 +41,11 @@ export interface Experience {
   id: number;
   title?: string;
   company?: string;
+  department?: string;
   location?: string;
   years?: string;
   description?: string[];
-  descriptionStyles?: ('bullet' | 'plain')[];
+  descriptionStyles?: ('bullet' | 'plain' | 'label')[];
 }
 
 export interface Education {
@@ -50,10 +61,12 @@ export interface Project {
   name?: string;
   role?: string;
   years?: string;
+  /** 项目规模 / 团队规模, promoted from inline source rows by the parser. */
+  scale?: string;
   github?: string;
   website?: string;
   description?: string[];
-  descriptionStyles?: ('bullet' | 'plain')[];
+  descriptionStyles?: ('bullet' | 'plain' | 'label')[];
 }
 
 export interface AdditionalInfo {
@@ -108,7 +121,7 @@ export interface CustomSectionItem {
   location?: string;
   years?: string;
   description?: string[];
-  descriptionStyles?: ('bullet' | 'plain')[];
+  descriptionStyles?: ('bullet' | 'plain' | 'label')[];
 }
 
 // Custom section data container
@@ -136,6 +149,7 @@ interface ResumeProps {
   template?: TemplateType;
   settings?: TemplateSettings;
   additionalSectionLabels?: Partial<AdditionalSectionLabels>;
+  personalInfoLabels?: Partial<PersonalInfoLabels>;
   sectionHeadings?: Partial<ResumeSectionHeadings>;
   fallbackLabels?: Partial<ResumeFallbackLabels>;
   /**
@@ -162,6 +176,7 @@ const Resume: React.FC<ResumeProps> = ({
   template = 'swiss-single',
   settings,
   additionalSectionLabels,
+  personalInfoLabels,
   sectionHeadings,
   fallbackLabels,
   locale,
@@ -183,6 +198,22 @@ const Resume: React.FC<ResumeProps> = ({
   // Convert settings to CSS variables
   const cssVars = settingsToCssVars(mergedSettings, locale);
 
+  // Display-only repair, in the same order as the backend read-time heal
+  // chain: canonical tech-term casing, then presentation hygiene (trim,
+  // blank rows/styles lockstep, unified list endings), then strip leaked
+  // Markdown emphasis modifiers (LLM output, old stored rows) and collapse
+  // entries that become duplicates once the markers are gone (e.g.
+  // "英语四级" / "英语四级**"). Keeps screen, PDF (this component renders the
+  // print page too) and DOCX in agreement. The original prop is untouched —
+  // builder forms stay raw.
+  const displayData = useMemo(
+    () =>
+      dedupeResumeLists(
+        stripMarkdownEmphasisDeep(normalizeTextHygiene(canonicalizeTechTerms(resumeData)))
+      ),
+    [resumeData]
+  );
+
   return (
     <div
       className={`${baseStyles['resume-body']} bg-white text-black w-full mx-auto resume-template-${mergedSettings.template}`}
@@ -190,28 +221,31 @@ const Resume: React.FC<ResumeProps> = ({
     >
       {mergedSettings.template === 'swiss-single' && (
         <ResumeSingleColumn
-          data={resumeData}
+          data={displayData}
           showContactIcons={mergedSettings.showContactIcons}
           additionalSectionLabels={additionalSectionLabels}
+          personalInfoLabels={personalInfoLabels}
+          sectionHeadings={sectionHeadings}
         />
       )}
       {mergedSettings.template === 'swiss-two-column' && (
         <ResumeTwoColumn
-          data={resumeData}
+          data={displayData}
           showContactIcons={mergedSettings.showContactIcons}
           sectionHeadings={sectionHeadings}
         />
       )}
       {mergedSettings.template === 'modern' && (
         <ResumeModern
-          data={resumeData}
+          data={displayData}
           showContactIcons={mergedSettings.showContactIcons}
           additionalSectionLabels={additionalSectionLabels}
+          sectionHeadings={sectionHeadings}
         />
       )}
       {mergedSettings.template === 'modern-two-column' && (
         <ResumeModernTwoColumn
-          data={resumeData}
+          data={displayData}
           showContactIcons={mergedSettings.showContactIcons}
           sectionHeadings={sectionHeadings}
           fallbackLabels={fallbackLabels}
@@ -219,21 +253,23 @@ const Resume: React.FC<ResumeProps> = ({
       )}
       {mergedSettings.template === 'latex' && (
         <ResumeLatex
-          data={resumeData}
+          data={displayData}
           showContactIcons={mergedSettings.showContactIcons}
           additionalSectionLabels={additionalSectionLabels}
+          sectionHeadings={sectionHeadings}
         />
       )}
       {mergedSettings.template === 'clean' && (
         <ResumeClean
-          data={resumeData}
+          data={displayData}
           showContactIcons={mergedSettings.showContactIcons}
           additionalSectionLabels={additionalSectionLabels}
+          sectionHeadings={sectionHeadings}
         />
       )}
       {mergedSettings.template === 'vivid' && (
         <ResumeVivid
-          data={resumeData}
+          data={displayData}
           showContactIcons={mergedSettings.showContactIcons}
           sectionHeadings={sectionHeadings}
           fallbackLabels={fallbackLabels}

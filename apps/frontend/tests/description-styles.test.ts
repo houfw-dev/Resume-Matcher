@@ -22,10 +22,23 @@ describe('description style helpers', () => {
       'bullet',
       'plain',
     ]);
+    // Cycle: bullet → plain → label → bullet. Plain stays one click away;
+    // the second click turns the row into a bold sub-module heading.
     expect(toggleDescriptionStyle(['A', 'B', 'C'], ['bullet', 'plain'], 1)).toEqual([
+      'bullet',
+      'label',
+      'bullet',
+    ]);
+    expect(toggleDescriptionStyle(['A', 'B', 'C'], ['bullet', 'label'], 1)).toEqual([
       'bullet',
       'bullet',
       'bullet',
     ]);
+  });
+
+  it('align preserves the label style (bold sub-module heading)', () => {
+    expect(
+      alignDescriptionStyles(['负责内容', 'A', 'B'], ['label', undefined, 'weird' as never])
+    ).toEqual(['label', 'bullet', 'bullet']);
   });
 });

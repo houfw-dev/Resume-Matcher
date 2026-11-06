@@ -1511,6 +1511,7 @@ async def complete_json(
     retries: int = 2,
     schema_type: str = "resume",
     response_validator: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    salvage_response: Callable[[str], dict[str, Any] | None] | None = None,
 ) -> dict[str, Any]:
     """Make a completion request expecting JSON response.
 
@@ -1524,6 +1525,10 @@ async def complete_json(
             context-aware truncation detection and used to tailor retry hints.
         response_validator: Optional synchronous schema/source validator. A
             ``ValueError`` rejects the content inside this retry budget.
+        salvage_response: Optional last-resort parser for malformed/truncated
+            raw text on the final attempt. When it returns a dict, the result
+            still passes ``response_validator``; otherwise the original error
+            is raised. Use for schemas where partial content is usable.
     """
     validate_prompt_size(prompt + (system_prompt or ""))
     router, config = get_router(config)
@@ -1543,9 +1548,39 @@ async def complete_json(
     # support it; prompt-only JSON remains the portable default.
     use_json_mode = _supports_json_mode(model_name) or _openai_compatible_supports_json_mode(config)
     json_mode_failed = False
+    # LiteLLM maps any non-"none" reasoning_effort to DeepSeek thinking mode,
+    # including on the non-reasoner deepseek-chat. Thinking shares the
+    # max_tokens budget with the answer, so dense extraction prompts can
+    # exhaust the budget and return HTTP 200 with empty content. The first
+    # empty response flips this off for the remaining attempts.
+    deepseek_thinking_disabled = False
+    saw_empty_response = False
+
+    def _try_salvage(raw_text: str) -> dict[str, Any] | None:
+        """Run the optional salvage hook + validator on malformed raw text."""
+        if salvage_response is None or not raw_text:
+            return None
+        try:
+            salvaged = salvage_response(raw_text)
+        except Exception as salvage_error:  # noqa: BLE001 — salvage is best-effort
+            logging.warning("Partial-JSON salvage parser failed: %s", salvage_error)
+            return None
+        if not isinstance(salvaged, dict):
+            return None
+        try:
+            if response_validator is not None:
+                salvaged = response_validator(salvaged)
+        except ValueError as salvage_invalid:
+            logging.warning("Salvaged JSON failed validation: %s", salvage_invalid)
+            return None
+        if not isinstance(salvaged, dict):
+            return None
+        logging.warning("Accepted salvaged partial JSON after extraction failure")
+        return salvaged
 
     for attempt in range(retries + 1):
         try:
+            saw_empty_response = False
             kwargs: dict[str, Any] = {
                 "model": "primary",
                 "messages": messages,
@@ -1586,7 +1621,11 @@ async def complete_json(
             # no_think setting. Scope it to structured-output requests only.
             if _uses_opencode_zen_hy3(config):
                 kwargs["extra_body"] = {"reasoning_effort": "no_think"}
-            elif reasoning_effort:
+            elif reasoning_effort and not (
+                # Omit entirely once DeepSeek thinking burned the budget:
+                # the provider's default is thinking-disabled.
+                config.provider == "deepseek" and deepseek_thinking_disabled
+            ):
                 kwargs["reasoning_effort"] = reasoning_effort
 
             # JSON-012: Fallback to prompt-only JSON mode after JSON-mode failure.
@@ -1599,9 +1638,24 @@ async def complete_json(
             # Never parse ``reasoning_content`` as JSON.  If the model has
             # consumed its budget on reasoning but produced no final answer,
             # treat it as an empty completion and retry with the full budget.
-            content = _extract_choice_primary_text(response.choices[0])
+            choice = response.choices[0]
+            content = _extract_choice_primary_text(choice)
 
             if not content:
+                # Log enough to distinguish a reasoning-budget burn-out
+                # (finish_reason=length + long reasoning_content) from a
+                # provider-side empty completion. Never log content: it
+                # carries resume/prompt personal data.
+                message = _safe_get(choice, "message")
+                reasoning = _safe_get(message, "reasoning_content")
+                logging.warning(
+                    "LLM returned no visible content (finish_reason=%s, "
+                    "reasoning_chars=%d, usage=%s)",
+                    _safe_get(choice, "finish_reason"),
+                    len(reasoning) if isinstance(reasoning, str) else 0,
+                    getattr(response, "usage", None),
+                )
+                saw_empty_response = True
                 raise ValueError("Empty response from LLM")
 
             # Do not log response bodies: they frequently contain a resume or
@@ -1672,18 +1726,41 @@ async def complete_json(
                     + "\n\nIMPORTANT: Output ONLY a valid JSON object. Start with { and end with }."
                 )
                 continue
+            salvaged = _try_salvage(content)
+            if salvaged is not None:
+                return salvaged
             raise ValueError(
                 f"Failed to parse JSON after {retries + 1} attempts: {e}")
 
         except ValueError as e:
             # Content quality — empty response, JSON extraction failure
             logging.warning(f"Content extraction failed (attempt {attempt + 1}): {e}")
+            if (
+                saw_empty_response
+                and config.provider == "deepseek"
+                and config.reasoning_effort
+                and not deepseek_thinking_disabled
+                and attempt < retries
+            ):
+                deepseek_thinking_disabled = True
+                logging.warning(
+                    "Empty content with DeepSeek thinking enabled (likely "
+                    "output budget exhausted by reasoning); retrying "
+                    "attempt %d without reasoning_effort",
+                    attempt + 2,
+                )
+                continue
             if attempt < retries:
-                messages[-1]["content"] = (
+                filters_valid_hint = (
                     prompt
                     + "\n\nIMPORTANT: Output ONLY a valid JSON object that satisfies every requested field and type."
                 )
+                messages[-1]["content"] = filters_valid_hint
                 continue
+            raw_text = content if "content" in locals() else ""
+            salvaged = _try_salvage(raw_text)
+            if salvaged is not None:
+                return salvaged
             raise
 
         except litellm.BadRequestError as e:

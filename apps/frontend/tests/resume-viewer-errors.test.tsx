@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResumeViewerPage from '@/app/(default)/resumes/[id]/page';
 import {
   deleteResume,
+  downloadResumeDocx,
   downloadResumePdf,
   fetchResume,
   renameResume,
   retryProcessing,
 } from '@/lib/api/resume';
-import { openUrlInNewTab } from '@/lib/utils/download';
+import { downloadBlobAsFile, openUrlInNewTab } from '@/lib/utils/download';
 
 const route = vi.hoisted(() => ({ resumeId: 'resume-123' }));
 const push = vi.fn();
@@ -36,6 +37,8 @@ vi.mock('@/lib/api/resume', () => ({
   renameResume: vi.fn(),
   downloadResumePdf: vi.fn(),
   getResumePdfUrl: vi.fn(() => 'https://example.invalid/pdf'),
+  downloadResumeDocx: vi.fn(),
+  getResumeDocxUrl: vi.fn(() => 'https://example.invalid/docx'),
 }));
 vi.mock('@/lib/utils/download', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/utils/download')>();
@@ -48,6 +51,8 @@ vi.mock('@/lib/utils/download', async (importOriginal) => {
 
 const mockedFetch = vi.mocked(fetchResume);
 const mockedDownload = vi.mocked(downloadResumePdf);
+const mockedDownloadDocx = vi.mocked(downloadResumeDocx);
+const mockedSaveBlob = vi.mocked(downloadBlobAsFile);
 const mockedRename = vi.mocked(renameResume);
 const mockedDelete = vi.mocked(deleteResume);
 
@@ -73,7 +78,7 @@ describe('resume viewer operation errors', () => {
     render(<ResumeViewerPage />);
 
     const downloadButton = await screen.findByRole('button', {
-      name: 'resumeViewer.downloadResume',
+      name: 'dashboard.downloadPdf',
     });
     await act(async () => downloadButton.click());
 
@@ -90,6 +95,118 @@ describe('resume viewer operation errors', () => {
     expect(mockedDownload).toHaveBeenCalledTimes(2);
     expect(await screen.findByText('common.success')).toBeInTheDocument();
     expect(screen.queryByText('resumeViewer.downloadFailedTitle')).not.toBeInTheDocument();
+  });
+
+  it('shows a retryable Word download error and retries the DOCX call', async () => {
+    mockedDownloadDocx.mockRejectedValue(new Error('HTTP 500 build failed'));
+    render(<ResumeViewerPage />);
+
+    const wordButton = await screen.findByRole('button', {
+      name: 'resumeViewer.downloadWord',
+    });
+    await act(async () => wordButton.click());
+
+    expect(await screen.findByText('resumeViewer.downloadFailedTitle')).toBeInTheDocument();
+    expect(screen.getByText('resumeViewer.errors.failedToDownload')).toBeInTheDocument();
+    expect(mockedDownload).not.toHaveBeenCalled();
+    mockedDownloadDocx.mockResolvedValue(new Blob(['docx']));
+    await act(async () => screen.getByRole('button', { name: 'common.retry' }).click());
+    expect(mockedDownloadDocx).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText('common.success')).toBeInTheDocument();
+  });
+
+  it('falls back to opening the DOCX URL in a new tab on network failure', async () => {
+    mockedDownloadDocx.mockRejectedValue(new TypeError('Failed to fetch'));
+    vi.mocked(openUrlInNewTab).mockReturnValue(false);
+    render(<ResumeViewerPage />);
+
+    const wordButton = await screen.findByRole('button', {
+      name: 'resumeViewer.downloadWord',
+    });
+    await act(async () => wordButton.click());
+
+    expect(await screen.findByText('resumeViewer.downloadFailedTitle')).toBeInTheDocument();
+    expect(screen.getByText('common.popupBlocked')).toBeInTheDocument();
+    expect(mockedDownload).not.toHaveBeenCalled();
+  });
+
+  it('names PDF and Word downloads from name-age-workYears-education-intention', async () => {
+    mockedFetch.mockResolvedValue({
+      title: 'Original title',
+      processed_resume: {
+        personalInfo: {
+          name: '王浩',
+          age: '28岁',
+          workYears: '5年',
+          educationLevel: '硕士',
+          title: 'Java开发工程师',
+        },
+      },
+      raw_resume: { processing_status: 'ready' },
+    } as Awaited<ReturnType<typeof fetchResume>>);
+    mockedDownload.mockResolvedValue(new Blob(['pdf']));
+    mockedDownloadDocx.mockResolvedValue(new Blob(['docx']));
+    render(<ResumeViewerPage />);
+
+    const pdfButton = await screen.findByRole('button', { name: 'dashboard.downloadPdf' });
+    await act(async () => pdfButton.click());
+    await waitFor(() => expect(mockedSaveBlob).toHaveBeenCalledTimes(1));
+    expect(mockedSaveBlob).toHaveBeenCalledWith(
+      expect.any(Blob),
+      '王浩-28岁-5年-硕士-Java开发工程师.pdf'
+    );
+
+    await act(async () =>
+      screen.getByRole('button', { name: 'resumeViewer.downloadWord' }).click()
+    );
+    await waitFor(() => expect(mockedSaveBlob).toHaveBeenCalledTimes(2));
+    expect(mockedSaveBlob).toHaveBeenLastCalledWith(
+      expect.any(Blob),
+      '王浩-28岁-5年-硕士-Java开发工程师.docx'
+    );
+  });
+
+  it('falls back to the latest education degree for the filename when 学历 is missing', async () => {
+    mockedFetch.mockResolvedValue({
+      title: 'Original title',
+      processed_resume: {
+        personalInfo: { name: '王浩', title: '后端开发' },
+        education: [
+          { id: 2, degree: '硕士' },
+          { id: 1, degree: '本科' },
+        ],
+      },
+      raw_resume: { processing_status: 'ready' },
+    } as Awaited<ReturnType<typeof fetchResume>>);
+    mockedDownload.mockResolvedValue(new Blob(['pdf']));
+    render(<ResumeViewerPage />);
+
+    const pdfButton = await screen.findByRole('button', { name: 'dashboard.downloadPdf' });
+    await act(async () => pdfButton.click());
+    await waitFor(() => expect(mockedSaveBlob).toHaveBeenCalledTimes(1));
+    expect(mockedSaveBlob).toHaveBeenCalledWith(expect.any(Blob), '王浩-硕士-后端开发.pdf');
+  });
+
+  it('keeps the PDF button independent of an in-flight Word download', async () => {
+    let settleWord!: (value: Blob) => void;
+    mockedDownloadDocx.mockImplementationOnce(
+      () =>
+        new Promise<Blob>((resolve) => {
+          settleWord = resolve;
+        })
+    );
+    render(<ResumeViewerPage />);
+
+    const wordButton = await screen.findByRole('button', {
+      name: 'resumeViewer.downloadWord',
+    });
+    const pdfButton = screen.getByRole('button', { name: 'dashboard.downloadPdf' });
+    expect(pdfButton).not.toBeDisabled();
+    await act(async () => wordButton.click());
+    expect(wordButton).toBeDisabled();
+    expect(pdfButton).not.toBeDisabled();
+    await act(async () => settleWord(new Blob(['docx'])));
+    await waitFor(() => expect(wordButton).not.toBeDisabled());
   });
 
   it('retains the edited title and offers retry after rename failure', async () => {

@@ -118,7 +118,9 @@ apps/
 | Resume templates | [resume-templates.md](../docs/agent/features/resume-templates.md) |
 | i18n | [i18n.md](../docs/agent/features/i18n.md) |
 | AI enrichment | [enrichment.md](../docs/agent/features/enrichment.md) |
+| AI fine-tune | [fine-tune.md](../docs/agent/features/fine-tune.md) |
 | JD matching | [jd-match.md](../docs/agent/features/jd-match.md) |
+| Resume diagnosis (V4) | [resume-diagnosis.md](../docs/agent/features/resume-diagnosis.md) |
 
 ---
 

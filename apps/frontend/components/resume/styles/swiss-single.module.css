@@ -13,6 +13,186 @@
   width: 100%;
 }
 
+/* Ordered technical-skills list with hanging indent */
+.skillOrderedList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  row-gap: calc(var(--item-gap) * 0.75);
+}
+
+.skillOrderedItem {
+  display: flex;
+  align-items: baseline;
+  column-gap: 0.5ch;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* Fixed number column; text wraps under its own start (hanging indent) */
+.skillNumber {
+  flex: 0 0 3ch;
+  font-variant-numeric: tabular-nums;
+}
+
+.skillText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Basic-info header: fixed three columns, every row end-aligned (两端对齐) */
+.infoGrid {
+  display: flex;
+  flex-direction: column;
+  row-gap: 0.125rem;
+  margin-top: calc(var(--item-gap) * 0.75);
+  text-align: left;
+}
+
+.infoRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: 1.25rem;
+}
+
+.infoCell {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  column-gap: 0.3rem;
+  text-align: left;
+}
+
+/* A partial final row keeps the three-column tracks: cells stay one column
+   wide and are pushed to the row edges instead of stretching. */
+.infoCellSparse {
+  flex: 0 1 calc((100% - 2.5rem) / 3);
+}
+
+.infoLabel {
+  font-family: var(--body-font);
+  font-size: calc(var(--font-size-base) * 0.75);
+  color: var(--resume-text-tertiary);
+  white-space: nowrap;
+}
+
+.infoValue {
+  font-family: var(--body-font);
+  font-size: calc(var(--font-size-base) * 0.92);
+  color: var(--resume-text-primary);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.infoLinks {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 1rem;
+  row-gap: 0.125rem;
+  margin-top: calc(var(--item-gap) * 0.4);
+  text-align: left;
+}
+
+/*
+  Tabular entry rows — work: time | company | department | role (4 columns),
+  education: time | institution | major | degree (4 columns).
+  Work rows are end-aligned (两端对齐): the date hugs the left edge and the
+  role hugs the right edge; company/department occupy the middle tracks, and
+  an empty department still reserves its track so roles line up across
+  entries. Fixed minmax(0, …) tracks let long values wrap inside their own
+  column instead of pushing the date.
+*/
+/* Date track is deliberately wider than the date glyphs need so the company
+   column starts a little further right (mirrors the DOCX 3.3cm first track). */
+.entryColumnsWork {
+  display: grid;
+  grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr) auto;
+  column-gap: 0.75rem;
+  align-items: baseline;
+  text-align: left;
+}
+
+/* No department: three real columns — time | company | role. The company
+   band keeps its 1.35fr width (it lines up with four-column rows); the role
+   fills the freed department+role bands (1fr) and stays flush right so the
+   row is 两端对齐 (date at the left edge, role at the right edge). */
+.entryColumnsWorkThree {
+  display: grid;
+  grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr);
+  column-gap: 0.75rem;
+  align-items: baseline;
+  text-align: left;
+}
+
+/* Job title: deliberately NOT bold, flush with the right content edge. */
+.entryRole {
+  justify-self: end;
+  text-align: right;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+/* Three-column (no department) rows keep the role flush with the right edge
+   (两端对齐). Declared after .entryRole so it wins when both are applied. */
+.entryRoleThree {
+  justify-self: end;
+  text-align: right;
+}
+
+.entryColumns4 {
+  display: grid;
+  grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 7rem);
+  column-gap: 0.75rem;
+  align-items: baseline;
+  text-align: left;
+}
+
+/*
+  Project rows: name | time | scale | role. Name takes the wide track; the
+  date is a fixed-width second track (name-first grid, unlike work rows).
+*/
+.entryColumnsProject {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 9.5rem) minmax(0, 0.9fr) minmax(0, 1.1fr);
+  column-gap: 0.75rem;
+  align-items: baseline;
+  text-align: left;
+}
+
+/* 项目规模 / 团队规模: body-font metadata, left-aligned like its column. */
+.entryScale {
+  font-family: var(--body-font);
+  font-size: calc(var(--font-size-base) * 0.75);
+  color: var(--resume-text-tertiary);
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.entryDate {
+  font-family: var(--body-font);
+  font-size: calc(var(--font-size-base) * 0.75);
+  color: var(--resume-text-tertiary);
+  white-space: nowrap;
+  text-align: left;
+}
+
+.entryDetail {
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+@media print {
+  .skillOrderedItem {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}
+
 /* 
   Overrides or specific tweaks for this template can go here.
   For example, if we wanted a specific border style for section titles

@@ -44,20 +44,21 @@
 }
 
 .resume-meta {
-  font-family: var(--resume-font-mono);
+  font-family: var(--body-font);
   font-size: calc(var(--font-size-base) * 0.82);
   color: var(--resume-text-tertiary);
 }
 
 .resume-meta-sm {
-  font-family: var(--resume-font-mono);
+  font-family: var(--body-font);
   font-size: calc(var(--font-size-base) * 0.75);
   color: var(--resume-text-tertiary);
 }
 
-/* Date formatting - ensures dates never wrap and stay right-aligned */
+/* Date formatting - ensures dates never wrap and stay right-aligned. Same
+   family as body text: digits must not switch to a monospace face. */
 .resume-date {
-  font-family: var(--resume-font-mono);
+  font-family: var(--body-font);
   font-size: calc(var(--font-size-base) * 0.75);
   color: var(--resume-text-tertiary);
   white-space: nowrap;
@@ -133,8 +134,52 @@
   gap: calc(var(--item-gap) * 0.75);
 }
 
+/*
+  Sub-module heading inside a work/project description （项目职责 /
+  负责内容 / 项目亮点 / …). Bold for visual separation; keeps the same 3ch
+  number gutter as bullet rows (markup in DescriptionList), so its text edge
+  aligns with ordinary point text.
+*/
+.resume-sub-label {
+  font-weight: 700;
+  margin-top: calc(var(--item-gap) * 0.75);
+  margin-bottom: calc(var(--item-gap) * 0.75);
+}
+
+.resume-item > .resume-sub-label:first-child {
+  margin-top: 0;
+}
+
+/*
+  Bullet group owned by a sub-module: indented by one number gutter so its
+  markers start at the label's text edge. Numbering restarts at 1 per group
+  (each group is its own <ol>). Project sites skip this (DescriptionList
+  flushLabels), so there the numbers start at the label / project-name edge.
+*/
+.resume-list-indented {
+  padding-left: 3.5ch;
+}
+
+/*
+  Descriptive content owned by a project 项目背景 / 技术栈 label: unnumbered
+  body text on its own line(s), flush with the label TEXT edge (the label
+  reserves the same 3ch number gutter), so it aligns one gutter less than
+  indented duty bullets.
+*/
+.resume-sub-body {
+  padding-left: 3ch;
+}
+
+/*
+  Project sites (DescriptionList flushLabels): 项目背景 / 技术栈 labels align
+  with the project name edge, so their body content is flush too.
+*/
+.resume-sub-body-flush {
+  padding-left: 0;
+}
+
 .resume-skill-pill {
-  font-family: var(--resume-font-mono);
+  font-family: var(--body-font);
   font-size: calc(var(--font-size-base) * 0.75);
   padding: 0.125rem 0.375rem;
   background-color: var(--resume-accent-bg);
@@ -147,7 +192,7 @@
 
 /* Link pill - styled clickable link with icon support */
 .resume-link-pill {
-  font-family: var(--resume-font-mono);
+  font-family: var(--body-font);
   font-size: calc(var(--font-size-base) * 0.7);
   padding: 0.125rem 0.375rem;
   color: var(--resume-text-primary);
@@ -276,14 +321,120 @@
 }
 
 @media print {
-  /* Ensure the main resume container respects page boundaries */
+  /*
+   * The resume root MUST stay fragmentable: a `break-inside: avoid` rule here
+   * made the whole multi-page resume monolithic, so Chromium pushed whole
+   * sections to the next page and left most of the previous page blank.
+   * Sections are allowed to span pages (see globals.css); only individual
+   * items below are kept atomic.
+   */
   .resume-body {
-    page-break-inside: avoid !important;
-    break-inside: avoid-page !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  /*
+   * Block flow fragments densely across pages. Column-flex containers are
+   * fragmented conservatively by Chromium (avoid items get pushed early,
+   * leaving large gaps), so the items stack becomes block flow when printing.
+   * .resume-item already carries the inter-item margin-bottom.
+   */
+  .resume-items {
+    display: block !important;
   }
 
   /* Avoid breaking individual resume items across pages */
   .resume-item {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /*
+   * swiss-single: long work/project entries are ALLOWED to split between
+   * bullet rows. Keeping every entry monolithic pushed tall entries to the
+   * next page whenever they did not fit the remaining space, leaving most of
+   * the previous page blank. Granularity is now: entry header rows stay
+   * together and with the first bullet; individual bullet rows stay whole;
+   * breaks only happen BETWEEN bullets.
+   */
+  .resume-body:global(.resume-template-swiss-single) .resume-item {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  /*
+   * Header/non-list pieces of an entry stay whole. Break-after-avoid binds a
+   * piece to what follows ONLY when a list actually follows it; binding it
+   * unconditionally chained compact, header-only entries (work / education
+   * rows without bullets) into one monolithic block, which Chromium pushed
+   * to the next page — leaving most of the previous page blank.
+   */
+  .resume-body:global(.resume-template-swiss-single) .resume-item > *:not(ul):not(ol) {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .resume-body:global(.resume-template-swiss-single)
+    .resume-item
+    > *:not(ul):not(ol):has(+ :is(ul, ol, [data-sub-label], [data-sub-body])) {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* A bold sub-module label must stay with its own list or descriptive body. */
+  .resume-body:global(.resume-template-swiss-single)
+    .resume-item
+    > [data-sub-label]:has(+ :is(ul, ol, [data-sub-body])) {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* The entry header binds to its list; the list/body itself may span pages. */
+  .resume-body:global(.resume-template-swiss-single) .resume-item > ul,
+  .resume-body:global(.resume-template-swiss-single) .resume-item > ol,
+  .resume-body:global(.resume-template-swiss-single) .resume-item > [data-sub-body] {
+    break-before: avoid !important;
+    page-break-before: avoid !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  /*
+   * Page breaks happen BETWEEN bullet/number rows; an individual row never
+   * splits. DescriptionList renders <ol>, legacy call sites still use <ul>;
+   * [data-body-row] are the rows of a 项目背景/技术栈 descriptive body block.
+   */
+  .resume-body:global(.resume-template-swiss-single) .resume-item > ul > li,
+  .resume-body:global(.resume-template-swiss-single) .resume-item > ol > li,
+  .resume-body:global(.resume-template-swiss-single)
+    .resume-item
+    > [data-sub-body]
+    > [data-body-row] {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .resume-body:global(.resume-template-swiss-single) .resume-item > ul > li:first-child,
+  .resume-body:global(.resume-template-swiss-single) .resume-item > ol > li:first-child,
+  .resume-body:global(.resume-template-swiss-single)
+    .resume-item
+    > [data-sub-body]
+    > [data-body-row]:first-child {
+    break-before: avoid !important;
+    page-break-before: avoid !important;
+  }
+
+  /*
+   * Custom text / stringList sections (and the swiss-single skills list)
+   * render as an <ol> directly under the section: the list may span pages,
+   * individual rows stay whole.
+   */
+  .resume-body .resume-section > ol {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  .resume-body .resume-section > ol > li {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }
@@ -295,13 +446,15 @@
     page-break-after: avoid !important;
   }
 
-  /* Keep section header together with its first item */
+  /* Keep section header together with its first item / row / paragraph */
   .resume-section-title + .resume-items > *:first-child,
   .resume-section-title-sm + .resume-items > *:first-child,
   .resume-section-title + p,
   .resume-section-title-sm + p,
   .resume-section-title + ul,
   .resume-section-title-sm + ul,
+  .resume-section-title + ol,
+  .resume-section-title-sm + ol,
   .resume-section-title + .resume-item,
   .resume-section-title-sm + .resume-item {
     break-before: avoid !important;

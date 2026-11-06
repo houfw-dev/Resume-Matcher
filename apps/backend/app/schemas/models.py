@@ -77,6 +77,24 @@ def _coerce_optional_text(value: Any) -> str | None:
     return text or None
 
 
+def _coerce_multiline_text(value: Any) -> str | None:
+    """Coerce custom-section text while preserving the source line structure.
+
+    Custom "text" sections must keep one point per source line. Models
+    sometimes return the block as a JSON array of lines; joining with the
+    default space joiner would destroy the original formatting and collapse
+    every point into one paragraph. List fragments are therefore joined with
+    newlines; a plain string keeps its internal newlines unchanged.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    fragments = _extract_text_fragments(value)
+    return "\n".join(fragments).strip() or None
+
+
 def _split_description_lines(value: str) -> list[str]:
     """Split a description block into clean bullet lines."""
     items: list[str] = []
@@ -111,18 +129,21 @@ def _coerce_string_list(value: Any) -> list[str]:
     return [coerced] if coerced else []
 
 
-def _coerce_description_styles(value: Any) -> list[Literal["bullet", "plain"]]:
+DescriptionStyle = Literal["bullet", "plain", "label"]
+
+
+def _coerce_description_styles(value: Any) -> list[DescriptionStyle]:
     """Coerce description style values into supported row styles."""
     if not isinstance(value, list):
         return []
 
-    return ["plain" if entry == "plain" else "bullet" for entry in value]
+    return [entry if entry in ("plain", "label") else "bullet" for entry in value]
 
 
 def _align_description_styles(
     description: list[str],
-    description_styles: list[Literal["bullet", "plain"]],
-) -> list[Literal["bullet", "plain"]]:
+    description_styles: list[DescriptionStyle],
+) -> list[DescriptionStyle]:
     """Keep descriptionStyles aligned with description rows."""
     return [
         description_styles[index] if index < len(description_styles) else "bullet"
@@ -149,6 +170,13 @@ class PersonalInfo(BaseModel):
     email: str = ""
     phone: str = ""
     location: str = ""
+    # Chinese-resume header facts, copied verbatim from the source header
+    # (e.g. gender "男", age "28岁", workYears "5年", educationLevel "本科").
+    # Empty strings when the source does not state them; never inferred.
+    gender: str = ""
+    age: str = ""
+    workYears: str = ""
+    educationLevel: str = ""
     website: str | None = None
     linkedin: str | None = None
     github: str | None = None
@@ -160,10 +188,11 @@ class Experience(BaseModel):
     id: int = 0
     title: str = ""
     company: str = ""
+    department: str | None = None
     location: str | None = None
     years: str = ""
     description: list[str] = Field(default_factory=list)
-    descriptionStyles: list[Literal["bullet", "plain"]] = Field(default_factory=list)
+    descriptionStyles: list[DescriptionStyle] = Field(default_factory=list)
 
     @field_validator("description", mode="before")
     @classmethod
@@ -174,7 +203,7 @@ class Experience(BaseModel):
     @classmethod
     def _normalize_description_styles(
         cls, value: Any
-    ) -> list[Literal["bullet", "plain"]]:
+    ) -> list[DescriptionStyle]:
         return _coerce_description_styles(value)
 
     @model_validator(mode="after")
@@ -207,10 +236,11 @@ class Project(BaseModel):
     name: str = ""
     role: str = ""
     years: str = ""
+    scale: str = ""
     github: str | None = None
     website: str | None = None
     description: list[str] = Field(default_factory=list)
-    descriptionStyles: list[Literal["bullet", "plain"]] = Field(default_factory=list)
+    descriptionStyles: list[DescriptionStyle] = Field(default_factory=list)
 
     @field_validator("description", mode="before")
     @classmethod
@@ -221,7 +251,7 @@ class Project(BaseModel):
     @classmethod
     def _normalize_description_styles(
         cls, value: Any
-    ) -> list[Literal["bullet", "plain"]]:
+    ) -> list[DescriptionStyle]:
         return _coerce_description_styles(value)
 
     @model_validator(mode="after")
@@ -274,7 +304,7 @@ class CustomSectionItem(BaseModel):
     location: str | None = None
     years: str = ""
     description: list[str] = Field(default_factory=list)
-    descriptionStyles: list[Literal["bullet", "plain"]] = Field(default_factory=list)
+    descriptionStyles: list[DescriptionStyle] = Field(default_factory=list)
 
     @field_validator("description", mode="before")
     @classmethod
@@ -285,7 +315,7 @@ class CustomSectionItem(BaseModel):
     @classmethod
     def _normalize_description_styles(
         cls, value: Any
-    ) -> list[Literal["bullet", "plain"]]:
+    ) -> list[DescriptionStyle]:
         return _coerce_description_styles(value)
 
     @model_validator(mode="after")
@@ -329,10 +359,16 @@ class CustomSection(BaseModel):
     @field_validator("text", mode="before")
     @classmethod
     def _normalize_text(cls, value: Any) -> str | None:
-        return _coerce_optional_text(value)
+        # Newline-preserving: custom-section text keeps the source's line
+        # structure (the ordered-list renderer splits on "\n").
+        return _coerce_multiline_text(value)
 
 
-# Default section metadata for backward compatibility
+# Default section metadata for backward compatibility.
+# Formal-degree canonical order (education second):
+# 基础信息 → 教育背景 → 个人优势 → 专业技能 → 工作经历 → 项目经验.
+# The non-formal-degree branch is applied by section_order at
+# normalize/render time.
 DEFAULT_SECTION_META: list[dict[str, Any]] = [
     {
         "id": "personalInfo",
@@ -344,40 +380,22 @@ DEFAULT_SECTION_META: list[dict[str, Any]] = [
         "order": 0,
     },
     {
-        "id": "summary",
-        "key": "summary",
-        "displayName": "Summary",
-        "sectionType": SectionType.TEXT,
-        "isDefault": True,
-        "isVisible": True,
-        "order": 1,
-    },
-    {
-        "id": "workExperience",
-        "key": "workExperience",
-        "displayName": "Experience",
-        "sectionType": SectionType.ITEM_LIST,
-        "isDefault": True,
-        "isVisible": True,
-        "order": 2,
-    },
-    {
         "id": "education",
         "key": "education",
         "displayName": "Education",
         "sectionType": SectionType.ITEM_LIST,
         "isDefault": True,
         "isVisible": True,
-        "order": 3,
+        "order": 1,
     },
     {
-        "id": "personalProjects",
-        "key": "personalProjects",
-        "displayName": "Projects",
-        "sectionType": SectionType.ITEM_LIST,
+        "id": "summary",
+        "key": "summary",
+        "displayName": "Summary",
+        "sectionType": SectionType.TEXT,
         "isDefault": True,
         "isVisible": True,
-        "order": 4,
+        "order": 2,
     },
     {
         "id": "additional",
@@ -386,23 +404,93 @@ DEFAULT_SECTION_META: list[dict[str, Any]] = [
         "sectionType": SectionType.STRING_LIST,
         "isDefault": True,
         "isVisible": True,
+        "order": 3,
+    },
+    {
+        "id": "workExperience",
+        "key": "workExperience",
+        "displayName": "Experience",
+        "sectionType": SectionType.ITEM_LIST,
+        "isDefault": True,
+        "isVisible": True,
+        "order": 4,
+    },
+    {
+        "id": "personalProjects",
+        "key": "personalProjects",
+        "displayName": "Projects",
+        "sectionType": SectionType.ITEM_LIST,
+        "isDefault": True,
+        "isVisible": True,
         "order": 5,
     },
 ]
 
 
 def normalize_resume_data(data: dict[str, Any]) -> dict[str, Any]:
-    """Ensure resume data has section metadata (migration helper).
+    """Ensure resume data has canonical section metadata.
 
-    This function is used for lazy migration of existing resumes
-    that don't have sectionMeta or customSections fields.
+    Migration + governance helper used lazily on GET and by wizard flows:
+    missing sectionMeta/customSections get defaults, and meta is reordered
+    to the degree-branch canonical sequence, renamed default titles are
+    reset, and empty optional blocks are hidden (never deleted).
     """
+    # Function-local import: services import this schema module, so a
+    # module-level import would be circular.
+    from app.services.parser import (
+        dedupe_resume_lists,
+        extract_education_credentials,
+        extract_misfiled_credentials,
+        normalize_cjk_compat_deep,
+        normalize_date_periods,
+        normalize_text_hygiene,
+        reconcile_custom_section_shapes,
+        repair_project_label_regions,
+        strip_markdown_emphasis_deep,
+    )
+    from app.services.section_order import canonicalize_section_meta
+    from app.services.tech_terms import canonicalize_tech_terms
+
+    # Old records may carry Markdown emphasis markers the LLM leaked into
+    # field values ("统招本科（**985&211)**"); strip them on read/save so
+    # viewer, PDF and DOCX all render clean text without a re-parse. The
+    # strip can collapse list rows that differed only by formatting
+    # ("英语四级" / "英语四级**"), so de-duplicate rendered lists too.
+    # Compatibility glyphs (⼯→工) and mislabeled project rows (tech-stack
+    # entries styled as labels, duty prose glued to a label row) get the same
+    # read-time self-healing so pre-fix uploads render correctly.
+    cleaned = normalize_cjk_compat_deep(data)
+    # Canonical date periods (yyyy.MM, "~" connector, 至今 for open-ended
+    # ranges) so old uploads render with the same format new parses enforce.
+    cleaned = normalize_date_periods(cleaned)
+    cleaned = repair_project_label_regions(cleaned)
+    # 奖项/证书行被弱模型粘进教育描述（专业单元格）时，移入 additional
+    # 对应数组；存量简历读时自愈，无需重新上传或重新解析。
+    cleaned = extract_education_credentials(cleaned)
+    # 工作/项目描述列表中带显式标签的奖项/证书/语言区域同样归位 additional。
+    cleaned = extract_misfiled_credentials(cleaned)
+    # 自定义区块内容容器与 sectionType 错装（stringList 的条目落在 items、
+    # 或 itemList 的条目落在 strings）时迁移到正确容器，避免只渲染标题。
+    cleaned = reconcile_custom_section_shapes(cleaned)
+    # Canonical casing of curated technical English terms.
+    cleaned = canonicalize_tech_terms(cleaned)
+    # Presentation hygiene (trim, blank-row/style lockstep drop, unified list
+    # point endings) so pre-fix uploads render like freshly parsed resumes.
+    cleaned = normalize_text_hygiene(cleaned)
+    cleaned = dedupe_resume_lists(strip_markdown_emphasis_deep(cleaned))
+    data.clear()
+    data.update(cleaned)
+
     if not data.get("sectionMeta"):
         # Use deepcopy to avoid shared mutable reference bug
         # Without this, all resumes would share the same list reference
         data["sectionMeta"] = copy.deepcopy(DEFAULT_SECTION_META)
     if "customSections" not in data:
         data["customSections"] = {}
+
+    data["sectionMeta"] = canonicalize_section_meta(
+        data, reset_names=True, hide_empty_optional=True
+    )
     return data
 
 
@@ -890,7 +978,14 @@ class ResumeChange(BaseModel):
     path: str = Field(
         description="Dot+bracket path, e.g. 'workExperience[0].description[1]'"
     )
-    action: Literal["replace", "append", "reorder", "add_skill"]
+    action: Literal[
+        "replace",
+        "append",
+        "reorder",
+        "add_skill",
+        "elaborate_skill",
+        "insert_row",
+    ]
     original: str | list[str] | None = Field(
         default=None,
         description="Current text at path — for verification. May be a list (the "
@@ -899,6 +994,27 @@ class ResumeChange(BaseModel):
     )
     value: str | list[str] = Field(description="New content")
     reason: str = Field(description="Why this change helps match the JD")
+    anchor: Literal["tech_stack", "highlight"] | None = Field(
+        default=None,
+        description="For insert_row on personalProjects[i].description only: "
+        "which project sub-module the row is inserted into "
+        "(tech_stack = the 技术栈 region, highlight = the 项目亮点 region).",
+    )
+
+    @model_validator(mode="after")
+    def _validate_action_fields(self) -> "ResumeChange":
+        """A list ``original`` is only meaningful for ``reorder`` (the LLM sends
+        the current items). For the text actions it must stay a string/None — a
+        list there would silently bypass the replace verification gate and crash
+        the invented-metrics check, so reject it at parse time. ``anchor`` is
+        meaningful only for ``insert_row``."""
+        if isinstance(self.original, list) and self.action != "reorder":
+            raise ValueError("'original' may be a list only for the reorder action")
+        if self.anchor is not None and self.action != "insert_row":
+            raise ValueError("'anchor' is supported only by the insert_row action")
+        if self.action == "insert_row" and self.anchor is None:
+            raise ValueError("insert_row requires an anchor (tech_stack/highlight)")
+        return self
 
     @model_validator(mode="after")
     def _list_original_only_for_reorder(self) -> "ResumeChange":

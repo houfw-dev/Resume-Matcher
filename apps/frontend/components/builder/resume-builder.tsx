@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { type ResumeData } from '@/components/dashboard/resume-component';
+import { type ResumeData, type SectionMeta } from '@/components/dashboard/resume-component';
 import { ResumeForm } from './resume-form';
 import { FormattingControls } from './formatting-controls';
 import { CoverLetterEditor } from './cover-letter-editor';
@@ -25,6 +25,7 @@ import {
   Check,
   Sparkles,
   Loader2,
+  Wand2,
 } from 'lucide-react';
 import {
   useResumePreview,
@@ -33,8 +34,10 @@ import {
 import { PaginatedPreview } from '@/components/preview';
 import {
   downloadResumePdf,
+  downloadResumeDocx,
   downloadCoverLetterPdf,
   getResumePdfUrl,
+  getResumeDocxUrl,
   getCoverLetterPdfUrl,
   fetchResume,
   updateResume,
@@ -48,12 +51,24 @@ import {
 import { JDComparisonView } from './jd-comparison-view';
 import { RegenerateWizard } from './regenerate-wizard';
 import { useRegenerateWizard } from '@/hooks/use-regenerate-wizard';
+import { FineTuneWizardView } from './fine-tune/fine-tune-wizard';
+import { useFineTuneWizard } from '@/hooks/use-fine-tune-wizard';
+import type { FineTuneCustomModule, FineTuneEntryOption } from './fine-tune/fine-tune-dialog';
 import { useTranslations } from '@/lib/i18n';
-import { type TemplateSettings, DEFAULT_TEMPLATE_SETTINGS } from '@/lib/types/template-settings';
+import { type TemplateSettings } from '@/lib/types/template-settings';
+import { loadTemplateSettings, storeTemplateSettings } from '@/lib/utils/template-settings-storage';
 import { withLocalizedDefaultSections } from '@/lib/utils/section-helpers';
 import { useLanguage } from '@/lib/context/language-context';
-import { buildResumeFilename, downloadBlobAsFile, openUrlInNewTab } from '@/lib/utils/download';
+import {
+  buildResumeFactFilename,
+  buildResumeFilename,
+  downloadBlobAsFile,
+  openUrlInNewTab,
+} from '@/lib/utils/download';
 import { normalizeResumeForRender, normalizeResumeForSave } from '@/lib/utils/resume-normalization';
+import { hasSectionContent } from '@/lib/utils/section-order';
+import { isValidTargetToken } from '@/lib/utils/fine-tune-scope';
+import { mergedEntryRegions } from '@/lib/utils/description-regions';
 import {
   buildResumeDraft,
   getResumeDraftStorageKey,
@@ -76,7 +91,6 @@ import {
 type TabId = 'resume' | 'cover-letter' | 'outreach' | 'interview-prep' | 'jd-match';
 type JobContextStatus = 'idle' | 'loading' | 'available' | 'missing';
 
-const SETTINGS_STORAGE_KEY = 'resume_builder_settings';
 const TAB_IDS: TabId[] = ['resume', 'cover-letter', 'outreach', 'interview-prep', 'jd-match'];
 const RESUME_AUTOSAVE_DEBOUNCE_MS = 2500;
 const RESUME_AUTOSAVE_MAX_WAIT_MS = 12000;
@@ -210,25 +224,7 @@ const ResumeBuilderContent = () => {
   const [hasCurrentLocalDraft, setHasCurrentLocalDraft] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [loadingState, setLoadingState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
-  const [templateSettings, setTemplateSettings] = useState<TemplateSettings>(() => {
-    if (typeof window === 'undefined') return DEFAULT_TEMPLATE_SETTINGS;
-    try {
-      const saved = safeStorage.get(SETTINGS_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return {
-          ...DEFAULT_TEMPLATE_SETTINGS,
-          ...parsed,
-          margins: { ...DEFAULT_TEMPLATE_SETTINGS.margins, ...parsed.margins },
-          spacing: { ...DEFAULT_TEMPLATE_SETTINGS.spacing, ...parsed.spacing },
-          fontSize: { ...DEFAULT_TEMPLATE_SETTINGS.fontSize, ...parsed.fontSize },
-        };
-      }
-    } catch {
-      // fall through to defaults
-    }
-    return DEFAULT_TEMPLATE_SETTINGS;
-  });
+  const [templateSettings, setTemplateSettings] = useState<TemplateSettings>(loadTemplateSettings);
   const { improvedData } = useResumePreview();
   const improvedPreview = improvedData?.data?.resume_preview;
   const improvedCoverLetter = improvedData?.data?.cover_letter;
@@ -362,6 +358,51 @@ const ResumeBuilderContent = () => {
     },
   });
 
+  // AI Fine-tune wizard (job-less; grounded in original upload + parsed data)
+  const fineTuneWizard = useFineTuneWizard({
+    resumeId: resumeId || '',
+    outputLanguage: contentLanguage,
+    onApplied: async ({ mode, resumeId: resultId }) => {
+      if (mode === 'copy') {
+        router.push(`/resumes/${resultId}`);
+        return;
+      }
+      if (!resumeId) return;
+      try {
+        const data = await fetchResume(resumeId);
+        setResumeTitle(data.title ?? null);
+        if (data.processed_resume) {
+          setResumeData(data.processed_resume as ResumeData);
+          setLastSavedData(data.processed_resume as ResumeData);
+          setHasUnsavedChanges(false);
+          syncedVersionRef.current = editVersionRef.current;
+          unsyncedSinceRef.current = null;
+        }
+        showNotification(t('fineTune.toast.overwritten'), 'success');
+      } catch (error) {
+        console.error('Failed to reload resume after fine-tuning:', error);
+        showNotification(t('builder.alerts.reloadFailed'), 'danger');
+        throw error;
+      }
+    },
+    onError: (errorMessage) => {
+      if (/network|fetch/i.test(errorMessage) || errorMessage.includes('Failed to fetch')) {
+        showNotification(t('fineTune.errors.networkError'), 'danger');
+        return;
+      }
+      if (/changed after preview|retry preview|already in progress|expired/i.test(errorMessage)) {
+        showNotification(t('fineTune.errors.resumeChanged'), 'danger');
+        return;
+      }
+      if (/fine-tune generation failed|failed to fine-tune/i.test(errorMessage)) {
+        showNotification(t('fineTune.errors.generationFailed'), 'danger');
+        return;
+      }
+      console.error('Fine-tune failed:', errorMessage);
+      showNotification(t('fineTune.errors.confirmFailed'), 'danger');
+    },
+  });
+
   const canonicalResumeDataForPreview = useMemo(
     () => normalizeResumeForRender(resumeData),
     [resumeData]
@@ -400,6 +441,76 @@ const ResumeBuilderContent = () => {
     }
     return null;
   }, [canonicalResumeDataForPreview.additional?.technicalSkills, t]);
+  // Fine-tune selection data, derived from the same canonical (saved) sequence
+  // as the regenerate items so work_N/project_# indices match the backend.
+  const fineTuneExperienceEntries: FineTuneEntryOption[] = useMemo(
+    () =>
+      (canonicalResumeDataForPreview.workExperience || []).map((exp) => ({
+        title: exp.title ?? '',
+        subtitle: exp.company || undefined,
+        // Indices run over the same canonical (saved) sequence the backend
+        // scope gate uses, so work_N:<region> tokens line up exactly.
+        regions: Array.from(mergedEntryRegions('work', exp).keys()),
+      })),
+    [canonicalResumeDataForPreview.workExperience]
+  );
+
+  const fineTuneProjectEntries: FineTuneEntryOption[] = useMemo(
+    () =>
+      (canonicalResumeDataForPreview.personalProjects || []).map((project) => ({
+        title: project.name ?? '',
+        subtitle: project.role || undefined,
+        regions: Array.from(mergedEntryRegions('project', project).keys()),
+      })),
+    [canonicalResumeDataForPreview.personalProjects]
+  );
+
+  // Module rows are content-driven: empty built-in modules are hidden, and
+  // every non-empty custom section is listed separately under its real
+  // heading. Content checks reuse hasSectionContent (meaningful text, not
+  // bare array length); missing meta rows get a stub (built-ins only).
+  const fineTuneModules = useMemo(() => {
+    const data = canonicalResumeDataForPreview;
+    const metaRows = data.sectionMeta ?? [];
+    const defaultHasContent = (key: string): boolean => {
+      const meta: SectionMeta = metaRows.find((row) => row.key === key && row.isDefault) ?? {
+        id: key,
+        key,
+        displayName: key,
+        sectionType: 'text',
+        isDefault: true,
+        isVisible: true,
+        order: 0,
+      };
+      return hasSectionContent(meta, data);
+    };
+    const customModules: FineTuneCustomModule[] = metaRows
+      .filter((meta) => !meta.isDefault && hasSectionContent(meta, data))
+      .map((meta) => ({ key: meta.key, displayName: meta.displayName }));
+    return {
+      hasSummary: defaultHasContent('summary'),
+      hasWorkExperience: defaultHasContent('workExperience'),
+      hasEducation: defaultHasContent('education'),
+      hasProjects: defaultHasContent('personalProjects'),
+      hasAdditional: defaultHasContent('additional'),
+      customModules,
+    };
+  }, [canonicalResumeDataForPreview]);
+
+  const handleStartFineTune = async (presetTargets?: string[]) => {
+    const didSave = await flushResumeChanges(true);
+    if (didSave) {
+      fineTuneWizard.open(presetTargets);
+    }
+  };
+
+  const handleFineTuneSection = (sectionId: string) => {
+    // Default section ids equal backend tokens; custom sections pass their
+    // own custom_<key> token. Anything outside the grammar is ignored.
+    if (!isValidTargetToken(sectionId)) return;
+    void handleStartFineTune([sectionId]);
+  };
+
   const localizedResumeDataForPreview = useMemo(
     () => withLocalizedDefaultSections(canonicalResumeDataForPreview, t),
     [canonicalResumeDataForPreview, t]
@@ -407,7 +518,7 @@ const ResumeBuilderContent = () => {
 
   // Save template settings to localStorage when they change
   useEffect(() => {
-    safeStorage.set(SETTINGS_STORAGE_KEY, JSON.stringify(templateSettings));
+    storeTemplateSettings(templateSettings);
   }, [templateSettings]);
 
   // Warn user before leaving with unsaved changes
@@ -961,7 +1072,7 @@ const ResumeBuilderContent = () => {
     }
   };
 
-  const handleDownload = async () => {
+  const handleDownload = async (kind: 'pdf' | 'docx' = 'pdf') => {
     if (!resumeId) {
       showNotification(t('builder.alerts.downloadNotAvailable'), 'warning');
       return;
@@ -972,16 +1083,37 @@ const ResumeBuilderContent = () => {
     }
     try {
       setIsDownloading(true);
-      const blob = await downloadResumePdf(resumeId, templateSettings, uiLanguage);
-      const company = getCompanyFromTitle(resumeTitle);
-      const userName = resumeData.personalInfo?.name?.trim() || null;
-      const filename = buildResumeFilename(userName, company, resumeId, 'resume');
+      const blob =
+        kind === 'pdf'
+          ? await downloadResumePdf(resumeId, templateSettings, uiLanguage)
+          : // DOCX chrome follows the content language (server auto-detect).
+            await downloadResumeDocx(resumeId);
+      // Filename: 姓名-年龄-工作年限-学历-求职意向 (same rule for PDF and Word).
+      const personalInfo = resumeData.personalInfo;
+      const educationLevel =
+        personalInfo?.educationLevel?.trim() ||
+        resumeData.education?.find((edu) => edu.degree?.trim())?.degree?.trim() ||
+        null;
+      const filename = buildResumeFactFilename(
+        {
+          name: personalInfo?.name,
+          age: personalInfo?.age,
+          workYears: personalInfo?.workYears,
+          educationLevel,
+          title: personalInfo?.title,
+        },
+        resumeId,
+        kind
+      );
       downloadBlobAsFile(blob, filename);
       showNotification(t('builder.alerts.downloadSuccess'), 'success');
     } catch (error) {
-      console.error('Failed to download resume:', error);
+      console.error(`Failed to download resume ${kind}:`, error);
       if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        const fallbackUrl = getResumePdfUrl(resumeId, templateSettings, uiLanguage);
+        const fallbackUrl =
+          kind === 'pdf'
+            ? getResumePdfUrl(resumeId, templateSettings, uiLanguage)
+            : getResumeDocxUrl(resumeId);
         const didOpen = openUrlInNewTab(fallbackUrl);
         if (!didOpen) {
           showNotification(t('common.popupBlocked', { url: fallbackUrl }), 'warning');
@@ -1423,6 +1555,15 @@ const ResumeBuilderContent = () => {
                     {t('builder.regenerate.buttonLabel')}
                   </Button>
                   <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleStartFineTune()}
+                    disabled={!resumeId || isSaving}
+                  >
+                    <Wand2 className="w-4 h-4" />
+                    {t('fineTune.buttonLabel')}
+                  </Button>
+                  <Button
                     variant="warning"
                     size="sm"
                     onClick={handleReset}
@@ -1448,11 +1589,20 @@ const ResumeBuilderContent = () => {
                   <Button
                     variant="success"
                     size="sm"
-                    onClick={handleDownload}
+                    onClick={() => void handleDownload('pdf')}
                     disabled={!resumeId || isDownloading}
                   >
                     <Download className="w-4 h-4" />
-                    {isDownloading ? t('common.generating') : t('common.download')}
+                    {isDownloading ? t('common.generating') : t('dashboard.downloadPdf')}
+                  </Button>
+                  <Button
+                    variant="success"
+                    size="sm"
+                    onClick={() => void handleDownload('docx')}
+                    disabled={!resumeId || isDownloading}
+                  >
+                    <Download className="w-4 h-4" />
+                    {isDownloading ? t('common.generating') : t('resumeViewer.downloadWord')}
                   </Button>
                 </>
               )}
@@ -1568,7 +1718,11 @@ const ResumeBuilderContent = () => {
                       settings={templateSettings}
                       onChange={handleSettingsChange}
                     />
-                    <ResumeForm resumeData={resumeData} onUpdate={handleUpdate} />
+                    <ResumeForm
+                      resumeData={resumeData}
+                      onUpdate={handleUpdate}
+                      onFineTuneSection={handleFineTuneSection}
+                    />
                   </>
                 ))}
 
@@ -1896,6 +2050,20 @@ const ResumeBuilderContent = () => {
         onAccept={regenerateWizard.acceptChanges}
         onReject={regenerateWizard.rejectAndRegenerate}
         onClose={regenerateWizard.reset}
+      />
+
+      {/* AI Fine-tune Wizard */}
+      <FineTuneWizardView
+        wizard={fineTuneWizard}
+        experienceEntries={fineTuneExperienceEntries}
+        projectEntries={fineTuneProjectEntries}
+        hasSummary={fineTuneModules.hasSummary}
+        hasWorkExperience={fineTuneModules.hasWorkExperience}
+        hasEducation={fineTuneModules.hasEducation}
+        hasProjects={fineTuneModules.hasProjects}
+        hasAdditional={fineTuneModules.hasAdditional}
+        customModules={fineTuneModules.customModules}
+        settings={templateSettings}
       />
     </div>
   );

@@ -143,7 +143,7 @@ _AI_EXPERIENCE_RESULT = {
                 "id": 1,
                 "title": "Engineer",
                 "company": "Acme",
-                "years": "2021 - Present",
+                "years": "2021~至今",
                 "description": ["Shipped the billing service"],
             }
         ],
@@ -199,7 +199,7 @@ async def test_ai_turn_does_not_let_other_sections_be_clobbered() -> None:
         "id": 9,
         "title": "PM",
         "company": "Globex",
-        "years": "2019 - 2021",
+        "years": "2019~2021",
         "description": ["Ran the roadmap"],
     }
     state.resume_data = ResumeData.model_validate(
@@ -433,7 +433,7 @@ def test_apply_back_restores_previous_snapshot() -> None:
     assert result.resume_data.additional.technicalSkills == []
     assert result.resume_data.personalInfo.name == "James"
     assert [(entry.id, entry.years) for entry in result.resume_data.workExperience] == [
-        (42, "2019 - 2021")
+        (42, "2019~2021")
     ]
     assert result.history == []
 
@@ -458,14 +458,14 @@ _GLOBEX_ROLE = {
     "id": 1,
     "title": "PM",
     "company": "Globex",
-    "years": "2019 - 2021",
+    "years": "2019~2021",
     "description": ["Ran the roadmap"],
 }
 _ACME_ROLE = {
     "id": 2,
     "title": "Engineer",
     "company": "Acme",
-    "years": "2021 - Present",
+    "years": "2021~至今",
     "description": ["Shipped billing"],
 }
 
@@ -552,7 +552,13 @@ async def test_ai_turn_updates_experience_by_stable_id_without_duplication(
         result = await run_ai_turn(state, "Please correct that role", skip=False)
 
     assert [entry.id for entry in result.resume_data.workExperience] == [7, 11]
-    assert getattr(result.resume_data.workExperience[0], field) == corrected_value
+    stored_value = getattr(result.resume_data.workExperience[0], field)
+    if field == "years":
+        # Echo data passes through the read-heal chain, which enforces the
+        # canonical date presentation (tilde connector).
+        assert stored_value == "2019~2022"
+    else:
+        assert stored_value == corrected_value
     assert result.resume_data.workExperience[1].company == "Acme"
 
 

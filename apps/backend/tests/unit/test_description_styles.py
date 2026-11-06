@@ -23,6 +23,24 @@ def test_project_description_styles_are_trimmed_to_description_count() -> None:
     assert project.descriptionStyles == ["plain"]
 
 
+def test_label_style_is_accepted_and_unknown_values_become_bullet() -> None:
+    project = Project.model_validate(
+        {
+            "name": "P",
+            "description": ["负责内容", "Built APIs", "表格内容"],
+            "descriptionStyles": ["label", "weird", "plain"],
+        }
+    )
+
+    assert project.descriptionStyles == ["label", "bullet", "plain"]
+
+
+def test_project_scale_field_defaults_empty_and_is_kept() -> None:
+    assert Project.model_validate({"name": "P"}).scale == ""
+    project = Project.model_validate({"name": "P", "scale": "20人团队"})
+    assert project.scale == "20人团队"
+
+
 def test_resume_data_defaults_missing_custom_item_styles_to_bullets() -> None:
     resume = ResumeData.model_validate(
         {

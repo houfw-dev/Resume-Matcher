@@ -5,9 +5,11 @@ import copy
 import hashlib
 import json
 import logging
+import re
 import unicodedata
 from collections.abc import Awaitable
 from pathlib import Path
+from urllib.parse import quote
 from typing import Any, NoReturn
 from uuid import uuid4
 
@@ -61,12 +63,14 @@ from app.schemas import (
 )
 from app.services.parser import (
     DocumentResourceLimitError,
+    LegacyDocConversionError,
     MAX_EXTRACTED_TEXT_BYTES,
     MAX_UNPACKED_DOCUMENT_BYTES,
     has_meaningful_resume_content,
     parse_document,
     parse_resume_to_json,
     restore_dates_from_markdown,
+    sort_timeline_sections_newest_first,
 )
 from app.services.improver import (
     MONTH_PATTERN,
@@ -85,8 +89,10 @@ from app.services.refiner import (
     refine_resume,
 )
 from app.services.resume_preservation import (
+    approved_preview_project_rows,
     finalize_ai_resume,
     grounding_review_warnings,
+    skill_entry_covers,
     validate_confirmed_resume,
 )
 from app.services.ats import compute_ats_score
@@ -96,6 +102,15 @@ from app.services.cover_letter import (
     generate_outreach_message,
     generate_resume_title,
 )
+from app.schemas.diagnosis import DiagnosisReport, DiagnosisRequest
+from app.services.diagnosis import diagnose_resume
+from app.services.diagnosis_docx import (
+    DOCX_MEDIA_TYPE,
+    build_diagnosis_docx,
+    diagnosis_docx_stem,
+    docx_headers,
+)
+from app.services.resume_docx import build_resume_docx, resume_docx_headers
 from app.services.interview_prep import generate_interview_prep
 from app.prompts import DEFAULT_IMPROVE_PROMPT_ID, IMPROVE_PROMPT_OPTIONS
 
@@ -265,6 +280,66 @@ def _get_original_resume_data(resume: dict[str, Any]) -> dict[str, Any] | None:
     return original_data
 
 
+# Characters that are illegal or fragile in filenames across platforms.
+_FILENAME_INVALID_RE = re.compile(r'[/\\:*?"<>|]')
+_FILENAME_WHITESPACE_RE = re.compile(r"\s+")
+_FILENAME_MAX_STEM_CHARS = 100
+
+
+def _resume_download_stem(data: Any) -> str:
+    """Build the 姓名-年龄-工作年限-学历-求职意向 download filename stem.
+
+    Empty facts are skipped so missing fields never leave dangling dashes;
+    学历 falls back to the most recent education degree when
+    ``personalInfo.educationLevel`` is empty (same fallback as the header fact
+    grid). Returns ``""`` when no fact is available.
+    """
+    if not isinstance(data, dict):
+        return ""
+    personal = data.get("personalInfo")
+    personal = personal if isinstance(personal, dict) else {}
+
+    def _fact(value: Any) -> str:
+        return value.strip() if isinstance(value, str) else ""
+
+    education_level = _fact(personal.get("educationLevel"))
+    if not education_level:
+        education = data.get("education")
+        if isinstance(education, list):
+            for entry in education:
+                if isinstance(entry, dict):
+                    degree = _fact(entry.get("degree"))
+                    if degree:
+                        education_level = degree
+                        break
+
+    facts = (
+        _fact(personal.get("name")),
+        _fact(personal.get("age")),
+        _fact(personal.get("workYears")),
+        education_level,
+        _fact(personal.get("title")),
+    )
+    stem = "-".join(fact for fact in facts if fact)
+    stem = _FILENAME_INVALID_RE.sub("-", stem)
+    stem = _FILENAME_WHITESPACE_RE.sub(" ", stem).strip(" .-")
+    # Python slicing is by code point, so CJK stems truncate cleanly.
+    return stem[:_FILENAME_MAX_STEM_CHARS].strip(" .-")
+
+
+def _resume_download_headers(resume_id: str, stem: str, ext: str) -> dict[str, str]:
+    """RFC 5987 UTF-8 ``Content-Disposition`` header with an ASCII fallback."""
+    ascii_fallback = f"resume-{resume_id[:8]}.{ext}"
+    if not stem:
+        return {"Content-Disposition": f'attachment; filename="{ascii_fallback}"'}
+    quoted = quote(f"{stem}.{ext}")
+    return {
+        "Content-Disposition": (
+            f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quoted}"
+        )
+    }
+
+
 def _get_original_markdown(resume: dict[str, Any]) -> str | None:
     """Get the original markdown content from a resume.
 
@@ -409,10 +484,18 @@ def _preserve_original_skills(
         # Append any originals that were dropped
         restored = 0
         for item in orig_items:
-            if isinstance(item, str) and item.casefold() not in current_lower:
-                current_items.append(item)
-                current_lower.add(item.casefold())
-                restored += 1
+            if not isinstance(item, str) or item.casefold() in current_lower:
+                continue
+            # A bare skill survives as an elaboration ("Redis" ->
+            # "Redis：分布式缓存……"); do not re-append the bare name.
+            if field == "technicalSkills" and any(
+                isinstance(kept, str) and skill_entry_covers(item, kept)
+                for kept in current_items
+            ):
+                continue
+            current_items.append(item)
+            current_lower.add(item.casefold())
+            restored += 1
 
         if restored:
             logger.info("Restored %d dropped items in additional.%s", restored, field)
@@ -628,7 +711,14 @@ def _validate_confirm_payload(
     if mismatches:
         raise ValueError(f"personalInfo fields changed: {', '.join(mismatches)}")
     preservation_violations = validate_confirmed_resume(
-        original_data, improved_data, allow_appended_rows=allow_appended_rows
+        original_data,
+        improved_data,
+        allow_appended_rows=allow_appended_rows,
+        approved_project_rows=(
+            approved_preview_project_rows(original_data, improved_data)
+            if allow_appended_rows
+            else None
+        ),
     )
     if preservation_violations:
         raise ValueError(
@@ -909,9 +999,11 @@ async def _claim_processing(
 async def upload_resume(
     request: Request, file: UploadFile = File(...)
 ) -> ResumeUploadResponse:
-    """Upload and process a resume file (PDF/DOCX).
+    """Upload and process a resume file (PDF/DOC/DOCX).
 
     Converts the file to Markdown and stores it in the database.
+    Legacy binary Word (.doc) uses the local LibreOffice/textutil fallback;
+    when no converter backend exists the client gets an actionable 422.
     Optionally parses to structured JSON if LLM is configured.
     """
     _validate_upload_type(file)
@@ -942,6 +1034,10 @@ async def upload_resume(
         ) from e
     except (DatabaseBusyError, PromptSizeError):
         raise
+    except LegacyDocConversionError as e:
+        # Actionable, client-safe message from the legacy .doc fallback.
+        logger.warning("Legacy .doc conversion failed for %s: %s", file.filename, e)
+        raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:
         logger.exception("Document parsing failed")
         raise HTTPException(
@@ -1246,6 +1342,7 @@ async def _improve_preview_flow(
     # Collect warnings throughout the process
     response_warnings: list[str] = []
     allow_appended_rows = False
+    approved_project_rows: set[str] = set()
 
     # Diff-based improvement: generate targeted changes, apply with verification
     if original_resume_data:
@@ -1298,9 +1395,17 @@ async def _improve_preview_flow(
             allowed_skill_targets=skill_targets,
         )
         allow_appended_rows = any(
-            change.action == "append"
+            change.action in ("append", "insert_row")
             for change in applied_changes
         )
+        # insert_row content already passed the deterministic grounding gates
+        # in apply_diffs; re-approve it by text so it survives finalize even
+        # when the refiner LLM rewrites the surrounding resume.
+        approved_project_rows = {
+            " ".join(change.value.split()).casefold()
+            for change in applied_changes
+            if change.action == "insert_row" and isinstance(change.value, str)
+        }
 
         diff_warnings = verify_diff_result(
             original=original_resume_data,
@@ -1345,6 +1450,8 @@ async def _improve_preview_flow(
     original_markdown = _get_original_markdown(resume)
     if original_markdown:
         improved_data = restore_dates_from_markdown(improved_data, original_markdown)
+    # Tailored output keeps reverse-chronological work/education order.
+    improved_data = sort_timeline_sections_newest_first(improved_data)
     improved_data = _preserve_original_skills(original_resume_data, improved_data)
     improved_data = _protect_custom_sections(original_resume_data, improved_data)
 
@@ -1392,6 +1499,7 @@ async def _improve_preview_flow(
             original_resume_data,
             improved_data,
             allow_appended_rows=allow_appended_rows,
+            approved_appended_rows=approved_project_rows or None,
         )
         response_warnings.extend(
             grounding_review_warnings(original_resume_data, improved_data)
@@ -1509,8 +1617,17 @@ async def improve_resume_confirm_endpoint(
             original = _get_original_resume_data(resume)
             if original is None:
                 raise ValueError("Original resume data is unavailable; process the source before preview")
+            # The payload hash binds this candidate to the server-generated
+            # preview, so its extra project rows are re-derived and re-approved
+            # by text (labels auto-approve) rather than trusted from the client.
+            approved_rows = approved_preview_project_rows(original, improved_data)
             canonical = ResumeData.model_validate(
-                finalize_ai_resume(original, improved_data, allow_appended_rows=True)
+                finalize_ai_resume(
+                    original,
+                    improved_data,
+                    allow_appended_rows=True,
+                    approved_appended_rows=approved_rows or None,
+                )
             ).model_dump()
             if canonical != improved_data:
                 raise ValueError("Registered preview no longer satisfies preservation rules")
@@ -1670,6 +1787,7 @@ async def improve_resume_endpoint(
         # Collect warnings throughout the process
         response_warnings: list[str] = []
         allow_appended_rows = False
+        approved_project_rows: set[str] = set()
 
         # Diff-based improvement: generate targeted changes, apply with verification
         if original_resume_data:
@@ -1687,9 +1805,14 @@ async def improve_resume_endpoint(
                 changes=diff_result.changes,
             )
             allow_appended_rows = any(
-                change.action == "append"
+                change.action in ("append", "insert_row")
                 for change in applied_changes
             )
+            approved_project_rows = {
+                " ".join(change.value.split()).casefold()
+                for change in applied_changes
+                if change.action == "insert_row" and isinstance(change.value, str)
+            }
 
             diff_warnings = verify_diff_result(
                 original=original_resume_data,
@@ -1734,6 +1857,8 @@ async def improve_resume_endpoint(
             improved_data = restore_dates_from_markdown(
                 improved_data, original_markdown
             )
+        # Tailored output keeps reverse-chronological work/education order.
+        improved_data = sort_timeline_sections_newest_first(improved_data)
         improved_data = _preserve_original_skills(original_resume_data, improved_data)
         improved_data = _protect_custom_sections(original_resume_data, improved_data)
 
@@ -1781,6 +1906,7 @@ async def improve_resume_endpoint(
                 improved_data,
                 allow_review_claims=False,
                 allow_appended_rows=allow_appended_rows,
+                approved_appended_rows=approved_project_rows or None,
             )
             response_warnings.extend(
                 grounding_review_warnings(original_resume_data, improved_data)
@@ -1909,7 +2035,9 @@ async def update_resume_endpoint(
     if not existing:
         raise HTTPException(status_code=404, detail="Resume not found")
 
-    updated_data = resume_data.model_dump()
+    # Canonical section order + title governance backstop for direct API
+    # clients (the web builder normalizes before PATCHing).
+    updated_data = normalize_resume_data(copy.deepcopy(resume_data.model_dump()))
     updated_content = json.dumps(updated_data, indent=2)
 
     updated = await db.update_resume(
@@ -1955,6 +2083,45 @@ async def update_resume_endpoint(
             title=updated.get("title"),
         ),
     )
+
+
+@router.get("/{resume_id}/docx")
+async def download_resume_docx(
+    resume_id: str,
+    lang: str | None = Query(None, pattern="^[a-z]{2}(-[A-Z]{2})?$"),
+) -> Response:
+    """Download the resume as a single canonical editable Word (.docx) file.
+
+    Pure CPU generation from structured ResumeData (no LLM, no Chromium):
+    canonical section order/healing, the same four-column entry headers and
+    description-block semantics as the on-screen swiss-single template, and
+    independent 培训与证书 / 荣誉奖项 modules. Static chrome follows the
+    requested locale; the response filename is RFC 5987 UTF-8 encoded.
+    """
+    resume = await db.get_resume(resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    data = _get_original_resume_data(resume)
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="Resume data is unavailable. Please retry parsing or edit the resume first.",
+        )
+
+    try:
+        docx_bytes = build_resume_docx(data, language=lang)
+    except Exception as e:
+        logger.exception("Resume DOCX build failed for %s: %s", resume_id, e)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to build the resume document. Please try again.",
+        )
+
+    # Filename: 姓名-年龄-工作年限-学历-求职意向 (empty facts skipped).
+    filename_stem = _resume_download_stem(data) or f"简历-{resume_id[:8]}"
+    headers = resume_docx_headers(resume_id, filename_stem)
+    return Response(content=docx_bytes, media_type=DOCX_MEDIA_TYPE, headers=headers)
 
 
 @router.get("/{resume_id}/pdf")
@@ -2036,7 +2203,9 @@ async def download_resume_pdf(
     except PDFRenderError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
-    headers = {"Content-Disposition": f'attachment; filename="resume_{resume_id}.pdf"'}
+    # Filename: 姓名-年龄-工作年限-学历-求职意向 (falls back to the ASCII id).
+    resume_data = _get_original_resume_data(resume)
+    headers = _resume_download_headers(resume_id, _resume_download_stem(resume_data), "pdf")
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
 
@@ -2333,6 +2502,133 @@ async def generate_outreach_endpoint(resume_id: str) -> GenerateContentResponse:
         content=outreach_content,
         message="Outreach message generated successfully",
     )
+
+
+# Diagnose bodies stay small; the only sizable part is the client-measured
+# rendered-layout snapshot (frontend caps its JSON at ~48 KB). Reject anything
+# beyond 128 KB before FastAPI parses it.
+_DIAGNOSIS_MAX_BODY_BYTES = 128 * 1024
+
+
+@router.post("/{resume_id}/diagnose", response_model=DiagnosisReport)
+async def diagnose_resume_endpoint(
+    resume_id: str,
+    request: Request,
+    body: DiagnosisRequest,
+) -> DiagnosisReport:
+    """Run the V4 rubric diagnosis: deterministic checks + LLM semantic judge."""
+    raw_length = request.headers.get("content-length") or ""
+    if raw_length.isdigit() and int(raw_length) > _DIAGNOSIS_MAX_BODY_BYTES:
+        logger.warning(
+            "Rejected diagnosis request for %s: body %s bytes exceeds %s",
+            resume_id,
+            raw_length,
+            _DIAGNOSIS_MAX_BODY_BYTES,
+        )
+        raise HTTPException(
+            status_code=413,
+            detail="Diagnosis request is too large. Please try again.",
+        )
+
+    resume = await db.get_resume(resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    resume_data = resume.get("processed_data")
+    if not isinstance(resume_data, dict) or not resume_data:
+        raise HTTPException(
+            status_code=400,
+            detail="Resume has no processed data. Please re-upload the resume.",
+        )
+
+    # Judge the same read-healed form the builder/preview actually render:
+    # GET heals processed_data in its response only without persisting it, so
+    # without this copy pre-fix uploads would be diagnosed against raw stored
+    # rows (observed: a custom stringList section whose entries were trapped
+    # in items rendered as a title-only block and failed item 1). Deep copy
+    # first — normalization mutates in place, the stored document is untouched.
+    resume_data = normalize_resume_data(copy.deepcopy(resume_data))
+
+    job_description = body.job_description.strip() if body.job_description else None
+    target_title = body.target_title.strip() if body.target_title else None
+    competency_model_key = (
+        body.competency_model_key.strip() if body.competency_model_key else None
+    )
+    language = get_content_language()
+    # Ground every verdict in the user's original upload, not only in the
+    # lossy LLM-structured extraction (None for records with no stored text).
+    original_markdown = _get_original_markdown(resume)
+
+    try:
+        return await diagnose_resume(
+            resume_data,
+            resume_id=resume_id,
+            job_description=job_description,
+            target_title=target_title,
+            competency_model_key=competency_model_key,
+            language=language,
+            original_markdown=original_markdown,
+            template_settings=body.template_settings,
+            rendered_layout=body.rendered_layout,
+        )
+    except (DatabaseBusyError, AIOperationDeadlineExceeded, PromptSizeError):
+        raise
+    except KeyError as e:
+        logger.warning(
+            "Resume diagnosis for %s requested unknown competency model %s",
+            resume_id,
+            e,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail="Selected competency model is unavailable. Please choose another.",
+        )
+    except Exception as e:
+        logger.error(f"Resume diagnosis failed for {resume_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to diagnose resume. Please try again.",
+        )
+
+
+@router.post("/{resume_id}/diagnose/document")
+async def download_diagnosis_document_endpoint(
+    resume_id: str, report: DiagnosisReport
+) -> Response:
+    """Render an already-computed diagnosis report as a downloadable .docx.
+
+    The client posts back the report it received from /diagnose, so exporting
+    never triggers another LLM call.
+    """
+    resume = await db.get_resume(resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    candidate_name: str | None = None
+    processed_data = resume.get("processed_data")
+    if isinstance(processed_data, dict):
+        personal_info = processed_data.get("personalInfo")
+        if isinstance(personal_info, dict):
+            raw_name = personal_info.get("name")
+            if isinstance(raw_name, str) and raw_name.strip():
+                candidate_name = raw_name.strip()
+
+    try:
+        docx_bytes = build_diagnosis_docx(
+            report,
+            candidate_name=candidate_name,
+            resume_title=resume.get("title") if isinstance(resume.get("title"), str) else None,
+        )
+    except Exception as e:
+        logger.error(f"Diagnosis document build failed for {resume_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to build the diagnosis document. Please try again.",
+        )
+
+    # 简历诊断报告-姓名-时间.docx
+    headers = docx_headers(resume_id, diagnosis_docx_stem(candidate_name, resume_id))
+    return Response(content=docx_bytes, media_type=DOCX_MEDIA_TYPE, headers=headers)
 
 
 @router.post(

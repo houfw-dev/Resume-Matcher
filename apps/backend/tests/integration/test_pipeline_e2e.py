@@ -192,7 +192,9 @@ class TestPipelineCore:
         processed = data["processed_resume"]
         assert processed is not None
         assert processed["personalInfo"]["name"] == "Jane Doe"
-        assert processed["summary"] == sample_resume["summary"]
+        # Read-time hygiene unifies list-point endings: summary lines render as
+        # numbered points, so the trailing sentence period is dropped on GET.
+        assert processed["summary"] == sample_resume["summary"].rstrip(".")
 
         # Both resume and job live in the same isolated db.
         stats = await isolated_db.get_stats()
@@ -369,6 +371,68 @@ class TestTailoringPipeline:
         master = await isolated_db.get_master_resume()
         assert master["resume_id"] == resume_id
         assert master["processed_data"]["summary"] == sample_resume["summary"]
+
+    async def test_planner_failure_degrades_to_preview_with_warning(
+        self, isolated_db, sample_resume
+    ):
+        """A broken skill-target planner (e.g. the LLM returning non-JSON) must
+        not abort the preview. The router catches it, continues with an empty
+        allow-list, and surfaces a warning — never a 500."""
+        upload_resp = await _upload_resume(isolated_db, sample_resume)
+        assert upload_resp.status_code == 200
+        resume_id = upload_resp.json()["resume_id"]
+
+        async with _new_client() as client:
+            jobs_resp = await client.post(
+                "/api/v1/jobs/upload",
+                json={"job_descriptions": ["Senior Backend Engineer: Python, FastAPI."]},
+            )
+        assert jobs_resp.status_code == 200
+        job_id = jobs_resp.json()["job_id"][0]
+
+        improved = ResumeData.model_validate(copy.deepcopy(sample_resume)).model_dump()
+
+        with (
+            patch(
+                "app.routers.resumes.extract_job_keywords",
+                new_callable=AsyncMock,
+                return_value={"keywords": ["Python"], "required_skills": []},
+            ),
+            patch(
+                "app.routers.resumes.generate_skill_target_plan",
+                new_callable=AsyncMock,
+                side_effect=ValueError("No JSON found in response"),
+            ),
+            patch(
+                "app.routers.resumes.generate_resume_diffs",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(changes=[]),
+            ),
+            patch(
+                "app.routers.resumes.apply_diffs",
+                return_value=(copy.deepcopy(improved), [], []),
+            ),
+            patch("app.routers.resumes.verify_diff_result", return_value=[]),
+            patch(
+                "app.routers.resumes.refine_resume",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("refinement disabled for test"),
+            ),
+            patch(
+                "app.routers.resumes.generate_resume_title",
+                new_callable=AsyncMock,
+                return_value="Senior Backend Engineer",
+            ),
+        ):
+            async with _new_client() as client:
+                preview_resp = await client.post(
+                    "/api/v1/resumes/improve/preview",
+                    json={"resume_id": resume_id, "job_id": job_id},
+                )
+
+        assert preview_resp.status_code == 200, preview_resp.text
+        warnings = preview_resp.json()["data"].get("warnings", [])
+        assert any("Skill target planning failed" in w for w in warnings)
 
     async def test_preview_confirm_succeeds_for_non_canonical_stored_resume(
         self, isolated_db, sample_resume

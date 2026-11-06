@@ -100,14 +100,27 @@ const DialogClose: React.FC<DialogCloseProps> = ({ asChild, children, className 
 interface DialogContentProps {
   children: React.ReactNode;
   className?: string;
+  /** Allow closing with the Escape key (default true). */
+  closeOnEscape?: boolean;
+  /** Allow closing by clicking the backdrop overlay (default true). */
+  closeOnBackdrop?: boolean;
+  /** Render the top-right close button (default true). */
+  showCloseButton?: boolean;
 }
 
-const DialogContent: React.FC<DialogContentProps> = ({ children, className }) => {
+const DialogContent: React.FC<DialogContentProps> = ({
+  children,
+  className,
+  closeOnEscape = true,
+  closeOnBackdrop = true,
+  showCloseButton = true,
+}) => {
   const { open, onOpenChange, titleId } = useDialogContext();
   const { t } = useTranslations();
 
   // Handle escape key
   React.useEffect(() => {
+    if (!closeOnEscape) return;
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && open) {
         onOpenChange(false);
@@ -116,7 +129,7 @@ const DialogContent: React.FC<DialogContentProps> = ({ children, className }) =>
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [open, onOpenChange]);
+  }, [open, onOpenChange, closeOnEscape]);
 
   // Prevent body scroll when dialog is open
   React.useEffect(() => {
@@ -137,7 +150,7 @@ const DialogContent: React.FC<DialogContentProps> = ({ children, className }) =>
       {/* Overlay */}
       <div
         className="fixed inset-0 bg-black/50 animate-in fade-in-0"
-        onClick={() => onOpenChange(false)}
+        onClick={closeOnBackdrop ? () => onOpenChange(false) : undefined}
       />
       {/* Content */}
       <div className="fixed inset-0 flex items-center justify-center p-4">
@@ -155,13 +168,15 @@ const DialogContent: React.FC<DialogContentProps> = ({ children, className }) =>
           onClick={(e) => e.stopPropagation()}
         >
           {children}
-          <button
-            onClick={() => onOpenChange(false)}
-            className="absolute right-4 top-4 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-700 focus:ring-offset-2"
-          >
-            <X className="h-5 w-5" />
-            <span className="sr-only">{t('common.close')}</span>
-          </button>
+          {showCloseButton && (
+            <button
+              onClick={() => onOpenChange(false)}
+              className="absolute right-4 top-4 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-blue-700 focus:ring-offset-2"
+            >
+              <X className="h-5 w-5" />
+              <span className="sr-only">{t('common.close')}</span>
+            </button>
+          )}
         </div>
       </div>
     </div>,

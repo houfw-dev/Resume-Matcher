@@ -16,6 +16,7 @@ dependencies = [
     "litellm==1.86.2",
     "markitdown[docx]==0.1.4",
     "pdfminer.six==20260107",
+    "pypdfium2==5.14.0",  # PDF text recovery for embedded-subset fonts
     "playwright==1.58.0",
     "python-docx==1.2.0",
     "python-dotenv==1.2.2",
@@ -34,6 +35,13 @@ dev = [
 e2e-monitor = [
     "pypdf>=4.0.0",  # PDF text probe for the non-blank render check
     "httpx>=0.28.0",
+]
+# Optional offline OCR for scanned / glyph-as-outline PDFs with no text layer.
+# Bundled PP-OCR models (Chinese + English); no network and no API key.
+# Install with: uv sync --extra ocr
+ocr = [
+    "pypdfium2==5.14.0",  # PDF -> bitmap rendering (Apache-2.0/BSD, no system libs)
+    "rapidocr-onnxruntime==1.4.4",  # OCR engine + bundled ONNX models
 ]
 
 [build-system]

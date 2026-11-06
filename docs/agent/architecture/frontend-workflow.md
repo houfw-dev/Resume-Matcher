@@ -86,13 +86,17 @@ Dashboard → Upload Master Resume → Tailor for Job → View/Edit → Download
 
 ## Section Management
 
-| Action  | Result                                    |
-| ------- | ----------------------------------------- |
-| Rename  | Click pencil icon                         |
-| Reorder | Up/down arrows                            |
-| Hide    | Eye icon (hidden sections still editable) |
-| Delete  | Hides default, removes custom             |
-| Add     | "Add Section" button                      |
+Section order is fixed by the canonical ordering rule (degree-branch aware);
+the builder has no reorder controls. See
+[custom-sections.md](../features/custom-sections.md#fixed-section-order).
+
+| Action  | Result                                                          |
+| ------- | --------------------------------------------------------------- |
+| Rename  | Pencil icon on custom sections only; default titles are locked  |
+| Reorder | Not available — order is canonical and derived on render/save   |
+| Hide    | Eye icon (hidden sections still editable)                       |
+| Delete  | Hides default, removes custom after confirmation                |
+| Add     | "Add Section" button (blank/duplicate/reserved names rejected)   |
 
 ## API Client
 

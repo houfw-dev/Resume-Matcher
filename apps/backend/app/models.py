@@ -121,6 +121,37 @@ class TailoringPreview(Base):
     response_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
 
+class FineTunePreview(Base):
+    """A job-less self-improvement preview and its bounded confirmation claim."""
+
+    __tablename__ = "fine_tune_previews"
+    __table_args__ = (
+        Index(
+            "ix_fine_tune_preview_compatibility",
+            "source_id",
+            "payload_hash",
+            "created_at",
+        ),
+    )
+
+    preview_id: Mapped[str] = mapped_column(String, primary_key=True)
+    source_id: Mapped[str] = mapped_column(String, index=True)
+    scope_kind: Mapped[str] = mapped_column(String)
+    scope_targets: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    instruction: Mapped[str] = mapped_column(Text, default="")
+    payload_hash: Mapped[str] = mapped_column(String)
+    source_hash: Mapped[str] = mapped_column(String)
+    prompt_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[str] = mapped_column(String)
+    expires_at: Mapped[str] = mapped_column(String, index=True)
+    result_resume_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
+    claim_token: Mapped[str | None] = mapped_column(String, nullable=True)
+    claim_expires_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    response_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
 class Application(Base):
     """A Kanban application-tracker card."""
 

@@ -55,10 +55,12 @@ See the [hosted review corrections](architecture/hosted-review-corrections.md) f
 
 | Doc                                                            | Purpose                                                  |
 | -------------------------------------------------------------- | -------------------------------------------------------- |
+| [resume-parsing-rules](features/resume-parsing-rules.md)       | PDF/Word upload → structured JSON parsing rules          |
 | [custom-sections](features/custom-sections.md)                 | Dynamic sections                                         |
 | [resume-templates](features/resume-templates.md)               | Template types and controls                              |
 | [adding-resume-templates](features/adding-resume-templates.md) | How to add a new template                                |
 | [enrichment](features/enrichment.md)                           | AI enrichment flow                                       |
+| [fine-tune](features/fine-tune.md)                             | Job-less AI fine-tune: scope, dual-evidence grounding, preview → overwrite/copy |
 | [jd-match](features/jd-match.md)                               | Job description matching                                 |
 | [preview-confirmation](features/preview-confirmation.md)       | Durable preview identity, atomic confirmation and replay |
 | [i18n](features/i18n.md)                                       | Internationalization                                     |

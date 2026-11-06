@@ -183,6 +183,17 @@ export default async function PrintResumePage({ params, searchParams }: PageProp
   const fallbackLabels = {
     name: t('resume.defaults.name'),
   };
+  const personalInfoLabels = {
+    gender: t('resume.personalInfo.gender'),
+    age: t('resume.personalInfo.age'),
+    educationLevel: t('resume.personalInfo.educationLevel'),
+    workYears: t('resume.personalInfo.workYears'),
+    jobIntention: t('resume.personalInfo.jobIntention'),
+    desiredCity: t('resume.personalInfo.desiredCity'),
+    phone: t('resume.personalInfo.phone'),
+    email: t('resume.personalInfo.email'),
+    foreignLanguage: t('resume.personalInfo.foreignLanguage'),
+  };
 
   // Parse template settings from query params
   const settings: TemplateSettings = {
@@ -256,6 +267,7 @@ export default async function PrintResumePage({ params, searchParams }: PageProp
         settings={printSettings}
         locale={locale}
         additionalSectionLabels={additionalSectionLabels}
+        personalInfoLabels={personalInfoLabels}
         sectionHeadings={sectionHeadings}
         fallbackLabels={fallbackLabels}
       />

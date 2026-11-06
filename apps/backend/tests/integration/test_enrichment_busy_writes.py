@@ -79,10 +79,18 @@ async def test_enrichment_write_contention_returns_503_and_retry_commits(
 
     expected = copy.deepcopy(sample_resume)
     descriptions = expected["workExperience"][0]["description"]
-    expected["workExperience"][0]["description"] = (
-        descriptions + ["Built a reliable service"]
-        if operation == "apply" else ["Built a reliable service"]
-    )
+    # apply-regenerated matches against the read-healed form and persists it
+    # back (lazy migration), so the post-retry document is the healed fixture
+    # with the regenerated description written verbatim.
+    if operation == "apply-regenerated":
+        from app.schemas.models import normalize_resume_data
+
+        expected = normalize_resume_data(expected)
+        expected["workExperience"][0]["description"] = ["Built a reliable service"]
+    else:
+        expected["workExperience"][0]["description"] = descriptions + [
+            "Built a reliable service"
+        ]
     stored = await database.get_resume(source["resume_id"])
     assert stored is not None and stored["processed_data"] == expected
 

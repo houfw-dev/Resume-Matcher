@@ -20,7 +20,7 @@ export interface ExperienceEntry {
   location?: string;
   years?: string;
   description: string[];
-  descriptionStyles?: ('bullet' | 'plain')[];
+  descriptionStyles?: ('bullet' | 'plain' | 'label')[];
 }
 
 export interface EducationEntry {
@@ -36,8 +36,9 @@ export interface ProjectEntry {
   name: string;
   role?: string;
   years?: string;
+  scale?: string;
   description: string[];
-  descriptionStyles?: ('bullet' | 'plain')[];
+  descriptionStyles?: ('bullet' | 'plain' | 'label')[];
 }
 
 export interface AdditionalInfo {

@@ -144,6 +144,20 @@ async def test_finalize_creates_ready_master_resume(isolated_db) -> None:
     assert stored["content_type"] == "json"
     assert json.loads(stored["content"])["personalInfo"]["name"] == "James"
 
+    # No education data -> "other" branch: education sits before the end and
+    # the empty summary block is hidden while keeping its dense-order slot.
+    meta = stored["processed_data"]["sectionMeta"]
+    assert [m["key"] for m in meta] == [
+        "personalInfo",
+        "summary",
+        "additional",
+        "workExperience",
+        "personalProjects",
+        "education",
+    ]
+    assert [m["order"] for m in meta] == [0, 1, 2, 3, 4, 5]
+    assert next(m for m in meta if m["key"] == "summary")["isVisible"] is False
+
 
 async def test_finalize_replays_identical_wizard_master_without_duplication(
     isolated_db: Database,

@@ -18,6 +18,9 @@ import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw';
 import Plus from 'lucide-react/dist/esm/icons/plus';
 import Settings from 'lucide-react/dist/esm/icons/settings';
 import AlertTriangle from 'lucide-react/dist/esm/icons/alert-triangle';
+import Stethoscope from 'lucide-react/dist/esm/icons/stethoscope';
+
+import { DiagnosisWorkspace } from '@/components/diagnosis/diagnosis-workspace';
 
 import {
   fetchResume,
@@ -43,6 +46,7 @@ export default function DashboardPage() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [isMasterChoiceDialogOpen, setIsMasterChoiceDialogOpen] = useState(false);
+  const [isDiagnosisWorkspaceOpen, setIsDiagnosisWorkspaceOpen] = useState(false);
   const router = useRouter();
 
   // Status cache for optimistic counter updates and LLM status check
@@ -410,12 +414,58 @@ export default function DashboardPage() {
     return Math.abs(hash);
   };
 
-  const totalCards = 1 + tailoredResumes.length + 1;
+  // Master branch: master card + tailored cards. No-master branch: one
+  // initialize/settings card. Diagnosis and create live in the SwissGrid
+  // footer bar (footerActions), not in the card grid.
+  const totalCards = masterResumeId ? 1 + tailoredResumes.length : 1;
   const fillerCount = Math.max(0, (5 - (totalCards % 5)) % 5);
   const extraFillerCount = 5;
   // Use Tailwind classes for fillers now that we have them in config or use specific hex if needed
   // Using the hex values from before to maintain exact look, or we could map them to variants
   const fillerPalette = ['bg-secondary', 'bg-[#D8D8D2]', 'bg-[#CFCFC7]', 'bg-[#E0E0D8]'];
+
+  const openDiagnosisWorkspace = () => setIsDiagnosisWorkspaceOpen(true);
+
+  const handleDiagnosisCardKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setIsDiagnosisWorkspaceOpen(true);
+    }
+  };
+
+  // Diagnosis and create entries share the SwissGrid footer bar with the
+  // application-tracker and settings actions (per product decision: module
+  // entries grouped together instead of square grid cards).
+  const footerActionClass =
+    'inline-flex items-center justify-center gap-2 bg-background text-black border border-black px-4 md:px-6 py-2 uppercase font-bold tracking-wide shadow-sw-sm hover:translate-y-[1px] hover:translate-x-[1px] hover:shadow-none transition-all min-w-[130px] text-center text-xs md:text-sm disabled:opacity-40 disabled:pointer-events-none disabled:shadow-none';
+
+  const footerActions = (
+    <>
+      <button
+        type="button"
+        onClick={openDiagnosisWorkspace}
+        onKeyDown={handleDiagnosisCardKeyDown}
+        className={footerActionClass}
+        aria-label={t('diagnosis.workspace.cta')}
+      >
+        <Stethoscope className="w-4 h-4 text-primary" />
+        {t('diagnosis.workspace.cta')}
+      </button>
+      <button
+        type="button"
+        onClick={() => router.push('/tailor')}
+        disabled={!isTailorEnabled}
+        className={footerActionClass}
+        aria-label={t('dashboard.createResume')}
+        title={
+          isTailorEnabled ? t('dashboard.createResume') : t('dashboard.initializeMasterResume')
+        }
+      >
+        <Plus className="w-4 h-4 text-green-700" />
+        {t('dashboard.createResume')}
+      </button>
+    </>
+  );
 
   const listErrorAlert = listError ? (
     <div
@@ -464,37 +514,39 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <SwissGrid>
+      <SwissGrid footerActions={footerActions}>
         {/* 1. Master Resume Logic */}
         {!masterResumeId ? (
           // LLM Not Configured or Upload State
           !isLlmConfigured && !statusLoading ? (
-            <Link href="/settings" className="block h-full">
-              <Card
-                variant="interactive"
-                className="aspect-square h-full border-dashed border-warning bg-amber-50"
-              >
-                <div className="flex-1 flex flex-col justify-between">
-                  <div className="w-14 h-14 border-2 border-warning bg-white flex items-center justify-center mb-4">
-                    <AlertTriangle className="w-7 h-7 text-warning" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg uppercase text-amber-800 mb-2">
-                      {t('dashboard.setupRequiredTitle')}
-                    </CardTitle>
-                    <CardDescription className="text-amber-700 text-xs">
-                      {t('dashboard.setupRequiredMessage')}
-                    </CardDescription>
-                    <div className="flex items-center gap-2 mt-4 text-amber-700 group-hover:text-amber-900">
-                      <Settings className="w-4 h-4" />
-                      <span className="font-mono text-xs font-bold uppercase">
-                        {t('nav.goToSettings')}
-                      </span>
+            <>
+              <Link href="/settings" className="block h-full">
+                <Card
+                  variant="interactive"
+                  className="aspect-square h-full border-dashed border-warning bg-amber-50"
+                >
+                  <div className="flex-1 flex flex-col justify-between">
+                    <div className="w-14 h-14 border-2 border-warning bg-white flex items-center justify-center mb-4">
+                      <AlertTriangle className="w-7 h-7 text-warning" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg uppercase text-amber-800 mb-2">
+                        {t('dashboard.setupRequiredTitle')}
+                      </CardTitle>
+                      <CardDescription className="text-amber-700 text-xs">
+                        {t('dashboard.setupRequiredMessage')}
+                      </CardDescription>
+                      <div className="flex items-center gap-2 mt-4 text-amber-700 group-hover:text-amber-900">
+                        <Settings className="w-4 h-4" />
+                        <span className="font-mono text-xs font-bold uppercase">
+                          {t('nav.goToSettings')}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Card>
-            </Link>
+                </Card>
+              </Link>
+            </>
           ) : (
             <>
               <Card
@@ -650,23 +702,7 @@ export default function DashboardPage() {
           );
         })}
 
-        {/* 3. Create Tailored Resume */}
-        <Card className="aspect-square h-full" variant="default">
-          <div className="flex-1 flex flex-col items-center justify-center text-center h-full">
-            <Button
-              onClick={() => router.push('/tailor')}
-              disabled={!isTailorEnabled}
-              className="w-20 h-20 bg-blue-700 text-white border-2 border-black shadow-sw-default hover:bg-blue-800 hover:translate-y-[2px] hover:translate-x-[2px] hover:shadow-none transition-all rounded-none"
-            >
-              <Plus className="w-8 h-8" />
-            </Button>
-            <p className="text-xs font-mono mt-4 uppercase text-green-700">
-              {t('dashboard.createResume')}
-            </p>
-          </div>
-        </Card>
-
-        {/* 4. Fillers */}
+        {/* Fillers */}
         {Array.from({ length: fillerCount }).map((_, index) => (
           <Card
             key={`filler-${index}`}
@@ -708,6 +744,15 @@ export default function DashboardPage() {
           variant="danger"
         />
       </SwissGrid>
+
+      {/* Conditional mount: closing discards workspace-only state/polls. */}
+      {isDiagnosisWorkspaceOpen && (
+        <DiagnosisWorkspace
+          open
+          onClose={() => setIsDiagnosisWorkspaceOpen(false)}
+          onResumeMutated={() => void loadTailoredResumes()}
+        />
+      )}
     </div>
   );
 }

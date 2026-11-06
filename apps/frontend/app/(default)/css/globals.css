@@ -227,10 +227,18 @@
 .resume-body .resume-section-title-sm + p,
 .resume-body .resume-section-title + ul,
 .resume-body .resume-section-title-sm + ul,
+.resume-body .resume-section-title + ol,
+.resume-body .resume-section-title-sm + ol,
 .resume-body .resume-section-title + .resume-item,
 .resume-body .resume-section-title-sm + .resume-item {
   break-before: avoid;
   page-break-before: avoid;
+}
+
+/* Custom text/stringList and skills lists span pages; individual rows stay whole */
+.resume-body .resume-section > ol > li {
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 /* Generic no-break class for any element */
@@ -265,9 +273,37 @@
   .resume-body .resume-section-title-sm + p,
   .resume-body .resume-section-title + ul,
   .resume-body .resume-section-title-sm + ul,
+  .resume-body .resume-section-title + ol,
+  .resume-body .resume-section-title-sm + ol,
   .resume-body .resume-section-title + .resume-item,
   .resume-body .resume-section-title-sm + .resume-item {
     break-before: avoid !important;
     page-break-before: avoid !important;
   }
+
+  /* Custom text/stringList and skills lists may span pages; rows stay whole */
+  .resume-body .resume-section > ol {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  .resume-body .resume-section > ol > li {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}
+
+/* Fine-tune preview: mark sections in scope for a module-level fine-tune.
+   Applied at runtime via DOM attribute (no template component changes);
+   never present in print/PDF renders. */
+[data-fine-tune-highlight] {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
+/* Sub-module scope (project_N:<region>): a thin blue bar on the label and
+   its content block, visually lighter than the whole-section frame. */
+[data-fine-tune-highlight='region'] {
+  outline: none;
+  box-shadow: inset 3px 0 0 0 #1d4ed8;
 }

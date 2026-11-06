@@ -49,3 +49,31 @@ it('retains numeric dates and pairs description styles with their source rows', 
     descriptionStyles: ['plain'],
   });
 });
+
+it('preserves header demographic fields when restoring a draft', () => {
+  localStorage.setItem(
+    'resume_wizard_draft',
+    JSON.stringify({
+      step: 'question',
+      asked_count: 0,
+      progress: { current: 1, total: 10 },
+      resume_data: {
+        personalInfo: {
+          name: '王浩',
+          gender: '男',
+          age: '28岁',
+          educationLevel: '本科',
+          workYears: '5年',
+        },
+      },
+    })
+  );
+  const restored = readResumeWizardDraft();
+  expect(restored?.resume_data.personalInfo).toMatchObject({
+    name: '王浩',
+    gender: '男',
+    age: '28岁',
+    educationLevel: '本科',
+    workYears: '5年',
+  });
+});

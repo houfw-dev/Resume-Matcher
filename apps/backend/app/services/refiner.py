@@ -79,6 +79,33 @@ def _normalize_skill_key(skill: str) -> str:
     return re.sub(r"\s+", " ", skill.strip()).casefold()
 
 
+# Characters that may directly follow a bare skill name when it was expanded
+# into a "Name: capability detail" entry (mirrors the diff flow's boundary).
+_SKILL_DETAIL_BOUNDARIES = "：:·|（(［[\\-—、,，/；;"
+
+
+def _skill_is_elaboration_of(skill_key: str, allowed_key: str) -> bool:
+    """Whether ``skill_key`` is an allowed bare skill or its elaboration.
+
+    "kafka: high-throughput event streaming" elaborates the allowed JD skill
+    "kafka"; "kafkaexporter" does not (no boundary after the bare name). A
+    proficiency-positioned rewrite that names the bare technology mid-sentence
+    ("熟练掌握 redis 核心数据结构……") also qualifies.
+    """
+    if skill_key == allowed_key:
+        return True
+    if skill_key.startswith(allowed_key):
+        tail = skill_key[len(allowed_key) :]
+        if tail and (
+            tail[0].isspace()
+            or tail[0] in _SKILL_DETAIL_BOUNDARIES
+            or _CJK_RE.match(tail[0])
+        ):
+            return True
+    # Marker-first rewrites name the bare skill anywhere as a bounded term.
+    return _keyword_in_text(allowed_key, skill_key)
+
+
 def _extract_jd_skill_keys(
     job_keywords: dict[str, Any],
     job_description: str,
@@ -384,7 +411,11 @@ def validate_master_alignment(
     master_full_text = _extract_all_text(master).lower()
 
     for skill in tailored_skills - master_skills:
-        if _normalize_skill_key(skill) in allowed_skills:
+        skill_key = _normalize_skill_key(skill)
+        if skill_key in allowed_skills or any(
+            _skill_is_elaboration_of(skill_key, allowed)
+            for allowed in allowed_skills
+        ):
             continue
         # Check substring/containment: e.g. "Python" in "Python 3.x"
         has_substring_match = any(

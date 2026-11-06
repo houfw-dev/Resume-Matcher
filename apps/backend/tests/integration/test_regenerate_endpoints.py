@@ -235,6 +235,100 @@ class TestRegenerateEndpoints(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updated["workExperience"][0]["description"], ["Bullet A"])
         self.assertEqual(updated["workExperience"][1]["description"], ["Bullet B (rewritten)"])
 
+    async def test_apply_regenerated_tolerates_read_heal_only_drift(self) -> None:
+        # Regression: GET heals processed_data in its response without
+        # persisting it, so the UI snapshots (and sends back) healed rows
+        # while older stored rows still carry trailing list punctuation and
+        # leaked Markdown emphasis. That presentation-only drift must not
+        # reject the apply — nothing was actually edited.
+        resume_id = "resume_1"
+        processed_data = {
+            "personalProjects": [
+                {
+                    "name": "资金平台",
+                    "role": "后端开发",
+                    "description": ["负责系统设计。", "**数据库**：DRDS。"],
+                },
+            ],
+            "additional": {"technicalSkills": ["熟悉 Java。", "熟悉 MySQL。"]},
+        }
+
+        mock_db = AsyncMock()
+        mock_db.get_resume.return_value = {"processed_data": processed_data}
+        mock_db.update_resume.return_value = None
+
+        regenerated_items = [
+            RegeneratedItem(
+                item_id="proj_0",
+                item_type="project",
+                title="资金平台",
+                subtitle="后端开发",
+                original_content=["负责系统设计", "数据库：DRDS"],
+                new_content=["负责交易系统设计", "数据库：DRDS、Redis"],
+                diff_summary="Summary",
+            ),
+            RegeneratedItem(
+                item_id="skills",
+                item_type="skills",
+                title="Technical Skills",
+                original_content=["熟悉 Java", "熟悉 MySQL"],
+                new_content=["精通 Java", "精通 MySQL"],
+                diff_summary="Summary",
+            ),
+        ]
+
+        with patch.object(enrichment_router, "db", mock_db):
+            result = await enrichment_router.apply_regenerated_items(resume_id, regenerated_items)
+
+        self.assertEqual(result["updated_items"], 2)
+
+        updated = mock_db.update_resume.call_args.args[1]["processed_data"]
+        # The new content lands on the matched project, and the healed form
+        # (no trailing punctuation / emphasis markers) is persisted back.
+        self.assertEqual(
+            updated["personalProjects"][0]["description"],
+            ["负责交易系统设计", "数据库：DRDS、Redis"],
+        )
+        self.assertEqual(updated["additional"]["technicalSkills"], ["精通 Java", "精通 MySQL"])
+        # The raw stored form is not mutated in place (deepcopy before healing).
+        self.assertEqual(
+            processed_data["personalProjects"][0]["description"],
+            ["负责系统设计。", "**数据库**：DRDS。"],
+        )
+
+    async def test_apply_regenerated_refuses_real_content_change_despite_healing(self) -> None:
+        # Tolerance is presentation-only: a genuinely different stored row
+        # (beyond punctuation / emphasis / whitespace) must still 409.
+        resume_id = "resume_1"
+        processed_data = {
+            "personalProjects": [
+                {"name": "资金平台", "role": "后端开发", "description": ["负责账务系统设计。"]},
+            ],
+            "additional": {"technicalSkills": ["Java"]},
+        }
+
+        mock_db = AsyncMock()
+        mock_db.get_resume.return_value = {"processed_data": processed_data}
+
+        regenerated_items = [
+            RegeneratedItem(
+                item_id="proj_0",
+                item_type="project",
+                title="资金平台",
+                subtitle="后端开发",
+                original_content=["负责交易系统设计"],
+                new_content=["负责交易系统重构"],
+                diff_summary="Summary",
+            ),
+        ]
+
+        with patch.object(enrichment_router, "db", mock_db):
+            with self.assertRaises(HTTPException) as ctx:
+                await enrichment_router.apply_regenerated_items(resume_id, regenerated_items)
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        mock_db.update_resume.assert_not_called()
+
     async def test_apply_regenerated_refuses_when_items_do_not_match(self) -> None:
         resume_id = "resume_1"
         processed_data = {

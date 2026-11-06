@@ -135,11 +135,11 @@
       "stay": "继续编辑"
     },
     "personalInfo": "个人信息",
-    "summary": "个人简介",
+    "summary": "个人优势",
     "experience": "工作经历",
     "education": "教育背景",
-    "skills": "技能",
-    "projects": "项目经历",
+    "skills": "专业技能",
+    "projects": "项目经验",
     "certifications": "证书",
     "languages": "语言能力",
     "awards": "荣誉奖项",
@@ -171,7 +171,7 @@
       "addCustomSectionButton": "添加自定义板块",
       "sectionTypes": {
         "textBlockLabel": "文本块",
-        "textBlockDescription": "单个文本区域（类似个人简介）",
+        "textBlockDescription": "单个文本区域（类似个人优势）",
         "itemListLabel": "条目列表",
         "itemListDescription": "包含多个条目的列表（类似工作经历）",
         "stringListLabel": "简单列表",
@@ -187,14 +187,19 @@
       "unknownSectionType": "未知板块类型：{type}",
       "unknownDefaultSection": "未知默认板块：{section}"
     },
+    "sectionOrder": {
+      "lockedNotice": "板块顺序固定，不可拖拽调整"
+    },
     "sectionHeader": {
       "renameSection": "重命名板块",
+      "titleLocked": "默认板块标题不可修改",
+      "duplicateNameError": "已存在名为「{name}」的板块",
+      "reservedNameError": "「{name}」是默认板块名称",
+      "nameRequiredError": "板块名称不能为空",
       "customTag": "自定义",
       "hiddenFromPdfTag": "PDF 中隐藏",
       "hideSection": "隐藏板块",
       "showSection": "显示板块",
-      "moveUp": "上移",
-      "moveDown": "下移",
       "deleteSection": "删除板块",
       "deleteTitle": "删除板块",
       "deleteDescription": "确定要删除“{name}”吗？此操作无法撤销。"
@@ -237,10 +242,10 @@
         "title": "选择要重新生成的项目",
         "subtitle": "选择您想要改进的简历部分",
         "experience": "工作经历",
-        "projects": "项目经历",
-        "skills": "技术技能",
+        "projects": "项目经验",
+        "skills": "专业技能",
         "noItemsSelected": "请至少选择一个项目",
-        "noItemsAvailable": "没有可重新生成的项目。请先添加工作经历、项目经历或技能。",
+        "noItemsAvailable": "没有可重新生成的项目。请先添加工作经历、项目经验或技能。",
         "itemCount": {
           "one": "{count} 条",
           "other": "{count} 条"
@@ -329,7 +334,7 @@
         "title": "标题",
         "organization": "组织/公司",
         "location": "地点",
-        "years": "2020年1月 - 至今",
+        "years": "2020.03~至今",
         "description": "描述你的贡献..."
       },
       "noEntries": "// 暂无{label}",
@@ -341,13 +346,15 @@
         "addFirstJob": "添加第一条经历",
         "fields": {
           "jobTitle": "职位名称",
-          "company": "公司"
+          "company": "公司",
+          "department": "部门"
         },
         "placeholders": {
           "jobTitle": "高级开发工程师",
           "company": "科技公司",
+          "department": "如：技术部",
           "location": "远程 / 城市",
-          "years": "2020年1月 - 至今",
+          "years": "2020.03~至今",
           "description": "描述你的成果..."
         }
       },
@@ -363,7 +370,7 @@
         "placeholders": {
           "institution": "某某大学",
           "degree": "工学学士",
-          "years": "2016年8月 - 2020年5月",
+          "years": "2016.08~2020.05",
           "description": "补充说明..."
         }
       },
@@ -373,12 +380,14 @@
         "fields": {
           "projectName": "项目名称",
           "role": "角色",
+          "scale": "项目规模",
           "website": "网站"
         },
         "placeholders": {
           "projectName": "Resume Matcher",
           "role": "作者",
-          "years": "2023年3月",
+          "years": "2023.03",
+          "scale": "如：10 人团队",
           "github": "github.com/username/project",
           "website": "https://project-demo.com",
           "description": "项目细节..."
@@ -466,6 +475,10 @@
       "placeholders": {
         "name": "张三",
         "title": "软件工程师",
+        "gender": "男",
+        "age": "28岁",
+        "educationLevel": "本科",
+        "workYears": "5年",
         "email": "zhangsan@example.com",
         "phone": "+86 138 0000 0000",
         "location": "城市，国家",
@@ -803,6 +816,7 @@
     "returnToDashboard": "返回仪表板",
     "enhanceResume": "增强简历",
     "downloadResume": "下载简历",
+    "downloadWord": "下载 Word",
     "deletedTitle": "已删除简历",
     "deletedDescriptionMaster": "您的主简历已从系统中永久删除。",
     "deletedDescriptionRegular": "该简历已从系统中永久删除。",
@@ -819,7 +833,8 @@
     },
     "titlePlaceholder": "输入简历标题...",
     "downloadFailedTitle": "下载失败",
-    "renameFailedTitle": "重命名失败"
+    "renameFailedTitle": "重命名失败",
+    "diagnoseResume": "简历诊断"
   },
   "preview": {
     "margins": "页边距",
@@ -834,25 +849,33 @@
     "personalInfo": {
       "name": "姓名",
       "title": "职位名称",
+      "gender": "性别",
+      "age": "年龄",
+      "educationLevel": "学历",
+      "workYears": "工作年限",
+      "jobIntention": "求职意向",
+      "desiredCity": "意向城市",
       "email": "电子邮箱",
       "phone": "电话",
       "location": "所在地",
+      "foreignLanguage": "外语水平",
       "website": "个人网站",
       "linkedin": "领英",
       "github": "GitHub"
     },
     "sections": {
       "personalInfo": "个人信息",
-      "summary": "个人简介",
+      "summary": "个人优势",
       "experience": "工作经历",
       "education": "教育背景",
-      "projects": "项目经历",
-      "skills": "技能与荣誉",
-      "skillsOnly": "技能",
+      "projects": "项目经验",
+      "skills": "专业技能",
+      "skillsOnly": "专业技能",
       "certifications": "培训与证书",
       "languages": "语言能力",
       "awards": "荣誉奖项",
-      "links": "链接"
+      "links": "链接",
+      "selfIntroduction": "自我介绍"
     },
     "defaults": {
       "name": "你的姓名"
@@ -1113,6 +1136,162 @@
       "projectFollowUps": "项目追问",
       "skillGaps": "技能差距",
       "talkingPoints": "沟通要点"
+    }
+  },
+  "diagnosis": {
+    "title": "简历诊断",
+    "subtitle": "按《简历诊断规范 V4》逐项给出符合 / 部分符合 / 不符合 / 不适用判定与红线结论。",
+    "loading": "正在逐项检查——语义项由 AI 评审，可能需要几分钟……",
+    "measuringLayout": "正在按所选模板测量排版…",
+    "layoutSkipped": "排版测量不可用，页数与段落密度按文本估算。",
+    "error": "诊断失败，请重试。",
+    "intro": "报告结合确定性检查与一次结构化 AI 评审。可粘贴目标岗位描述，额外评估岗位匹配度检查项。",
+    "jobDescriptionLabel": "目标岗位描述（选填）",
+    "jobDescriptionPlaceholder": "粘贴岗位描述以启用岗位匹配度检查……",
+    "jdHint": "未提供岗位 JD 时，岗位匹配度检查项将标记为不适用；5 项职级专业能力检查项无需 JD，但需明确求职意向并匹配或选择对应职级能力模型，否则标记为不适用。",
+    "run": "开始诊断",
+    "rerun": "重新诊断",
+    "specVersion": "规范版本 {version}",
+    "redlinePassed": "红线检查全部通过。",
+    "redlineFailed": "存在未通过的红线项，此简历不可直接投递：",
+    "dimensionsTitle": "各维度检查结果",
+    "itemsTitle": "检查明细",
+    "filterAll": "全部",
+    "filterProblems": "仅看问题",
+    "allConform": "所有检查项均符合或不适用。",
+    "evidenceLabel": "问题描述",
+    "suggestionLabel": "优化建议",
+    "rating": {
+      "conform": "符合",
+      "partial": "部分符合",
+      "nonconform": "不符合",
+      "na": "不适用"
+    },
+    "severity": {
+      "redline": "红线"
+    },
+    "method": {
+      "objective": "自动",
+      "subjective": "AI"
+    },
+    "downloadWord": "下载 Word 文档",
+    "downloadFailed": "下载失败，请重试。",
+    "fileStem": "简历诊断报告",
+    "targetLabel": "诊断目标岗位",
+    "targetEmptyHint": "未填写求职意向，将按简历整体内容进行诊断。",
+    "targetChooseHint": "检测到多个求职意向，请选择本次诊断的目标岗位：",
+    "targetValue": "诊断目标岗位：{title}",
+    "competencyValue": "附加能力模型：{name}",
+    "countsLabel": "检查结果",
+    "countsSummary": "适用 {effective} 项 —— 符合 {conform}、部分符合 {partial}、不符合 {nonconform}；不适用 {na} 项。",
+    "modelLabel": "岗位能力模型",
+    "modelLoading": "正在加载岗位能力模型……",
+    "modelLoadError": "能力模型加载失败，仍可按基础检查项进行诊断。",
+    "modelMatchedHint": "已按目标岗位自动匹配：{name}。可切换职级或选择不使用模型。",
+    "modelNoMatchHint": "目标岗位未匹配到能力模型，可手动选择一个，或不使用模型直接检查。",
+    "modelNone": "不使用能力模型",
+    "workspace": {
+      "cta": "简历诊断",
+      "dropzoneHint": "支持 PDF、DOCX、DOC，最大 4MB — 解析完成后自动开始诊断",
+      "parsing": "正在解析上传的简历…",
+      "diagnosing": "正在运行诊断清单，AI 语义评审可能需要几分钟…",
+      "parseFailed": "该简历解析失败。可重试解析、删除该简历或重新上传文件。",
+      "paneResume": "上传的简历",
+      "paneReport": "诊断结果",
+      "structuredTab": "简历",
+      "originalTab": "原文",
+      "resizeHint": "拖拽调整两栏宽度",
+      "hideLeft": "隐藏简历栏",
+      "showLeft": "显示简历栏",
+      "hideRight": "隐藏结果栏",
+      "showRight": "显示结果栏",
+      "deleteResume": "删除简历",
+      "deleteConfirmTitle": "删除这份简历？",
+      "deleteConfirmDescription": "上传的简历及其解析数据将被永久删除；诊断报告仅可在导出后保留。",
+      "backToUpload": "重新上传",
+      "jdToggle": "粘贴岗位描述（JD）重新诊断",
+      "jdRun": "带 JD 重诊",
+      "exporting": "导出中…"
+    }
+  },
+  "fineTune": {
+    "buttonLabel": "AI 智能微调",
+    "sectionButtonLabel": "微调此模块",
+    "generating": {
+      "title": "正在微调简历…",
+      "body": "AI 正在重新组织并润色所选内容，可能需要几分钟。"
+    },
+    "dialog": {
+      "title": "AI 智能微调",
+      "subtitle": "结合原始上传内容与解析后的简历，优化逻辑与重点。不会虚构任何新信息。",
+      "scopeAll": "整篇简历",
+      "scopeAllHint": "将所有模块作为一份连贯文档进行重组和强化。",
+      "scopeModules": "选定模块",
+      "scopeModulesHint": "仅修改你勾选的模块和条目，其余内容保持不变。",
+      "modules": {
+        "summary": "个人总结",
+        "workExperience": "工作经历",
+        "education": "教育背景",
+        "personalProjects": "项目经验",
+        "additional": "技能及其他",
+        "customSections": "自定义区块"
+      },
+      "selectEntries": "选择{module}中的条目",
+      "selectRegions": "选择{module}中的子模块",
+      "regions": {
+        "techStack": "技术栈",
+        "background": "项目背景",
+        "duties": "项目职责",
+        "highlights": "项目亮点",
+        "achievements": "工作业绩",
+        "role": "项目角色"
+      },
+      "selectAtLeastOne": "请至少选择一个模块。",
+      "instructionLabel": "微调要求（可选）",
+      "instructionPlaceholder": "例如：量化成果、把最重要的经历排在前面、精简措辞。",
+      "cancel": "取消",
+      "generate": "生成预览"
+    },
+    "preview": {
+      "title": "微调预览",
+      "subtitle": "保存前请查看微调结果。",
+      "highlightHint": "带蓝框的模块属于本次微调范围。",
+      "tabRendered": "渲染预览",
+      "tabChanges": "改动对照",
+      "warningsTitle": "请人工核对",
+      "groundingWarning": "保留了一条无法核实的表述，请自行确认：{detail}",
+      "ignoredTarget": "已忽略超出范围的选择：{target}",
+      "diffUnavailable": "详细改动列表暂时不可用，请通过渲染预览进行对比。",
+      "relocationHint": "所选模块中混有奖项、证书等本应归属其他模块的内容。请改选「整体微调」后重新生成，即可将其自动归类到对应模块。",
+      "changesCount": "{count} 处改动",
+      "descriptionsModified": "修改 {count} 条描述",
+      "skillsAdded": "新增 {count} 项技能",
+      "skillsRemoved": "移除 {count} 项技能",
+      "noChanges": "未检测到文字改动。",
+      "originalLabel": "修改前",
+      "newLabel": "修改后",
+      "changeAdded": "新增",
+      "changeRemoved": "删除",
+      "changeModified": "修改",
+      "cancel": "取消",
+      "overwrite": "覆盖原简历",
+      "saveCopy": "另存副本",
+      "createCopy": "创建副本",
+      "copyTitleLabel": "副本标题",
+      "copyTitlePlaceholder": "微调后副本的标题",
+      "applying": "正在应用…",
+      "overwriteConfirmTitle": "确定覆盖此简历？",
+      "overwriteConfirmBody": "结构化内容将被替换为微调后的版本。原始上传文本会保留，你也可以再次微调，但此操作不可撤销。如需保留当前版本，请选择「另存副本」。",
+      "regionAppendDropped": "子模块微调保持原有行数；模型多产出的行未被采纳。"
+    },
+    "toast": {
+      "overwritten": "简历已更新为微调后的版本。"
+    },
+    "errors": {
+      "networkError": "微调时出现网络错误，请重试。",
+      "resumeChanged": "简历在预览生成后发生了变化，请重新生成预览。",
+      "generationFailed": "微调失败，请重试。",
+      "confirmFailed": "无法保存微调后的简历，请重试。"
     }
   }
 }

@@ -67,6 +67,20 @@ export function PaginatedPreview({ resumeData, settings }: PaginatedPreviewProps
     }),
     [t]
   );
+  const personalInfoLabels = React.useMemo(
+    () => ({
+      gender: t('resume.personalInfo.gender'),
+      age: t('resume.personalInfo.age'),
+      educationLevel: t('resume.personalInfo.educationLevel'),
+      workYears: t('resume.personalInfo.workYears'),
+      jobIntention: t('resume.personalInfo.jobIntention'),
+      desiredCity: t('resume.personalInfo.desiredCity'),
+      phone: t('resume.personalInfo.phone'),
+      email: t('resume.personalInfo.email'),
+      foreignLanguage: t('resume.personalInfo.foreignLanguage'),
+    }),
+    [t]
+  );
 
   const { pages, isCalculating } = usePagination({
     pageSize: settings.pageSize,
@@ -186,6 +200,7 @@ export function PaginatedPreview({ resumeData, settings }: PaginatedPreviewProps
             settings={resumeSettings}
             locale={contentLanguage}
             additionalSectionLabels={additionalSectionLabels}
+            personalInfoLabels={personalInfoLabels}
             sectionHeadings={sectionHeadings}
             fallbackLabels={fallbackLabels}
           />
@@ -220,6 +235,7 @@ export function PaginatedPreview({ resumeData, settings }: PaginatedPreviewProps
                   settings={resumeSettings}
                   locale={contentLanguage}
                   additionalSectionLabels={additionalSectionLabels}
+                  personalInfoLabels={personalInfoLabels}
                   sectionHeadings={sectionHeadings}
                   fallbackLabels={fallbackLabels}
                 />

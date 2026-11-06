@@ -28,4 +28,10 @@ describe('ResumeClean', () => {
     expect(screen.getByText('DevRel Engineer')).toBeInTheDocument();
     expect(screen.getByText('Lead client demos.')).toBeInTheDocument();
   });
+
+  it('renders the phone number as plain text, never a tel: link', () => {
+    const { container } = render(<ResumeClean data={data} />);
+    expect(screen.getByText('+91-700')).toBeInTheDocument();
+    expect(container.querySelector('a[href^="tel:"]')).toBeNull();
+  });
 });

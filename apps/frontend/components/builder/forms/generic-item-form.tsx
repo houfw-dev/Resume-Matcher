@@ -16,7 +16,7 @@ const RichTextEditor = dynamic(
     ),
   }
 );
-import { AlignLeft, List, Plus, Trash2 } from 'lucide-react';
+import { AlignLeft, Heading, List, Plus, Trash2 } from 'lucide-react';
 import type { CustomSectionItem } from '@/components/dashboard/resume-component';
 import { useTranslations } from '@/lib/i18n';
 import { alignDescriptionStyles, toggleDescriptionStyle } from '@/lib/utils/description-styles';
@@ -277,6 +277,8 @@ export const GenericItemForm: React.FC<GenericItemFormProps> = ({
                   >
                     {item.descriptionStyles?.[idx] === 'plain' ? (
                       <AlignLeft className="w-3 h-3" />
+                    ) : item.descriptionStyles?.[idx] === 'label' ? (
+                      <Heading className="w-3 h-3" />
                     ) : (
                       <List className="w-3 h-3" />
                     )}

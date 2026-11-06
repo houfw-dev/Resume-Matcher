@@ -184,6 +184,96 @@ class TestValidateMasterAlignment:
         ]
         assert critical_skill_violations == []
 
+    def test_allows_elaboration_of_jd_added_skill(self, sample_resume, master_resume):
+        # elaborate_skill / detailed add_skill output ("Name: capability
+        # detail") must not be flagged as a fabricated skill.
+        tailored = copy.deepcopy(sample_resume)
+        tailored["additional"]["technicalSkills"].append(
+            "Kubernetes: container orchestration, Service/Ingress traffic management"
+        )
+        report = validate_master_alignment(
+            tailored,
+            master_resume,
+            allowed_new_skills={"Kubernetes"},
+        )
+        assert not [
+            v
+            for v in report.violations
+            if v.violation_type == "fabricated_skill" and v.severity == "critical"
+        ]
+
+    def test_allows_proficiency_sentence_naming_jd_added_skill(
+        self, sample_resume, master_resume
+    ):
+        # The new add_skill/elaborate style opens with a proficiency word and
+        # names the bare technology mid-sentence; that is not a fabrication.
+        tailored = copy.deepcopy(sample_resume)
+        tailored["additional"]["technicalSkills"].append(
+            "Proficient in Kubernetes container orchestration and declarative rollout"
+        )
+        report = validate_master_alignment(
+            tailored,
+            master_resume,
+            allowed_new_skills={"Kubernetes"},
+        )
+        assert not [
+            v
+            for v in report.violations
+            if v.violation_type == "fabricated_skill" and v.severity == "critical"
+        ]
+
+    def test_marker_sentence_rewrite_of_master_skill_is_not_critical(
+        self, sample_resume, master_resume
+    ):
+        # elaborate_skill rewrites a bare master entry ("Redis") as a
+        # proficiency-first CJK sentence; it must never read as fabricated.
+        tailored = copy.deepcopy(sample_resume)
+        skills = tailored["additional"]["technicalSkills"]
+        skills[skills.index("Redis")] = "熟练掌握 Redis 核心数据结构与缓存、分布式锁等典型用法"
+        report = validate_master_alignment(tailored, master_resume)
+        assert not [
+            v
+            for v in report.violations
+            if v.violation_type == "fabricated_skill" and v.severity == "critical"
+        ]
+
+    def test_elaboration_without_boundary_is_still_fabricated(
+        self, sample_resume, master_resume
+    ):
+        # A different technology whose name merely starts with an allowed skill
+        # ("Kubernetes" -> "KubernetesExporter") keeps the critical flag:
+        # allowance requires an elaboration boundary after the bare name.
+        tailored = copy.deepcopy(sample_resume)
+        tailored["additional"]["technicalSkills"].append("KubernetesExporter toolkit")
+        report = validate_master_alignment(
+            tailored,
+            master_resume,
+            allowed_new_skills={"Kubernetes"},
+        )
+        assert any(
+            v.violation_type == "fabricated_skill" and v.severity == "critical"
+            for v in report.violations
+        )
+
+    def test_allows_cjk_elaboration_of_jd_added_skill(
+        self, sample_resume, master_resume
+    ):
+        # CJK text may directly adjoin the Latin skill name ("Kubernetes 容器…").
+        tailored = copy.deepcopy(sample_resume)
+        tailored["additional"]["technicalSkills"].append(
+            "Kubernetes：容器编排、Service/Ingress 流量治理与发布管理"
+        )
+        report = validate_master_alignment(
+            tailored,
+            master_resume,
+            allowed_new_skills={"Kubernetes"},
+        )
+        assert not [
+            v
+            for v in report.violations
+            if v.violation_type == "fabricated_skill" and v.severity == "critical"
+        ]
+
     async def test_refiner_rejects_skill_from_generic_keyword_only(
         self,
         sample_resume,

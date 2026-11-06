@@ -145,6 +145,8 @@ CRITICAL RULES:
 5. Do not use em-dashes (—) or their variants (---, --)
 6. Make keyword incorporation the DEFAULT across all content sections, not an optional enhancement
 7. Preserve descriptionStyles arrays and keep them aligned one-to-one with description arrays
+8. Detailed technical-skills entries written as "Name: core-capability detail" are deliberate: keep the entry as ONE list item with its detail intact (never split it, shorten it back to a bare name, merge it with another skill, or add versions/numbers)
+9. Project descriptions may contain bold sub-module label rows such as "技术栈：", "项目亮点：", "Tech Stack:", or "Project Highlights:" (style "label"), unnumbered bare technology rows under the tech-stack label (style "plain"), and inserted highlight bullets (style "bullet"). Keep every such row, its order, and its style exactly aligned; do not renumber rows across labels, flatten the sub-modules into one list, or add numbers/metrics to inserted rows
 
 Keywords to inject (only if supported by master resume):
 {keywords_to_inject}

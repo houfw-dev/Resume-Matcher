@@ -24,7 +24,9 @@ from app.pdf import close_pdf_renderer, init_pdf_renderer
 from app.routers import (
     applications_router,
     config_router,
+    diagnosis_router,
     enrichment_router,
+    fine_tune_router,
     health_router,
     jobs_router,
     resume_wizard_router,
@@ -111,8 +113,10 @@ app.include_router(config_router, prefix="/api/v1")
 app.include_router(resumes_router, prefix="/api/v1")
 app.include_router(jobs_router, prefix="/api/v1")
 app.include_router(enrichment_router, prefix="/api/v1")
+app.include_router(fine_tune_router, prefix="/api/v1")
 app.include_router(applications_router, prefix="/api/v1")
 app.include_router(resume_wizard_router, prefix="/api/v1")
+app.include_router(diagnosis_router, prefix="/api/v1")
 
 
 @app.get("/")

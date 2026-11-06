@@ -50,10 +50,15 @@ describe('ResumeSingleColumn filters blank entries (issue #763)', () => {
       },
     } as ResumeData;
 
-    render(<ResumeSingleColumn data={data} />);
+    const { container } = render(<ResumeSingleColumn data={data} />);
 
-    // Blank entries must not produce stray separators in the joined output.
-    expect(screen.getByText('React, TypeScript')).toBeInTheDocument();
-    expect(screen.queryByText(/React, , /)).not.toBeInTheDocument();
+    // Blank entries are dropped; skills render as numbered list items, one per line.
+    const list = container.querySelector('ol');
+    expect(list).not.toBeNull();
+    expect(list!.querySelectorAll('li')).toHaveLength(2);
+    expect(screen.getByText('React')).toBeInTheDocument();
+    expect(screen.getByText('TypeScript')).toBeInTheDocument();
+    // The old comma-joined output is gone.
+    expect(screen.queryByText('React, TypeScript')).toBeNull();
   });
 });
