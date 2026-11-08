@@ -115,3 +115,35 @@ async def test_generate_interview_prep_rejects_malformed_llm_json():
 
         with pytest.raises(ValidationError):
             await generate_interview_prep(SAMPLE_RESUME, "Need FastAPI", "en")
+
+
+@pytest.mark.asyncio
+async def test_empty_jd_uses_resume_only_prompt():
+    with patch(
+        "app.services.interview_prep.complete_json",
+        new_callable=AsyncMock,
+    ) as mock_complete, _patched_llm_token_helpers():
+        mock_complete.return_value = _valid_payload()
+
+        result = await generate_interview_prep(SAMPLE_RESUME, "", "en")
+
+    assert result.role_fit_analysis == ["Python API experience is relevant."]
+    prompt = mock_complete.await_args.kwargs["prompt"]
+    # The no-JD template never renders a job-description section.
+    assert "Job Description:" not in prompt
+    assert "Backend engineer" in prompt
+
+
+@pytest.mark.asyncio
+async def test_whitespace_jd_treated_as_missing():
+    with patch(
+        "app.services.interview_prep.complete_json",
+        new_callable=AsyncMock,
+    ) as mock_complete, _patched_llm_token_helpers():
+        mock_complete.return_value = _valid_payload()
+
+        await generate_interview_prep(SAMPLE_RESUME, "   \n  ", "zh")
+
+    prompt = mock_complete.await_args.kwargs["prompt"]
+    assert "Job Description:" not in prompt
+    assert "Chinese" in prompt or "中文" in prompt

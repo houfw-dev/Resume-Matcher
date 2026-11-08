@@ -9,7 +9,11 @@ from app.llm import (
     get_model_name,
     get_safe_max_tokens,
 )
-from app.prompts import INTERVIEW_PREP_PROMPT, get_language_name
+from app.prompts import (
+    INTERVIEW_PREP_NO_JD_PROMPT,
+    INTERVIEW_PREP_PROMPT,
+    get_language_name,
+)
 from app.schemas import InterviewPrepData
 
 
@@ -103,15 +107,27 @@ async def generate_interview_prep(
     job_description: str,
     language: str = "en",
 ) -> InterviewPrepData:
-    """Generate structured interview preparation for a tailored resume."""
-    prompt = INTERVIEW_PREP_PROMPT.format(
-        job_description=_truncate_text_for_prompt(
-            job_description,
-            _JOB_DESCRIPTION_PROMPT_CHAR_LIMIT,
-        ),
-        resume_data=_serialize_resume_data_for_prompt(resume_data),
-        output_language=get_language_name(language),
-    )
+    """Generate structured interview preparation from a resume and optional JD.
+
+    An empty/whitespace ``job_description`` produces resume-only preparation
+    (standalone resumes have no stored job context); tailored resumes pass the
+    stored job content and use the JD-aware prompt.
+    """
+    serialized_resume = _serialize_resume_data_for_prompt(resume_data)
+    if not job_description or not job_description.strip():
+        prompt = INTERVIEW_PREP_NO_JD_PROMPT.format(
+            resume_data=serialized_resume,
+            output_language=get_language_name(language),
+        )
+    else:
+        prompt = INTERVIEW_PREP_PROMPT.format(
+            job_description=_truncate_text_for_prompt(
+                job_description,
+                _JOB_DESCRIPTION_PROMPT_CHAR_LIMIT,
+            ),
+            resume_data=serialized_resume,
+            output_language=get_language_name(language),
+        )
     config = get_llm_config()
     max_tokens = get_safe_max_tokens(
         get_model_name(config),

@@ -167,10 +167,26 @@ regeneration replacements require non-empty lists of non-blank strings.
 ## Optional generated text
 
 Plain completions reject whitespace-only output. Resume confirmation still
-saves the tailored resume if title, cover letter, outreach, or interview prep
+saves the tailored resume if cover letter, outreach, or interview prep
 generation fails, and records a warning for each missing attachment. Cover
-letter, outreach, and title generation reject job descriptions longer than
-100,000 characters before calling a provider.
+letter and outreach generation reject job descriptions longer than 100,000
+characters before calling a provider.
+
+### Resume titles are deterministic (no LLM call)
+
+Tailored-resume titles are built by `cover_letter.build_resume_title` as
+`姓名-岗位名称`, with no provider call: the name comes from
+`personalInfo.name` and the position prefers the role cached in the job's
+keyword extraction (`job_keywords.role`, zero extra LLM cost on confirm),
+falling back to the first slash-separated segment of the resume's own
+`personalInfo.title` 求职意向. When neither fact exists, a localized generic
+title ("定制简历" / "Tailored Resume" / …) is used. Output is collapsed to one
+line and capped at 80 characters. This replaced the earlier LLM-generated
+title after reasoning-style models were observed echoing prompt rules (e.g.
+"Max 60 chars. Output one line.") into the stored title. The legacy
+`generate_resume_title` service (with its preamble/prompt-echo validator and
+strict retry) remains in the codebase with its unit tests but is no longer
+wired into the tailoring flow.
 
 ## Error Handling Pattern
 

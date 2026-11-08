@@ -76,7 +76,7 @@
     "processingFailedHint": "Impossible de lire ce fichier. Réessayez ou téléversez un autre fichier.",
     "retrySuccess": "Traitement réussi !",
     "retryFailed": "La nouvelle tentative a échoué. Essayez de téléverser un autre fichier.",
-    "createResume": "Créer un CV",
+    "createResume": "Personnaliser le CV",
     "edited": "Modifié le {date}",
     "statusLine": "STATUT : {status}",
     "status": {
@@ -220,17 +220,14 @@
       "usLetter": "Lettre US"
     },
     "generatePrompt": {
-      "notAvailableTitle": "{title} non disponible",
-      "notAvailableDescription": "Pour générer {title}, personnalisez d'abord votre CV avec une fiche de poste.",
-      "goToDashboard": "Aller au tableau de bord",
       "generateTitle": "Générer {title}",
-      "coverLetterDescription": "Générez une lettre de motivation personnalisée basée sur votre CV et la fiche de poste.",
-      "outreachDescription": "Générez un message de prise de contact concis pour LinkedIn ou e-mail basé sur votre CV et la fiche de poste.",
+      "coverLetterDescription": "Générez une lettre de motivation à partir de votre CV ; pour les CV personnalisés, la fiche de poste est également prise en compte.",
+      "outreachDescription": "Générez un message de prise de contact concis pour LinkedIn ou e-mail à partir de votre CV ; pour les CV personnalisés, la fiche de poste est également prise en compte.",
       "generateButton": "Générer {title}",
       "coverLetterFooter": "Conseil : personnalisez d'abord pour de meilleurs résultats.",
       "outreachFooter": "Conseil : restez bref et personnalisé.",
-      "interviewPrepDescription": "Générez une préparation à l'entretien spécifique au poste, basée sur votre CV personnalisé et la fiche de poste.",
-      "interviewPrepFooter": "Conseil : utilisez cette fonction après la personnalisation pour préparer des réponses sincères et fondées sur votre CV."
+      "interviewPrepDescription": "Générez une préparation à l'entretien à partir de votre CV ; pour les CV personnalisés, la fiche de poste est également prise en compte.",
+      "interviewPrepFooter": "Conseil : préparez des réponses sincères et fondées sur votre CV."
     },
     "regenerateDialog": {
       "title": "Régénérer {title} ?",
@@ -512,7 +509,11 @@
       "outreachSaveFailed": "Impossible d'enregistrer le message de contact. Veuillez réessayer.",
       "coverLetterGenerateFailed": "Impossible de générer la lettre de motivation : {error}",
       "outreachGenerateFailed": "Impossible de générer le message de contact : {error}",
-      "interviewPrepGenerateFailed": "Impossible de générer la préparation à l'entretien : {error}"
+      "interviewPrepGenerateFailed": "Impossible de générer la préparation à l'entretien : {error}",
+      "interviewPrepDownloadRequiresContent": "Générez d'abord la préparation à l'entretien pour pouvoir la télécharger.",
+      "interviewPrepDownloadFailed": "Échec du téléchargement de la préparation à l'entretien : {error}",
+      "jdMatchDownloadRequiresContext": "La correspondance avec l'offre n'est disponible que pour les CV personnalisés avec une fiche de poste.",
+      "jdMatchDownloadFailed": "Échec du téléchargement de la correspondance avec l'offre : {error}"
     },
     "leaveWithoutDraft": {
       "title": "Quitter avec des modifications non enregistrées ?",
@@ -575,6 +576,9 @@
     "subtitle": "Optimisez votre CV pour un poste spécifique",
     "heroTitle": "Personnalisez votre CV",
     "selectResume": "Sélectionner un CV",
+    "sourceDescription": "Choisissez le CV principal ou un CV autonome comme base. Les CV déjà adaptés ne peuvent pas servir de source.",
+    "sourceMaster": "CV principal",
+    "sourceStandalone": "CV autonome",
     "pasteJobDescription": "Coller la fiche de poste",
     "pasteJobDescriptionBelow": "Collez la fiche de poste ci-dessous",
     "jobDescriptionPlaceholder": "Collez la fiche de poste ici...",
@@ -834,7 +838,8 @@
     "titlePlaceholder": "Saisissez le titre du CV...",
     "downloadFailedTitle": "Échec du téléchargement",
     "renameFailedTitle": "Échec du renommage",
-    "diagnoseResume": "Diagnostiquer le CV"
+    "diagnoseResume": "Diagnostiquer le CV",
+    "tailorFromThis": "Adapter à partir de ce CV"
   },
   "preview": {
     "margins": "Marges",
@@ -907,6 +912,23 @@
     },
     "print": {
       "emptyContent": "Aucun contenu de lettre de motivation disponible."
+    },
+    "studio": {
+      "backToResume": "Retour au CV",
+      "jobDescriptionLabel": "Description de poste",
+      "jobDescriptionHint": "Facultatif. Laissez vide pour générer une lettre basée uniquement sur le CV ; ajoutez une description de poste pour adapter la lettre au poste.",
+      "jobDescriptionPlaceholder": "Collez ici la description du poste visé (facultatif)...",
+      "resultLabel": "Lettre de motivation",
+      "emptyResult": "Votre lettre de motivation générée apparaîtra ici. Vous pouvez la modifier avant de l'enregistrer.",
+      "saved": "Enregistré",
+      "copyError": "Échec de la copie. Sélectionnez et copiez le texte manuellement.",
+      "errors": {
+        "loadFailed": "Échec du chargement du CV. Revenez au tableau de bord et réessayez.",
+        "generateFailed": "Échec de la génération de la lettre de motivation. Veuillez réessayer.",
+        "saveFailed": "Échec de l'enregistrement de la lettre de motivation. Veuillez réessayer.",
+        "downloadFailed": "Échec du téléchargement du PDF. Veuillez réessayer.",
+        "emptyContent": "Générez une lettre de motivation avant de la télécharger."
+      }
     }
   },
   "outreach": {
@@ -1138,6 +1160,19 @@
       "talkingPoints": "Arguments clés"
     }
   },
+  "importWorkspace": {
+    "cta": "Importer un CV",
+    "dropzoneHint": "PDF, DOCX ou DOC jusqu'à 4 Mo.",
+    "parsing": "Analyse du CV téléversé…",
+    "parseFailed": "L'analyse de ce CV a échoué. Réessayez, supprimez-le ou téléversez un autre fichier.",
+    "importSuccess": "CV importé et analysé avec succès.",
+    "done": "Terminé",
+    "paneResume": "CV importé",
+    "deleteResume": "Supprimer le CV",
+    "deleteConfirmTitle": "Supprimer ce CV ?",
+    "deleteConfirmDescription": "Le CV téléversé et ses données analysées seront définitivement supprimés.",
+    "backToUpload": "Téléverser un autre fichier"
+  },
   "diagnosis": {
     "title": "Diagnostic du CV",
     "subtitle": "Check-list du barème V4 : verdict par critère et résultat des lignes rouges.",
@@ -1189,30 +1224,7 @@
     "modelLoadError": "Impossible de charger les modèles de compétences ; vous pouvez quand même exécuter la check-list de base.",
     "modelMatchedHint": "Correspondance automatique avec le poste visé : {name}. Changez de niveau ou lancez sans modèle.",
     "modelNoMatchHint": "Aucun modèle de compétences ne correspond au poste visé. Choisissez-en un pour confirmer, ou lancez sans modèle.",
-    "modelNone": "Lancer sans modèle de compétences",
-    "workspace": {
-      "cta": "Diagnostic de CV",
-      "dropzoneHint": "PDF, DOCX ou DOC jusqu'à 4 Mo — le diagnostic démarre automatiquement après l'analyse.",
-      "parsing": "Analyse du CV téléversé…",
-      "diagnosing": "Exécution de la liste de vérification ; la revue IA peut prendre quelques minutes…",
-      "parseFailed": "L'analyse de ce CV a échoué. Réessayez, supprimez-le ou téléversez un autre fichier.",
-      "paneResume": "CV téléversé",
-      "paneReport": "Rapport de diagnostic",
-      "structuredTab": "CV",
-      "originalTab": "Original",
-      "resizeHint": "Glisser pour redimensionner les panneaux",
-      "hideLeft": "Masquer le panneau CV",
-      "showLeft": "Afficher le panneau CV",
-      "hideRight": "Masquer le panneau rapport",
-      "showRight": "Afficher le panneau rapport",
-      "deleteResume": "Supprimer le CV",
-      "deleteConfirmTitle": "Supprimer ce CV ?",
-      "deleteConfirmDescription": "Le CV téléversé et ses données analysées seront définitivement supprimés. Le rapport n'est conservé qu'après export.",
-      "backToUpload": "Téléverser un autre fichier",
-      "jdToggle": "Relancer le diagnostic avec une offre d'emploi",
-      "jdRun": "Relancer avec l'offre",
-      "exporting": "Exportation…"
-    }
+    "modelNone": "Lancer sans modèle de compétences"
   },
   "fineTune": {
     "buttonLabel": "Ajustement IA",

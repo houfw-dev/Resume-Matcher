@@ -9,6 +9,7 @@ from uuid import uuid4
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.ai_limits import MAX_JOB_CHARACTERS
 from app.database import ResumeNotFoundError
 from app.main import app
 from app.schemas import InterviewPrepData
@@ -195,6 +196,139 @@ class TestUpdateOutreachMessage:
         assert resp.status_code == 200
 
 
+class TestGenerateCoverLetterFromResume:
+    """POST /api/v1/resumes/{resume_id}/cover-letter/generate"""
+
+    @patch("app.routers.resumes.get_content_language", return_value="en")
+    @patch("app.routers.resumes.generate_cover_letter", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_master_resume_without_jd(
+        self,
+        mock_db: AsyncMock,
+        mock_generate: AsyncMock,
+        _mock_language: MagicMock,
+        client: AsyncClient,
+        mock_resume_record: dict,
+        sample_resume: dict,
+    ) -> None:
+        mock_db.get_resume.return_value = mock_resume_record
+        mock_generate.return_value = "Dear team..."
+
+        async with client:
+            resp = await client.post(
+                "/api/v1/resumes/res-123/cover-letter/generate", json={}
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["content"] == "Dear team..."
+        # Master resume (no parent_id) and empty JD are both accepted.
+        mock_generate.assert_awaited_once_with(sample_resume, "", "en")
+        mock_db.update_resume.assert_awaited_once_with(
+            "res-123", {"cover_letter": "Dear team..."}
+        )
+
+    @patch("app.routers.resumes.get_content_language", return_value="en")
+    @patch("app.routers.resumes.generate_cover_letter", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_with_jd_passes_jd_to_service(
+        self,
+        mock_db: AsyncMock,
+        mock_generate: AsyncMock,
+        _mock_language: MagicMock,
+        client: AsyncClient,
+        mock_resume_record: dict,
+        sample_resume: dict,
+    ) -> None:
+        mock_db.get_resume.return_value = mock_resume_record
+        mock_generate.return_value = "Tailored letter"
+
+        async with client:
+            resp = await client.post(
+                "/api/v1/resumes/res-123/cover-letter/generate",
+                json={"job_description": "Need FastAPI and ETL"},
+            )
+
+        assert resp.status_code == 200
+        mock_generate.assert_awaited_once_with(
+            sample_resume, "Need FastAPI and ETL", "en"
+        )
+
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_missing_resume_returns_404(
+        self, mock_db: AsyncMock, client: AsyncClient
+    ) -> None:
+        mock_db.get_resume.return_value = None
+
+        async with client:
+            resp = await client.post(
+                "/api/v1/resumes/nonexistent/cover-letter/generate", json={}
+            )
+
+        assert resp.status_code == 404
+
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_missing_processed_data_returns_400(
+        self,
+        mock_db: AsyncMock,
+        client: AsyncClient,
+        mock_resume_record: dict,
+    ) -> None:
+        mock_db.get_resume.return_value = {
+            **mock_resume_record,
+            "processed_data": None,
+        }
+
+        async with client:
+            resp = await client.post(
+                "/api/v1/resumes/res-123/cover-letter/generate", json={}
+            )
+
+        assert resp.status_code == 400
+        assert "processed data" in resp.json()["detail"]
+
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_oversized_jd_returns_422(
+        self,
+        mock_db: AsyncMock,
+        client: AsyncClient,
+        mock_resume_record: dict,
+    ) -> None:
+        mock_db.get_resume.return_value = mock_resume_record
+
+        async with client:
+            resp = await client.post(
+                "/api/v1/resumes/res-123/cover-letter/generate",
+                json={"job_description": "x" * (MAX_JOB_CHARACTERS + 1)},
+            )
+
+        assert resp.status_code == 422
+        # Request validation fails before the handler runs.
+        mock_db.update_resume.assert_not_called()
+
+    @patch("app.routers.resumes.get_content_language", return_value="en")
+    @patch("app.routers.resumes.generate_cover_letter", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_generation_failure_returns_500(
+        self,
+        mock_db: AsyncMock,
+        mock_generate: AsyncMock,
+        _mock_language: MagicMock,
+        client: AsyncClient,
+        mock_resume_record: dict,
+    ) -> None:
+        mock_db.get_resume.return_value = mock_resume_record
+        mock_generate.side_effect = RuntimeError("llm down")
+
+        async with client:
+            resp = await client.post(
+                "/api/v1/resumes/res-123/cover-letter/generate", json={}
+            )
+
+        assert resp.status_code == 500
+        assert "Failed to generate cover letter" in resp.json()["detail"]
+        mock_db.update_resume.assert_not_called()
+
+
 class TestGenerateInterviewPrep:
     """POST /api/v1/resumes/{resume_id}/generate-interview-prep"""
 
@@ -228,15 +362,26 @@ class TestGenerateInterviewPrep:
         saved_payload = json.loads(update_payload["interview_prep"])
         assert saved_payload == SAMPLE_INTERVIEW_PREP
 
+    @patch("app.routers.resumes.get_content_language", return_value="en")
+    @patch("app.routers.resumes.generate_interview_prep", new_callable=AsyncMock)
     @patch("app.routers.resumes.db", new_callable=AsyncMock)
-    async def test_rejects_non_tailored_resume(self, mock_db, client, mock_resume_record):
+    async def test_standalone_resume_generates_without_job_context(
+        self, mock_db, mock_generate, _mock_language, client, mock_resume_record
+    ):
+        # Standalone (non-tailored) resumes generate resume-only preparation via
+        # the service's no-JD prompt branch; no improvement lookup happens.
         mock_db.get_resume.return_value = mock_resume_record
+        mock_generate.return_value = InterviewPrepData.model_validate(SAMPLE_INTERVIEW_PREP)
 
         async with client:
             resp = await client.post("/api/v1/resumes/res-123/generate-interview-prep")
 
-        assert resp.status_code == 400
-        assert "tailored resumes" in resp.json()["detail"]
+        assert resp.status_code == 200
+        mock_db.get_improvement_by_tailored_resume.assert_not_called()
+        mock_db.get_job.assert_not_called()
+        mock_generate.assert_awaited_once_with(mock_resume_record["processed_data"], "", "en")
+        update_payload = mock_db.update_resume.await_args.args[1]
+        assert json.loads(update_payload["interview_prep"]) == SAMPLE_INTERVIEW_PREP
 
     @patch("app.routers.resumes.db", new_callable=AsyncMock)
     async def test_rejects_missing_improvement_context(
@@ -286,6 +431,383 @@ class TestGenerateInterviewPrep:
 
         assert resp.status_code == 500
         assert "Failed to generate interview preparation" in resp.json()["detail"]
+
+
+class TestOnDemandCoverLetter:
+    """POST /api/v1/resumes/{resume_id}/generate-cover-letter"""
+
+    @patch("app.routers.resumes.get_content_language", return_value="en")
+    @patch("app.routers.resumes.generate_cover_letter", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_standalone_resume_uses_empty_job_description(
+        self, mock_db, mock_generate, _mock_language, client, mock_resume_record
+    ):
+        mock_db.get_resume.return_value = mock_resume_record
+        mock_generate.return_value = "Resume-only cover letter"
+
+        async with client:
+            resp = await client.post("/api/v1/resumes/res-123/generate-cover-letter")
+
+        assert resp.status_code == 200
+        mock_db.get_improvement_by_tailored_resume.assert_not_called()
+        mock_generate.assert_awaited_once_with(
+            mock_resume_record["processed_data"], "", "en"
+        )
+        mock_db.update_resume.assert_awaited_once_with(
+            "res-123", {"cover_letter": "Resume-only cover letter"}
+        )
+
+    @patch("app.routers.resumes.get_content_language", return_value="en")
+    @patch("app.routers.resumes.generate_cover_letter", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_tailored_resume_uses_stored_job(
+        self,
+        mock_db,
+        mock_generate,
+        _mock_language,
+        client,
+        mock_resume_record,
+        sample_resume,
+    ):
+        mock_db.get_resume.return_value = {
+            **mock_resume_record,
+            "parent_id": "master-1",
+            "processed_data": sample_resume,
+        }
+        mock_db.get_improvement_by_tailored_resume.return_value = {"job_id": "job-1"}
+        mock_db.get_job.return_value = {"job_id": "job-1", "content": "Need FastAPI"}
+        mock_generate.return_value = "Tailored cover letter"
+
+        async with client:
+            resp = await client.post("/api/v1/resumes/res-123/generate-cover-letter")
+
+        assert resp.status_code == 200
+        mock_generate.assert_awaited_once_with(sample_resume, "Need FastAPI", "en")
+
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_missing_processed_data_returns_400(
+        self, mock_db, client, mock_resume_record
+    ):
+        mock_db.get_resume.return_value = {
+            **mock_resume_record,
+            "processed_data": None,
+        }
+
+        async with client:
+            resp = await client.post("/api/v1/resumes/res-123/generate-cover-letter")
+
+        assert resp.status_code == 400
+        assert "processed data" in resp.json()["detail"]
+
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_tailored_without_improvement_returns_400(
+        self, mock_db, client, mock_resume_record
+    ):
+        mock_db.get_resume.return_value = {
+            **mock_resume_record,
+            "parent_id": "master-1",
+        }
+        mock_db.get_improvement_by_tailored_resume.return_value = None
+
+        async with client:
+            resp = await client.post("/api/v1/resumes/res-123/generate-cover-letter")
+
+        assert resp.status_code == 400
+        assert "No job context" in resp.json()["detail"]
+
+    @patch("app.routers.resumes.generate_cover_letter", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_generation_failure_returns_500(
+        self, mock_db, mock_generate, client, mock_resume_record
+    ):
+        mock_db.get_resume.return_value = mock_resume_record
+        mock_generate.side_effect = RuntimeError("llm failed")
+
+        async with client:
+            resp = await client.post("/api/v1/resumes/res-123/generate-cover-letter")
+
+        assert resp.status_code == 500
+        assert "Failed to generate cover letter" in resp.json()["detail"]
+
+
+class TestOnDemandOutreach:
+    """POST /api/v1/resumes/{resume_id}/generate-outreach"""
+
+    @patch("app.routers.resumes.get_content_language", return_value="en")
+    @patch("app.routers.resumes.generate_outreach_message", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_standalone_resume_uses_empty_job_description(
+        self, mock_db, mock_generate, _mock_language, client, mock_resume_record
+    ):
+        mock_db.get_resume.return_value = mock_resume_record
+        mock_generate.return_value = "Resume-only outreach"
+
+        async with client:
+            resp = await client.post("/api/v1/resumes/res-123/generate-outreach")
+
+        assert resp.status_code == 200
+        mock_db.get_improvement_by_tailored_resume.assert_not_called()
+        mock_generate.assert_awaited_once_with(
+            mock_resume_record["processed_data"], "", "en"
+        )
+        mock_db.update_resume.assert_awaited_once_with(
+            "res-123", {"outreach_message": "Resume-only outreach"}
+        )
+
+    @patch("app.routers.resumes.get_content_language", return_value="en")
+    @patch("app.routers.resumes.generate_outreach_message", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_tailored_resume_uses_stored_job(
+        self,
+        mock_db,
+        mock_generate,
+        _mock_language,
+        client,
+        mock_resume_record,
+        sample_resume,
+    ):
+        mock_db.get_resume.return_value = {
+            **mock_resume_record,
+            "parent_id": "master-1",
+            "processed_data": sample_resume,
+        }
+        mock_db.get_improvement_by_tailored_resume.return_value = {"job_id": "job-1"}
+        mock_db.get_job.return_value = {"job_id": "job-1", "content": "Need FastAPI"}
+        mock_generate.return_value = "Tailored outreach"
+
+        async with client:
+            resp = await client.post("/api/v1/resumes/res-123/generate-outreach")
+
+        assert resp.status_code == 200
+        mock_generate.assert_awaited_once_with(sample_resume, "Need FastAPI", "en")
+
+    @patch("app.routers.resumes.generate_outreach_message", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_generation_failure_returns_500(
+        self, mock_db, mock_generate, client, mock_resume_record
+    ):
+        mock_db.get_resume.return_value = mock_resume_record
+        mock_generate.side_effect = RuntimeError("llm failed")
+
+        async with client:
+            resp = await client.post("/api/v1/resumes/res-123/generate-outreach")
+
+        assert resp.status_code == 500
+        assert "Failed to generate outreach message" in resp.json()["detail"]
+
+
+class TestContentPdfExports:
+    """GET /api/v1/resumes/{resume_id}/{kind}/pdf"""
+
+    @pytest.mark.parametrize(
+        "path,selector,field,value",
+        [
+            (
+                "/api/v1/resumes/res-123/interview-prep/pdf",
+                ".interview-prep-print",
+                "interview_prep",
+                json.dumps(SAMPLE_INTERVIEW_PREP),
+            ),
+            (
+                "/api/v1/resumes/res-123/cover-letter/pdf",
+                ".cover-letter-print",
+                "cover_letter",
+                "Dear team, ...",
+            ),
+        ],
+    )
+    @patch("app.routers.resumes.render_resume_pdf", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_pdf_renders_stored_content(
+        self,
+        mock_db,
+        mock_render,
+        client,
+        mock_resume_record,
+        path,
+        selector,
+        field,
+        value,
+    ):
+        mock_db.get_resume.return_value = {**mock_resume_record, field: value}
+        mock_render.return_value = b"%PDF-1.4 synthetic"
+
+        async with client:
+            resp = await client.get(path)
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/pdf"
+        url = mock_render.await_args.args[0]
+        assert "pageSize=A4" in url
+        assert mock_render.await_args.kwargs["selector"] == selector
+
+    @pytest.mark.parametrize(
+        "path,field",
+        [
+            ("/api/v1/resumes/res-123/interview-prep/pdf", "interview_prep"),
+            ("/api/v1/resumes/res-123/cover-letter/pdf", "cover_letter"),
+        ],
+    )
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_missing_content_returns_404(
+        self, mock_db, client, mock_resume_record, path, field
+    ):
+        mock_db.get_resume.return_value = {**mock_resume_record, field: None}
+
+        async with client:
+            resp = await client.get(path)
+
+        assert resp.status_code == 404
+
+    @patch("app.routers.resumes.render_resume_pdf", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_jd_match_requires_tailored_resume(
+        self, mock_db, mock_render, client, mock_resume_record
+    ):
+        mock_db.get_resume.return_value = mock_resume_record
+
+        async with client:
+            resp = await client.get("/api/v1/resumes/res-123/jd-match/pdf")
+
+        assert resp.status_code == 404
+        assert "JD matching" in resp.json()["detail"]
+        mock_render.assert_not_called()
+
+    @patch("app.routers.resumes.render_resume_pdf", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_jd_match_pdf_renders_for_tailored_resume(
+        self, mock_db, mock_render, client, mock_resume_record
+    ):
+        mock_db.get_resume.return_value = {
+            **mock_resume_record,
+            "parent_id": "master-1",
+        }
+        mock_db.get_improvement_by_tailored_resume.return_value = {"job_id": "job-1"}
+        mock_db.get_job.return_value = {"job_id": "job-1", "content": "Need FastAPI"}
+        mock_render.return_value = b"%PDF-1.4 synthetic"
+
+        async with client:
+            resp = await client.get("/api/v1/resumes/res-123/jd-match/pdf")
+
+        assert resp.status_code == 200
+        url = mock_render.await_args.args[0]
+        assert "/print/jd-match/res-123" in url
+        assert mock_render.await_args.kwargs["selector"] == ".jd-match-print"
+
+    @patch("app.routers.resumes.render_resume_pdf", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_render_failure_returns_503(
+        self, mock_db, mock_render, client, mock_resume_record
+    ):
+        from app.pdf import PDFRenderError
+
+        mock_db.get_resume.return_value = {
+            **mock_resume_record,
+            "interview_prep": json.dumps(SAMPLE_INTERVIEW_PREP),
+        }
+        mock_render.side_effect = PDFRenderError("browser failed")
+
+        async with client:
+            resp = await client.get("/api/v1/resumes/res-123/interview-prep/pdf")
+
+        assert resp.status_code == 503
+        assert "browser failed" in resp.json()["detail"]
+
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_unknown_resume_returns_404(self, mock_db, client):
+        mock_db.get_resume.return_value = None
+
+        async with client:
+            resp = await client.get("/api/v1/resumes/missing/interview-prep/pdf")
+
+        assert resp.status_code == 404
+
+    @patch("app.routers.resumes.render_resume_pdf", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_resume_pdf_rejects_processing_record_without_rendering(
+        self, mock_db, mock_render, client, mock_resume_record
+    ):
+        """A still-processing record fails fast (409) instead of a blank PDF or a 60s render timeout."""
+        mock_db.get_resume.return_value = {
+            **mock_resume_record,
+            "processing_status": "processing",
+        }
+
+        async with client:
+            resp = await client.get("/api/v1/resumes/res-123/pdf")
+
+        assert resp.status_code == 409
+        assert "still being processed" in resp.json()["detail"]
+        mock_render.assert_not_called()
+
+    @patch("app.routers.resumes.render_resume_pdf", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_resume_pdf_rejects_failed_record_without_rendering(
+        self, mock_db, mock_render, client, mock_resume_record
+    ):
+        mock_db.get_resume.return_value = {
+            **mock_resume_record,
+            "processing_status": "failed",
+        }
+
+        async with client:
+            resp = await client.get("/api/v1/resumes/res-123/pdf")
+
+        assert resp.status_code == 409
+        mock_render.assert_not_called()
+
+    @patch("app.routers.resumes.render_resume_pdf", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_resume_pdf_rejects_ready_record_without_renderable_data(
+        self, mock_db, mock_render, client, mock_resume_record
+    ):
+        """Ready but markdown-only (no structured data) cannot render — 422, never a blank shell."""
+        mock_db.get_resume.return_value = {
+            **mock_resume_record,
+            "processed_data": None,
+            "content_type": "md",
+            "content": "# Markdown only",
+        }
+
+        async with client:
+            resp = await client.get("/api/v1/resumes/res-123/pdf")
+
+        assert resp.status_code == 422
+        assert "not available for export" in resp.json()["detail"]
+        mock_render.assert_not_called()
+
+    @patch("app.routers.resumes.render_resume_pdf", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_resume_pdf_renders_ready_record(
+        self, mock_db, mock_render, client, mock_resume_record
+    ):
+        """The readiness gate must not block the normal ready-with-data export path."""
+        mock_db.get_resume.return_value = mock_resume_record
+        mock_render.return_value = b"%PDF-1.4 synthetic"
+
+        async with client:
+            resp = await client.get("/api/v1/resumes/res-123/pdf")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/pdf"
+        mock_render.assert_awaited_once()
+
+    @patch("app.routers.resumes.build_resume_docx", new_callable=MagicMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_resume_docx_rejects_processing_record(
+        self, mock_db, mock_build, client, mock_resume_record
+    ):
+        mock_db.get_resume.return_value = {
+            **mock_resume_record,
+            "processing_status": "processing",
+        }
+
+        async with client:
+            resp = await client.get("/api/v1/resumes/res-123/docx")
+
+        assert resp.status_code == 409
+        assert "still being processed" in resp.json()["detail"]
+        mock_build.assert_not_called()
 
 
 class TestRetryProcessing:

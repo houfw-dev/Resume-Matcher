@@ -803,6 +803,7 @@ def _timeline_facts(intervals: list[tuple[str, Interval]]) -> dict[str, Any]:
         current_gap = max(0, today - max(ends) - 1)
 
     historical_gap = 0
+    gap_segments: list[int] = []
     overlaps: list[dict[str, str]] = []
     sorted_iv = sorted(parsed, key=lambda iv: _month_index(*iv.start))
     for previous, current in zip(sorted_iv, sorted_iv[1:]):
@@ -811,8 +812,15 @@ def _timeline_facts(intervals: list[tuple[str, Interval]]) -> dict[str, Any]:
         gap = cur_start - prev_end - 1
         if gap >= 0:
             historical_gap += gap
+            if gap > 0:
+                gap_segments.append(gap)
         elif gap < -1:
             overlaps.append({"from": previous.raw, "to": current.raw, "months": str(-gap)})
+
+    # Item 14's rubric thresholds apply to a SINGLE gap segment (单段空窗); the
+    # cumulative historical total is an auxiliary hint only, so separate short
+    # gaps must never combine into a finding.
+    largest_gap = max([current_gap, *gap_segments], default=0)
 
     # Item 14 only counts ENDED full-time jobs; the current open-ended job is
     # excluded from short-stint statistics.
@@ -836,6 +844,7 @@ def _timeline_facts(intervals: list[tuple[str, Interval]]) -> dict[str, Any]:
         ],
         "current_gap_months": current_gap,
         "historical_gap_months": historical_gap,
+        "largest_gap_months": largest_gap,
         "open_ended": open_ended,
         "overlaps": overlaps,
         "short_stints": short_stints,
@@ -1819,15 +1828,19 @@ _VERDICT_RANK = {
 def _check_gaps(facts: dict[str, Any]) -> Finding:
     current_gap = facts["current_gap_months"]
     historical_gap = facts["historical_gap_months"]
-    worst = max(current_gap, historical_gap)
+    # Rubric item 14 rates a SINGLE gap segment: >3 and <=6 months is a
+    # warning, >6 months is a red line. A gap of exactly 3 months (or less)
+    # conforms. The cumulative historical total stays in the evidence text as
+    # an auxiliary hint only and never drives the rating.
+    largest_gap = facts["largest_gap_months"]
     detail = f"本次空窗 {current_gap} 个月，历史空窗累计 {historical_gap} 个月"
-    if worst > 6:
+    if largest_gap > 6:
         return _finding(
             RATING_NONCONFORM,
             detail + "，存在较长空窗，简历中未见安排说明",
             "在简历中说明空窗期安排（如业务调整、项目到期、学习或家庭安排）。",
         )
-    if worst >= 3:
+    if largest_gap > 3:
         return _finding(
             RATING_PARTIAL,
             detail + "，存在空窗且简历未见说明",

@@ -12,6 +12,7 @@ import {
   planNestedGroupHeads,
   splitProjectPlainPrefix,
   stripPointMarker,
+  type DescriptionRowStyle,
 } from '@/components/resume/list-format';
 
 describe('stripPointMarker', () => {
@@ -119,7 +120,10 @@ describe('planNestedGroupHeads', () => {
       '商品初始化同步方案',
       '通过分类治理与多轮对账，保障商品同步准确率 100%。',
     ];
-    const styles = ['label', ...items.slice(1).map(() => 'bullet' as const)];
+    const styles: Array<DescriptionRowStyle | null | undefined> = [
+      'label',
+      ...items.slice(1).map(() => 'bullet' as const),
+    ];
     expect([...planNestedGroupHeads(items, styles, projectOptions)].sort((a, b) => a - b)).toEqual([
       1, 4, 6, 9,
     ]);

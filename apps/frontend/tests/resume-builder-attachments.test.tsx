@@ -584,3 +584,35 @@ it('retains a matching restored attachment backup when replacement storage write
     storage.mockRestore();
   }
 });
+
+describe('standalone resume generation entry points', () => {
+  it('keeps content tabs enabled without stored content and reaches outreach generation', async () => {
+    // Standalone resume: no parent_id and none of the AI attachments stored.
+    fetchResume.mockResolvedValue({
+      processed_resume: RESUME,
+      raw_resume: { processing_status: 'ready' },
+      title: 'Standalone resume',
+    });
+    currentSearch = 'id=a&tab=outreach';
+    const Builder = await importBuilder();
+    render(<Builder />);
+
+    const coverTab = await screen.findByRole('button', {
+      name: 'builder.previewTabs.coverLetter',
+    });
+    const outreachTab = screen.getByRole('button', {
+      name: 'builder.previewTabs.outreach',
+    });
+    expect(coverTab).not.toBeDisabled();
+    expect(outreachTab).not.toBeDisabled();
+    // JD matching fundamentally needs a stored job, so it stays locked.
+    expect(screen.getByRole('button', { name: 'builder.previewTabs.jdMatch' })).toBeDisabled();
+
+    // Both panels render the empty-state GeneratePrompt for outreach.
+    const prompts = await screen.findAllByRole('button', { name: 'generate-outreach' });
+    expect(prompts.length).toBeGreaterThan(0);
+    await act(async () => prompts[0].click());
+
+    await waitFor(() => expect(generateOutreachMessage).toHaveBeenCalledWith('a'));
+  });
+});

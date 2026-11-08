@@ -76,7 +76,7 @@
     "processingFailedHint": "No pudimos leer este archivo. Reintenta o sube otro.",
     "retrySuccess": "¡Procesamiento completado!",
     "retryFailed": "El reintento falló. Prueba a subir otro archivo.",
-    "createResume": "Crear currículum",
+    "createResume": "Personalizar CV",
     "edited": "Editado {date}",
     "statusLine": "ESTADO: {status}",
     "status": {
@@ -220,17 +220,14 @@
       "usLetter": "Carta (EE. UU.)"
     },
     "generatePrompt": {
-      "notAvailableTitle": "{title} no disponible",
-      "notAvailableDescription": "Para generar {title}, primero adapta tu currículum con una descripción del puesto.",
-      "goToDashboard": "Ir al panel",
       "generateTitle": "Generar {title}",
-      "coverLetterDescription": "Genera una carta de presentación adaptada según tu currículum y la descripción del puesto.",
-      "outreachDescription": "Genera un mensaje de contacto breve para LinkedIn o email según tu currículum y la descripción del puesto.",
+      "coverLetterDescription": "Genera una carta de presentación a partir de tu currículum; en los currículums adaptados también se incorpora la descripción del puesto.",
+      "outreachDescription": "Genera un mensaje de contacto breve para LinkedIn o email a partir de tu currículum; en los currículums adaptados también se incorpora la descripción del puesto.",
       "generateButton": "Generar {title}",
       "coverLetterFooter": "Consejo: adapta primero para mejores resultados.",
       "outreachFooter": "Consejo: manténlo breve y personalizado.",
-      "interviewPrepDescription": "Genera preparación para entrevistas según tu currículum adaptado y la descripción del puesto.",
-      "interviewPrepFooter": "Consejo: úsalo después de adaptar el currículum para preparar respuestas veraces basadas en evidencia."
+      "interviewPrepDescription": "Genera preparación para entrevistas a partir de tu currículum; en los currículums adaptados también se incorpora la descripción del puesto.",
+      "interviewPrepFooter": "Consejo: prepara respuestas veraces y basadas en la evidencia de tu currículum."
     },
     "regenerateDialog": {
       "title": "¿Regenerar {title}?",
@@ -512,7 +509,11 @@
       "outreachSaveFailed": "No se pudo guardar el mensaje de contacto. Por favor, inténtalo de nuevo.",
       "coverLetterGenerateFailed": "No se pudo generar la carta de presentación: {error}",
       "outreachGenerateFailed": "No se pudo generar el mensaje de contacto: {error}",
-      "interviewPrepGenerateFailed": "No se pudo generar la preparación de entrevista: {error}"
+      "interviewPrepGenerateFailed": "No se pudo generar la preparación de entrevista: {error}",
+      "interviewPrepDownloadRequiresContent": "Genera primero la preparación de la entrevista para descargarla.",
+      "interviewPrepDownloadFailed": "Error al descargar la preparación de la entrevista: {error}",
+      "jdMatchDownloadRequiresContext": "La comparación con la oferta solo está disponible para currículums personalizados con una descripción de puesto.",
+      "jdMatchDownloadFailed": "Error al descargar la comparación con la oferta: {error}"
     },
     "leaveWithoutDraft": {
       "title": "¿Salir con cambios sin guardar?",
@@ -575,6 +576,9 @@
     "subtitle": "Optimiza tu currículum para un trabajo específico",
     "heroTitle": "Personaliza tu currículum",
     "selectResume": "Seleccionar Currículum",
+    "sourceDescription": "Elige el currículum principal o uno independiente sobre el que personalizar. Los currículums ya personalizados no pueden ser origen.",
+    "sourceMaster": "Currículum principal",
+    "sourceStandalone": "Currículum independiente",
     "pasteJobDescription": "Pegar Descripción del Trabajo",
     "pasteJobDescriptionBelow": "Pega la descripción del trabajo abajo",
     "jobDescriptionPlaceholder": "Pega la descripción del trabajo aquí...",
@@ -834,7 +838,8 @@
     "titlePlaceholder": "Ingrese el título del currículum...",
     "downloadFailedTitle": "Error de descarga",
     "renameFailedTitle": "Error al cambiar el nombre",
-    "diagnoseResume": "Diagnosticar CV"
+    "diagnoseResume": "Diagnosticar CV",
+    "tailorFromThis": "Personalizar desde este currículum"
   },
   "preview": {
     "margins": "Márgenes",
@@ -907,7 +912,24 @@
     "print": {
       "emptyContent": "No hay contenido de carta de presentación."
     },
-    "copied": "¡Copiado!"
+    "copied": "¡Copiado!",
+    "studio": {
+      "backToResume": "Volver al currículum",
+      "jobDescriptionLabel": "Descripción del puesto",
+      "jobDescriptionHint": "Opcional. Déjalo vacío para generar una carta basada solo en el currículum; añade una descripción para adaptar la carta al puesto.",
+      "jobDescriptionPlaceholder": "Pega aquí la descripción del puesto objetivo (opcional)...",
+      "resultLabel": "Carta de presentación",
+      "emptyResult": "Tu carta de presentación generada aparecerá aquí. Puedes editarla antes de guardarla.",
+      "saved": "Guardado",
+      "copyError": "Error al copiar. Selecciona y copia el texto manualmente.",
+      "errors": {
+        "loadFailed": "No se pudo cargar el currículum. Vuelve al panel e inténtalo de nuevo.",
+        "generateFailed": "No se pudo generar la carta de presentación. Inténtalo de nuevo.",
+        "saveFailed": "No se pudo guardar la carta de presentación. Inténtalo de nuevo.",
+        "downloadFailed": "No se pudo descargar el PDF. Inténtalo de nuevo.",
+        "emptyContent": "Genera una carta de presentación antes de descargarla."
+      }
+    }
   },
   "outreach": {
     "title": "Mensaje de Contacto",
@@ -1138,6 +1160,19 @@
       "talkingPoints": "Puntos clave"
     }
   },
+  "importWorkspace": {
+    "cta": "Importar CV",
+    "dropzoneHint": "PDF, DOCX o DOC de hasta 4 MB.",
+    "parsing": "Analizando el CV subido…",
+    "parseFailed": "Falló el análisis de este CV. Reinténtalo, elimínalo o sube otro archivo.",
+    "importSuccess": "CV importado y analizado correctamente.",
+    "done": "Listo",
+    "paneResume": "CV importado",
+    "deleteResume": "Eliminar CV",
+    "deleteConfirmTitle": "¿Eliminar este CV?",
+    "deleteConfirmDescription": "El CV subido y sus datos analizados se eliminarán de forma permanente.",
+    "backToUpload": "Subir otro archivo"
+  },
   "diagnosis": {
     "title": "Diagnóstico de CV",
     "subtitle": "Lista de comprobación de la rúbrica V4: veredictos por ítem y resultado de líneas rojas.",
@@ -1189,30 +1224,7 @@
     "modelLoadError": "No se pudieron cargar los modelos de competencias; puedes ejecutar la lista de comprobación básica.",
     "modelMatchedHint": "Asignado automáticamente al puesto objetivo: {name}. Cambia de nivel o ejecuta sin modelo.",
     "modelNoMatchHint": "Ningún modelo de competencias coincide con el puesto objetivo. Elige uno para confirmar, o ejecuta sin modelo.",
-    "modelNone": "Ejecutar sin modelo de competencias",
-    "workspace": {
-      "cta": "Diagnóstico de CV",
-      "dropzoneHint": "PDF, DOCX o DOC de hasta 4 MB: el diagnóstico comienza automáticamente tras el análisis.",
-      "parsing": "Analizando el CV subido…",
-      "diagnosing": "Ejecutando la lista de comprobación; la revisión con IA puede tardar unos minutos…",
-      "parseFailed": "Falló el análisis de este CV. Reinténtalo, elimínalo o sube otro archivo.",
-      "paneResume": "CV subido",
-      "paneReport": "Informe de diagnóstico",
-      "structuredTab": "CV",
-      "originalTab": "Original",
-      "resizeHint": "Arrastra para ajustar los paneles",
-      "hideLeft": "Ocultar panel del CV",
-      "showLeft": "Mostrar panel del CV",
-      "hideRight": "Ocultar panel del informe",
-      "showRight": "Mostrar panel del informe",
-      "deleteResume": "Eliminar CV",
-      "deleteConfirmTitle": "¿Eliminar este CV?",
-      "deleteConfirmDescription": "El CV subido y sus datos analizados se eliminarán de forma permanente. El informe solo se conserva si lo exportas.",
-      "backToUpload": "Subir otro archivo",
-      "jdToggle": "Volver a diagnosticar con una descripción de puesto",
-      "jdRun": "Repetir con JD",
-      "exporting": "Exportando…"
-    }
+    "modelNone": "Ejecutar sin modelo de competencias"
   },
   "fineTune": {
     "buttonLabel": "Ajuste fino con IA",

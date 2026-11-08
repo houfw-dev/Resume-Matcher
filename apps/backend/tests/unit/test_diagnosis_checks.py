@@ -33,6 +33,7 @@ from app.services.diagnosis_checks import (
     _check_work_elements,
     _check_work_overlap,
     _join_findings,
+    _timeline_facts,
     _union_tenure_months,
     build_mainstream_stack_finding,
     count_points,
@@ -1269,6 +1270,7 @@ def test_current_gap_over_six_months_fails() -> None:
     facts = {
         "current_gap_months": 8,
         "historical_gap_months": 0,
+        "largest_gap_months": 8,
         "stints": [1],
         "short_stints": [],
         "companies_last_5_years": ["甲公司"],
@@ -1280,6 +1282,7 @@ def test_gap_between_three_and_six_is_partial() -> None:
     facts = {
         "current_gap_months": 4,
         "historical_gap_months": 0,
+        "largest_gap_months": 4,
         "stints": [1],
         "short_stints": [],
         "companies_last_5_years": [],
@@ -1291,10 +1294,96 @@ def test_exactly_six_month_gap_is_partial_threshold_is_strict() -> None:
     facts = {
         "current_gap_months": 6,
         "historical_gap_months": 0,
+        "largest_gap_months": 6,
         "stints": [1],
         "short_stints": [],
         "companies_last_5_years": [],
     }
+    assert _check_gaps(facts)[0] == RATING_PARTIAL
+
+
+def test_exactly_three_month_gap_conforms_threshold_is_strict() -> None:
+    # Rubric: only a single gap STRICTLY longer than 3 months is a warning;
+    # 3 months and below must stay silent (regression for the off-by-one).
+    facts = {
+        "current_gap_months": 3,
+        "historical_gap_months": 0,
+        "largest_gap_months": 3,
+        "stints": [1],
+        "short_stints": [],
+        "companies_last_5_years": [],
+    }
+    rating, evidence, suggestion = _check_gaps(facts)
+    assert rating == RATING_CONFORM
+    assert evidence == "" and suggestion == ""
+
+
+def test_short_gaps_do_not_combine_into_a_finding() -> None:
+    # Two separate 2-month gaps make the cumulative total 4 months, but each
+    # single segment is within the 3-month tolerance, so no finding is raised.
+    facts = {
+        "current_gap_months": 0,
+        "historical_gap_months": 4,
+        "largest_gap_months": 2,
+        "stints": [1, 2, 3],
+        "short_stints": [],
+        "companies_last_5_years": [],
+    }
+    rating, evidence, suggestion = _check_gaps(facts)
+    assert rating == RATING_CONFORM
+    assert evidence == "" and suggestion == ""
+
+
+def test_single_historical_gap_over_three_months_is_partial() -> None:
+    facts = {
+        "current_gap_months": 0,
+        "historical_gap_months": 4,
+        "largest_gap_months": 4,
+        "stints": [1, 2],
+        "short_stints": [],
+        "companies_last_5_years": [],
+    }
+    assert _check_gaps(facts)[0] == RATING_PARTIAL
+
+
+def test_timeline_two_short_gaps_stay_conform() -> None:
+    # End-to-end through _timeline_facts: two separate 2-month gaps make the
+    # cumulative total 4 months, but no single segment exceeds 3, so item 14's
+    # gap checker stays silent (the open-ended last job pins current_gap at 0).
+    intervals = [
+        ("甲公司", Interval((2018, 1), (2018, 12), "2018.01-2018.12", "")),
+        ("乙公司", Interval((2019, 3), (2019, 12), "2019.03-2019.12", "")),
+        ("丙公司", Interval((2020, 3), None, "2020.03 至今", "")),
+    ]
+    facts = _timeline_facts(intervals)
+    assert facts["current_gap_months"] == 0
+    assert facts["historical_gap_months"] == 4
+    assert facts["largest_gap_months"] == 2
+    rating, evidence, suggestion = _check_gaps(facts)
+    assert rating == RATING_CONFORM
+    assert evidence == "" and suggestion == ""
+
+
+def test_timeline_exactly_three_month_gap_conforms() -> None:
+    # A single segment of exactly 3 months must stay at conform (strict >3 rule).
+    intervals = [
+        ("甲公司", Interval((2018, 1), (2018, 12), "2018.01-2018.12", "")),
+        ("乙公司", Interval((2019, 4), None, "2019.04 至今", "")),
+    ]
+    facts = _timeline_facts(intervals)
+    assert facts["largest_gap_months"] == 3
+    assert _check_gaps(facts)[0] == RATING_CONFORM
+
+
+def test_timeline_four_month_segment_is_partial() -> None:
+    intervals = [
+        ("甲公司", Interval((2018, 1), (2018, 12), "2018.01-2018.12", "")),
+        ("乙公司", Interval((2019, 5), (2020, 12), "2019.05-2020.12", "")),
+        ("丙公司", Interval((2021, 1), None, "2021.01 至今", "")),
+    ]
+    facts = _timeline_facts(intervals)
+    assert facts["historical_gap_months"] == 4
+    assert facts["largest_gap_months"] == 4
     assert _check_gaps(facts)[0] == RATING_PARTIAL
 
 

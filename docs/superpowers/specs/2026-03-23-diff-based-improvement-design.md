@@ -193,7 +193,13 @@ Downstream contracts:
   bound to the registered preview hash, `approved_preview_project_rows()`
   re-derives the set structurally (digit-free extras inside labeled
   tech-stack/highlight regions; bare-name restrictions re-checked for stack
-  rows). Ordinary `append` bullets keep going through the grounding gate.
+  rows). A region row whose best source-row similarity is at/above
+  `_INSERT_ROW_NEAR_SOURCE_THRESHOLD` (0.8) is treated as a modification of
+  that source row, not an insertion, and stays out of the set: approving it
+  would skip source-slot consumption and force-restore the original as a
+  duplicate, breaking preview -> confirm idempotence (e.g. an em-dash
+  rewritten as commas by the refiner still scores 1.0 against its source).
+  Ordinary `append` bullets keep going through the grounding gate.
 - Refiner master alignment treats both `"Name: detail"` and proficiency-first
   sentences as allowed JD/master skills when the bare name is allowed or
   already present (`_skill_is_elaboration_of`, prefix-boundary or bounded

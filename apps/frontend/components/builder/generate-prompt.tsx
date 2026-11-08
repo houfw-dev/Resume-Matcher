@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
-import { Sparkles, Loader2, FileText, Mail, MessagesSquare, ArrowRight } from 'lucide-react';
+import { Sparkles, Loader2, FileText, Mail, MessagesSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTranslations } from '@/lib/i18n';
 
@@ -13,19 +13,11 @@ export interface GeneratePromptProps {
   isGenerating: boolean;
   /** Callback to trigger generation */
   onGenerate: () => void;
-  /** Whether this is a tailored resume (has job context) */
-  isTailoredResume: boolean;
   /** Additional class names */
   className?: string;
 }
 
-export function GeneratePrompt({
-  type,
-  isGenerating,
-  onGenerate,
-  isTailoredResume,
-  className,
-}: GeneratePromptProps) {
+export function GeneratePrompt({ type, isGenerating, onGenerate, className }: GeneratePromptProps) {
   const { t } = useTranslations();
   const isOutreach = type === 'outreach';
   const isInterviewPrep = type === 'interview-prep';
@@ -35,32 +27,6 @@ export function GeneratePrompt({
     : isOutreach
       ? t('outreach.title')
       : t('coverLetter.title');
-
-  // Show a different message if resume is not tailored
-  if (!isTailoredResume) {
-    return (
-      <div
-        className={cn(
-          'flex flex-col items-center justify-center min-h-[400px] p-12 text-center',
-          className
-        )}
-      >
-        <div className="w-16 h-16 border-2 border-steel-grey bg-paper-tint flex items-center justify-center mb-6">
-          <Icon className="w-8 h-8 text-steel-grey" />
-        </div>
-        <h3 className="font-mono text-sm font-bold uppercase tracking-wider text-ink-soft mb-3">
-          {t('builder.generatePrompt.notAvailableTitle', { title })}
-        </h3>
-        <p className="font-mono text-xs text-steel-grey max-w-md mb-6 leading-relaxed">
-          {t('builder.generatePrompt.notAvailableDescription', { title })}
-        </p>
-        <div className="flex items-center gap-2 text-blue-700 font-mono text-xs">
-          <span>{t('builder.generatePrompt.goToDashboard')}</span>
-          <ArrowRight className="w-4 h-4" />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div

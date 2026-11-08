@@ -450,6 +450,10 @@ def _validate_doc_container(path: Path) -> None:
     major_version = int.from_bytes(header[26:28], "little")
     file_size = path.stat().st_size
     sector_size = 1 << sector_shift
+    # WPS Office appends a non-CFB trailer (signature/watermark metadata, seen
+    # in the wild at 153 bytes) after the final sector. Floor division keeps
+    # every pointer check on the sector-aligned base; the trailing partial
+    # sector is ignored, exactly as textutil/LibreOffice ignore it.
     sector_count = file_size // sector_size - 1
     fat_sector_count = int.from_bytes(header[44:48], "little")
     first_directory_sector = int.from_bytes(header[48:52], "little")
@@ -463,7 +467,6 @@ def _validate_doc_container(path: Path) -> None:
         or (major_version == 3 and sector_shift != 9)
         or (major_version == 4 and sector_shift != 12)
         or file_size < sector_size * 3
-        or file_size % sector_size != 0
         or fat_sector_count < 1
         or fat_sector_count > sector_count
         or first_directory_sector >= sector_count
@@ -473,6 +476,41 @@ def _validate_doc_container(path: Path) -> None:
         raise DocumentValidationError(
             "The uploaded file is not a valid PDF, DOC, or DOCX document."
         )
+
+
+# Real container signatures hidden behind a legacy ``.doc`` filename. Files
+# saved by WPS/Word/Google Docs (or renamed in the file manager) frequently
+# carry a .doc extension while their bytes are OOXML, RTF or Word HTML.
+_ZIP_LOCAL_FILE_SIGNATURE = b"PK\x03\x04"
+_RTF_SIGNATURE = b"{\\rtf"
+
+
+def _sniff_legacy_doc_format(path: Path) -> str:
+    """Identify the real container behind a ``.doc`` filename.
+
+    Returns ``"ole2"`` for a genuine binary Word document, ``"docx"`` for an
+    OOXML package, ``"rtf"`` / ``"html"`` for those text formats, and
+    ``"unknown"`` for anything unrecognised.
+    """
+    try:
+        with path.open("rb") as stream:
+            header = stream.read(512)
+    except OSError as exc:
+        raise DocumentValidationError(
+            "The uploaded file is not a valid PDF, DOC, or DOCX document."
+        ) from exc
+
+    if header[:8] == _COMPOUND_FILE_SIGNATURE:
+        return "ole2"
+    if header[:4] == _ZIP_LOCAL_FILE_SIGNATURE:
+        return "docx"
+    # RTF/HTML may carry a UTF-8 BOM or leading whitespace before the marker.
+    stripped = header.lstrip(b"\xef\xbb\xbf \t\r\n").lower()
+    if stripped.startswith(_RTF_SIGNATURE):
+        return "rtf"
+    if stripped.startswith(b"<!doctype") or stripped.startswith(b"<html"):
+        return "html"
+    return "unknown"
 
 
 def _validate_extracted_text(text: str) -> None:
@@ -3503,7 +3541,28 @@ def _parse_document_sync(content: bytes, filename: str) -> str:
         if suffix == ".pdf":
             _validate_pdf_container(tmp_path)
         elif suffix == ".doc":
-            _validate_doc_container(tmp_path)
+            sniffed_format = _sniff_legacy_doc_format(tmp_path)
+            if sniffed_format == "ole2":
+                _validate_doc_container(tmp_path)
+            elif sniffed_format == "docx":
+                # Mislabeled OOXML package: markitdown infers the converter
+                # from the extension, so re-suffix before its DOCX path.
+                docx_path = tmp_path.with_suffix(".docx")
+                tmp_path.rename(docx_path)
+                tmp_path = docx_path
+                suffix = ".docx"
+                _validate_docx_container(tmp_path)
+            elif sniffed_format in ("rtf", "html"):
+                # The local legacy converter (textutil/LibreOffice) sniffs
+                # content and reads RTF/HTML directly; a server without a
+                # converter gets the actionable LegacyDocConversionError.
+                text = normalize_cjk_compat(_convert_legacy_doc(tmp_path))
+                _validate_extracted_text(text)
+                return text
+            else:
+                raise DocumentValidationError(
+                    "The uploaded file is not a valid PDF, DOC, or DOCX document."
+                )
         elif suffix == ".docx":
             _validate_docx_container(tmp_path)
         md = MarkItDown()

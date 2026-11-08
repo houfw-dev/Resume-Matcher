@@ -25,8 +25,8 @@ import {
   AlertCircle,
   Sparkles,
   Pencil,
-  MessagesSquare,
   Stethoscope,
+  Target,
 } from 'lucide-react';
 import { EnrichmentModal } from '@/components/enrichment/enrichment-modal';
 import { DiagnosisModal } from '@/components/diagnosis/diagnosis-modal';
@@ -205,10 +205,6 @@ export default function ResumeViewerPage() {
 
   const handleEdit = () => {
     router.push(`/builder?id=${resumeId}`);
-  };
-
-  const handleInterviewPrep = () => {
-    router.push(`/builder?id=${resumeId}&tab=interview-prep`);
   };
 
   const handleTitleSave = async () => {
@@ -509,10 +505,13 @@ export default function ResumeViewerPage() {
               <Edit className="w-4 h-4" />
               {t('dashboard.editResume')}
             </Button>
-            {isTailoredResume && (
-              <Button variant="outline" onClick={handleInterviewPrep}>
-                <MessagesSquare className="w-4 h-4" />
-                {t('interviewPrep.title')}
+            {!isTailoredResume && processingStatus === 'ready' && (
+              <Button
+                variant="outline"
+                onClick={() => router.push(`/tailor?source=${encodeURIComponent(resumeId)}`)}
+              >
+                <Target className="w-4 h-4" />
+                {t('resumeViewer.tailorFromThis')}
               </Button>
             )}
             <Button

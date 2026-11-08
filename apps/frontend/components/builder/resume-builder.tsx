@@ -36,9 +36,13 @@ import {
   downloadResumePdf,
   downloadResumeDocx,
   downloadCoverLetterPdf,
+  downloadInterviewPrepPdf,
+  downloadJdMatchPdf,
   getResumePdfUrl,
   getResumeDocxUrl,
   getCoverLetterPdfUrl,
+  getInterviewPrepPdfUrl,
+  getJdMatchPdfUrl,
   fetchResume,
   updateResume,
   updateCoverLetter,
@@ -1264,6 +1268,74 @@ const ResumeBuilderContent = () => {
     }
   };
 
+  const handleDownloadInterviewPrep = async () => {
+    if (!resumeId) {
+      showNotification(t('builder.alerts.interviewPrepDownloadRequiresContent'), 'warning');
+      return;
+    }
+    if (!interviewPrep) {
+      showNotification(t('builder.alerts.interviewPrepDownloadRequiresContent'), 'warning');
+      return;
+    }
+    try {
+      setIsDownloading(true);
+      const blob = await downloadInterviewPrepPdf(resumeId, templateSettings.pageSize, uiLanguage);
+      const company = getCompanyFromTitle(resumeTitle);
+      const userName = resumeData.personalInfo?.name?.trim() || null;
+      const filename = buildResumeFilename(userName, company, resumeId, 'interview-prep');
+      downloadBlobAsFile(blob, filename);
+    } catch (error) {
+      console.error('Failed to download interview preparation:', error);
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        const fallbackUrl = getInterviewPrepPdfUrl(resumeId, templateSettings.pageSize, uiLanguage);
+        const didOpen = openUrlInNewTab(fallbackUrl);
+        if (!didOpen) {
+          showNotification(t('common.popupBlocked', { url: fallbackUrl }), 'warning');
+        }
+        return;
+      }
+      const errorMessage = error instanceof Error ? error.message : t('common.unknown');
+      showNotification(
+        t('builder.alerts.interviewPrepDownloadFailed', { error: errorMessage }),
+        'danger'
+      );
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleDownloadJdMatch = async () => {
+    if (!resumeId || !jobDescription) {
+      showNotification(t('builder.alerts.jdMatchDownloadRequiresContext'), 'warning');
+      return;
+    }
+    try {
+      setIsDownloading(true);
+      const blob = await downloadJdMatchPdf(resumeId, templateSettings.pageSize, uiLanguage);
+      const company = getCompanyFromTitle(resumeTitle);
+      const userName = resumeData.personalInfo?.name?.trim() || null;
+      const filename = buildResumeFilename(userName, company, resumeId, 'jd-match');
+      downloadBlobAsFile(blob, filename);
+    } catch (error) {
+      console.error('Failed to download JD match:', error);
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        const fallbackUrl = getJdMatchPdfUrl(resumeId, templateSettings.pageSize, uiLanguage);
+        const didOpen = openUrlInNewTab(fallbackUrl);
+        if (!didOpen) {
+          showNotification(t('common.popupBlocked', { url: fallbackUrl }), 'warning');
+        }
+        return;
+      }
+      const errorMessage = error instanceof Error ? error.message : t('common.unknown');
+      showNotification(
+        t('builder.alerts.jdMatchDownloadFailed', { error: errorMessage }),
+        'danger'
+      );
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   // Outreach handlers
   async function handleSaveOutreach(showSuccess = true, showFailure = true): Promise<boolean> {
     if (!resumeId || loadingState !== 'loaded') return false;
@@ -1408,11 +1480,12 @@ const ResumeBuilderContent = () => {
     doGenerateOutreach();
   };
 
+  // Standalone resumes generate resume-only preparation; tailored resumes
+  // additionally require their stored job context to be available.
   const canGenerateInterviewPrep =
     Boolean(resumeId) &&
     loadingState === 'loaded' &&
-    isTailoredResume &&
-    jobContextStatus === 'available';
+    (!isTailoredResume || jobContextStatus === 'available');
 
   const interviewPrepUnavailableMessage = !resumeId
     ? t('interviewPrep.saveRequiredDescription')
@@ -1590,7 +1663,7 @@ const ResumeBuilderContent = () => {
                     variant="success"
                     size="sm"
                     onClick={() => void handleDownload('pdf')}
-                    disabled={!resumeId || isDownloading}
+                    disabled={!resumeId || isDownloading || loadingState !== 'loaded'}
                   >
                     <Download className="w-4 h-4" />
                     {isDownloading ? t('common.generating') : t('dashboard.downloadPdf')}
@@ -1599,7 +1672,7 @@ const ResumeBuilderContent = () => {
                     variant="success"
                     size="sm"
                     onClick={() => void handleDownload('docx')}
-                    disabled={!resumeId || isDownloading}
+                    disabled={!resumeId || isDownloading || loadingState !== 'loaded'}
                   >
                     <Download className="w-4 h-4" />
                     {isDownloading ? t('common.generating') : t('resumeViewer.downloadWord')}
@@ -1669,18 +1742,42 @@ const ResumeBuilderContent = () => {
 
               {/* Interview prep tab actions */}
               {activeTab === 'interview-prep' && interviewPrep && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateInterviewPrep}
+                    disabled={!canGenerateInterviewPrep || isGeneratingInterviewPrep}
+                  >
+                    {isGeneratingInterviewPrep ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4" />
+                    )}
+                    {t('interviewPrep.regenerate')}
+                  </Button>
+                  <Button
+                    variant="success"
+                    size="sm"
+                    onClick={handleDownloadInterviewPrep}
+                    disabled={!resumeId || isDownloading}
+                  >
+                    <Download className="w-4 h-4" />
+                    {isDownloading ? t('common.generating') : t('common.download')}
+                  </Button>
+                </>
+              )}
+
+              {/* JD match tab actions */}
+              {activeTab === 'jd-match' && jobDescription && (
                 <Button
-                  variant="outline"
+                  variant="success"
                   size="sm"
-                  onClick={handleGenerateInterviewPrep}
-                  disabled={!canGenerateInterviewPrep || isGeneratingInterviewPrep}
+                  onClick={handleDownloadJdMatch}
+                  disabled={!resumeId || isDownloading}
                 >
-                  {isGeneratingInterviewPrep ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-4 h-4" />
-                  )}
-                  {t('interviewPrep.regenerate')}
+                  <Download className="w-4 h-4" />
+                  {isDownloading ? t('common.generating') : t('common.download')}
                 </Button>
               )}
             </div>
@@ -1740,7 +1837,6 @@ const ResumeBuilderContent = () => {
                     type="cover-letter"
                     isGenerating={isGeneratingCoverLetter}
                     onGenerate={handleGenerateCoverLetter}
-                    isTailoredResume={isTailoredResume}
                   />
                 ))}
 
@@ -1758,7 +1854,6 @@ const ResumeBuilderContent = () => {
                     type="outreach"
                     isGenerating={isGeneratingOutreach}
                     onGenerate={handleGenerateOutreach}
-                    isTailoredResume={isTailoredResume}
                   />
                 ))}
 
@@ -1834,20 +1929,20 @@ const ResumeBuilderContent = () => {
               <RetroTabs
                 tabs={[
                   { id: 'resume', label: t('builder.previewTabs.resume') },
+                  // Content tabs stay enabled with no stored content: the empty
+                  // state renders the GeneratePrompt entry, and on-demand
+                  // generation now works for standalone resumes too.
                   {
                     id: 'cover-letter',
                     label: t('builder.previewTabs.coverLetter'),
-                    disabled: !coverLetter,
                   },
                   {
                     id: 'outreach',
                     label: t('builder.previewTabs.outreach'),
-                    disabled: !outreachMessage,
                   },
                   {
                     id: 'interview-prep',
                     label: t('builder.previewTabs.interviewPrep'),
-                    disabled: !isTailoredResume,
                   },
                   {
                     id: 'jd-match',
@@ -1885,7 +1980,6 @@ const ResumeBuilderContent = () => {
                     type="cover-letter"
                     isGenerating={isGeneratingCoverLetter}
                     onGenerate={handleGenerateCoverLetter}
-                    isTailoredResume={isTailoredResume}
                   />
                 ))}
 
@@ -1900,7 +1994,6 @@ const ResumeBuilderContent = () => {
                     type="outreach"
                     isGenerating={isGeneratingOutreach}
                     onGenerate={handleGenerateOutreach}
-                    isTailoredResume={isTailoredResume}
                   />
                 ))}
 

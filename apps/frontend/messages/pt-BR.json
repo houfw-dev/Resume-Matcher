@@ -76,7 +76,7 @@
     "processingFailedHint": "Não conseguimos ler este arquivo. Tente novamente ou envie outro.",
     "retrySuccess": "Processamento concluído com sucesso!",
     "retryFailed": "A nova tentativa falhou. Tente enviar outro arquivo.",
-    "createResume": "Criar Currículo",
+    "createResume": "Personalizar Currículo",
     "edited": "Editado {date}",
     "statusLine": "STATUS: {status}",
     "status": {
@@ -220,17 +220,14 @@
       "usLetter": "Carta US"
     },
     "generatePrompt": {
-      "notAvailableTitle": "{title} Não Disponível",
-      "notAvailableDescription": "Para gerar {title}, primeiro personalize seu currículo com uma descrição de vaga.",
-      "goToDashboard": "Ir para o Painel",
       "generateTitle": "Gerar {title}",
-      "coverLetterDescription": "Gere uma carta de apresentação personalizada com base no seu currículo e descrição da vaga.",
-      "outreachDescription": "Gere uma mensagem de contato concisa para LinkedIn ou email com base no seu currículo e descrição da vaga.",
+      "coverLetterDescription": "Gere uma carta de apresentação a partir do seu currículo; em currículos adaptados, a descrição da vaga também é incorporada.",
+      "outreachDescription": "Gere uma mensagem de contato concisa para LinkedIn ou email a partir do seu currículo; em currículos adaptados, a descrição da vaga também é incorporada.",
       "generateButton": "Gerar {title}",
       "coverLetterFooter": "Dica: personalize primeiro para melhores resultados.",
       "outreachFooter": "Dica: mantenha curta e personalizada.",
-      "interviewPrepDescription": "Gere preparação para entrevista com base no currículo adaptado e na descrição da vaga.",
-      "interviewPrepFooter": "Dica: use depois de adaptar o currículo para preparar respostas verdadeiras e baseadas em evidências."
+      "interviewPrepDescription": "Gere preparação para entrevista a partir do seu currículo; em currículos adaptados, a descrição da vaga também é incorporada.",
+      "interviewPrepFooter": "Dica: prepare respostas verdadeiras e baseadas em evidências do seu currículo."
     },
     "regenerateDialog": {
       "title": "Regenerar {title}?",
@@ -512,7 +509,11 @@
       "outreachSaveFailed": "Falha ao salvar mensagem de contato. Por favor, tente novamente.",
       "coverLetterGenerateFailed": "Falha ao gerar carta de apresentação: {error}",
       "outreachGenerateFailed": "Falha ao gerar mensagem de contato: {error}",
-      "interviewPrepGenerateFailed": "Falha ao gerar preparação para entrevista: {error}"
+      "interviewPrepGenerateFailed": "Falha ao gerar preparação para entrevista: {error}",
+      "interviewPrepDownloadRequiresContent": "Gere a preparação para a entrevista antes de fazer o download.",
+      "interviewPrepDownloadFailed": "Falha ao baixar a preparação para entrevista: {error}",
+      "jdMatchDownloadRequiresContext": "A correspondência com a vaga só está disponível para currículos personalizados com descrição de vaga.",
+      "jdMatchDownloadFailed": "Falha ao baixar a correspondência com a vaga: {error}"
     },
     "leaveWithoutDraft": {
       "title": "Sair com alterações não salvas?",
@@ -575,6 +576,9 @@
     "subtitle": "Otimize seu currículo para uma vaga específica",
     "heroTitle": "Personalize Seu Currículo",
     "selectResume": "Selecionar Currículo",
+    "sourceDescription": "Escolha o currículo principal ou um currículo independente como base. Currículos já personalizados não podem ser origem.",
+    "sourceMaster": "Currículo principal",
+    "sourceStandalone": "Currículo independente",
     "pasteJobDescription": "Colar Descrição da Vaga",
     "pasteJobDescriptionBelow": "Cole a Descrição da Vaga Abaixo",
     "jobDescriptionPlaceholder": "Cole a descrição da vaga aqui...",
@@ -834,7 +838,8 @@
     "titlePlaceholder": "Digite o título do currículo...",
     "downloadFailedTitle": "Falha no download",
     "renameFailedTitle": "Falha ao renomear",
-    "diagnoseResume": "Diagnosticar currículo"
+    "diagnoseResume": "Diagnosticar currículo",
+    "tailorFromThis": "Personalizar a partir deste currículo"
   },
   "preview": {
     "margins": "Margens",
@@ -907,6 +912,23 @@
     },
     "print": {
       "emptyContent": "Nenhum conteúdo de carta de apresentação disponível."
+    },
+    "studio": {
+      "backToResume": "Voltar ao currículo",
+      "jobDescriptionLabel": "Descrição da vaga",
+      "jobDescriptionHint": "Opcional. Deixe vazio para gerar uma carta baseada apenas no currículo; informe a descrição da vaga para personalizar a carta.",
+      "jobDescriptionPlaceholder": "Cole aqui a descrição da vaga desejada (opcional)...",
+      "resultLabel": "Carta de apresentação",
+      "emptyResult": "Sua carta de apresentação gerada aparecerá aqui. Você pode editá-la antes de salvar.",
+      "saved": "Salvo",
+      "copyError": "Falha ao copiar. Selecione e copie o texto manualmente.",
+      "errors": {
+        "loadFailed": "Falha ao carregar o currículo. Volte ao painel e tente novamente.",
+        "generateFailed": "Falha ao gerar a carta de apresentação. Tente novamente.",
+        "saveFailed": "Falha ao salvar a carta de apresentação. Tente novamente.",
+        "downloadFailed": "Falha ao baixar o PDF. Tente novamente.",
+        "emptyContent": "Gere uma carta de apresentação antes de baixar."
+      }
     }
   },
   "outreach": {
@@ -1138,6 +1160,19 @@
       "talkingPoints": "Pontos de conversa"
     }
   },
+  "importWorkspace": {
+    "cta": "Importar currículo",
+    "dropzoneHint": "PDF, DOCX ou DOC com até 4 MB.",
+    "parsing": "Analisando o currículo enviado…",
+    "parseFailed": "A análise deste currículo falhou. Tente novamente, exclua ou envie outro arquivo.",
+    "importSuccess": "Currículo importado e analisado com sucesso.",
+    "done": "Concluído",
+    "paneResume": "Currículo importado",
+    "deleteResume": "Excluir currículo",
+    "deleteConfirmTitle": "Excluir este currículo?",
+    "deleteConfirmDescription": "O currículo enviado e seus dados analisados serão excluídos permanentemente.",
+    "backToUpload": "Enviar outro arquivo"
+  },
   "diagnosis": {
     "title": "Diagnóstico do currículo",
     "subtitle": "Checklist da rubrica V4: veredictos por item e resultado das linhas vermelhas.",
@@ -1189,30 +1224,7 @@
     "modelLoadError": "Não foi possível carregar os modelos de competências; você ainda pode executar o checklist básico.",
     "modelMatchedHint": "Correspondência automática com o cargo-alvo: {name}. Troque de nível ou execute sem modelo.",
     "modelNoMatchHint": "Nenhum modelo de competências corresponde ao cargo-alvo. Escolha um para confirmar ou execute sem modelo.",
-    "modelNone": "Executar sem modelo de competências",
-    "workspace": {
-      "cta": "Diagnóstico de currículo",
-      "dropzoneHint": "PDF, DOCX ou DOC com até 4 MB — o diagnóstico começa automaticamente após a análise.",
-      "parsing": "Analisando o currículo enviado…",
-      "diagnosing": "Executando a checklist; a revisão por IA pode levar alguns minutos…",
-      "parseFailed": "A análise deste currículo falhou. Tente novamente, exclua ou envie outro arquivo.",
-      "paneResume": "Currículo enviado",
-      "paneReport": "Relatório de diagnóstico",
-      "structuredTab": "Currículo",
-      "originalTab": "Original",
-      "resizeHint": "Arraste para redimensionar os painéis",
-      "hideLeft": "Ocultar painel do currículo",
-      "showLeft": "Mostrar painel do currículo",
-      "hideRight": "Ocultar painel do relatório",
-      "showRight": "Mostrar painel do relatório",
-      "deleteResume": "Excluir currículo",
-      "deleteConfirmTitle": "Excluir este currículo?",
-      "deleteConfirmDescription": "O currículo enviado e seus dados analisados serão excluídos permanentemente. O relatório só é preservado após a exportação.",
-      "backToUpload": "Enviar outro arquivo",
-      "jdToggle": "Refazer o diagnóstico com uma descrição de vaga",
-      "jdRun": "Refazer com JD",
-      "exporting": "Exportando…"
-    }
+    "modelNone": "Executar sem modelo de competências"
   },
   "fineTune": {
     "buttonLabel": "Ajuste fino com IA",

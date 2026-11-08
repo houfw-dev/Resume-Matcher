@@ -13,15 +13,25 @@ const api = vi.hoisted(() => ({
   jobs: vi.fn(),
   improvements: vi.fn(),
   resumes: vi.fn(),
+  fetchList: vi.fn(),
 }));
 const router = { push: api.push, back: api.back };
 const t = (key: string) => key;
-vi.mock('next/navigation', () => ({ useRouter: () => router }));
+vi.mock('next/navigation', () => {
+  // Stable reference across renders: a new object per call would make the
+  // page's [router, searchParams] effect loop forever.
+  const searchParams = { get: () => null };
+  return {
+    useRouter: () => router,
+    useSearchParams: () => searchParams,
+  };
+});
 vi.mock('@/lib/i18n', () => ({ useTranslations: () => ({ t }) }));
 vi.mock('@/lib/api/resume', () => ({
   uploadJobDescriptions: api.upload,
   previewImproveResume: api.preview,
   confirmImproveResume: api.confirm,
+  fetchResumeList: api.fetchList,
 }));
 vi.mock('@/lib/api/config', () => ({
   fetchPromptConfig: async () => ({ prompt_options: [], default_prompt_id: 'keywords' }),
@@ -95,6 +105,18 @@ beforeEach(() => {
   api.upload.mockResolvedValue('job');
   api.preview.mockResolvedValue(preview);
   api.confirm.mockResolvedValue(confirmed);
+  // One eligible master whose id matches the cached localStorage master.
+  api.fetchList.mockResolvedValue([
+    {
+      resume_id: 'master',
+      filename: 'master.pdf',
+      is_master: true,
+      parent_id: null,
+      processing_status: 'ready',
+      created_at: '',
+      updated_at: '',
+    },
+  ]);
 });
 
 async function generate() {

@@ -18,9 +18,9 @@ import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw';
 import Plus from 'lucide-react/dist/esm/icons/plus';
 import Settings from 'lucide-react/dist/esm/icons/settings';
 import AlertTriangle from 'lucide-react/dist/esm/icons/alert-triangle';
-import Stethoscope from 'lucide-react/dist/esm/icons/stethoscope';
+import UploadCloud from 'lucide-react/dist/esm/icons/upload-cloud';
 
-import { DiagnosisWorkspace } from '@/components/diagnosis/diagnosis-workspace';
+import { ResumeImportWorkspace } from '@/components/dashboard/resume-import-workspace';
 
 import {
   fetchResume,
@@ -46,7 +46,7 @@ export default function DashboardPage() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [isMasterChoiceDialogOpen, setIsMasterChoiceDialogOpen] = useState(false);
-  const [isDiagnosisWorkspaceOpen, setIsDiagnosisWorkspaceOpen] = useState(false);
+  const [isImportWorkspaceOpen, setIsImportWorkspaceOpen] = useState(false);
   const router = useRouter();
 
   // Status cache for optimistic counter updates and LLM status check
@@ -415,7 +415,7 @@ export default function DashboardPage() {
   };
 
   // Master branch: master card + tailored cards. No-master branch: one
-  // initialize/settings card. Diagnosis and create live in the SwissGrid
+  // initialize/settings card. Resume import and create live in the SwissGrid
   // footer bar (footerActions), not in the card grid.
   const totalCards = masterResumeId ? 1 + tailoredResumes.length : 1;
   const fillerCount = Math.max(0, (5 - (totalCards % 5)) % 5);
@@ -424,16 +424,16 @@ export default function DashboardPage() {
   // Using the hex values from before to maintain exact look, or we could map them to variants
   const fillerPalette = ['bg-secondary', 'bg-[#D8D8D2]', 'bg-[#CFCFC7]', 'bg-[#E0E0D8]'];
 
-  const openDiagnosisWorkspace = () => setIsDiagnosisWorkspaceOpen(true);
+  const openImportWorkspace = () => setIsImportWorkspaceOpen(true);
 
-  const handleDiagnosisCardKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+  const handleImportCardKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      setIsDiagnosisWorkspaceOpen(true);
+      setIsImportWorkspaceOpen(true);
     }
   };
 
-  // Diagnosis and create entries share the SwissGrid footer bar with the
+  // Resume import and create entries share the SwissGrid footer bar with the
   // application-tracker and settings actions (per product decision: module
   // entries grouped together instead of square grid cards).
   const footerActionClass =
@@ -443,13 +443,13 @@ export default function DashboardPage() {
     <>
       <button
         type="button"
-        onClick={openDiagnosisWorkspace}
-        onKeyDown={handleDiagnosisCardKeyDown}
+        onClick={openImportWorkspace}
+        onKeyDown={handleImportCardKeyDown}
         className={footerActionClass}
-        aria-label={t('diagnosis.workspace.cta')}
+        aria-label={t('importWorkspace.cta')}
       >
-        <Stethoscope className="w-4 h-4 text-primary" />
-        {t('diagnosis.workspace.cta')}
+        <UploadCloud className="w-4 h-4 text-primary" />
+        {t('importWorkspace.cta')}
       </button>
       <button
         type="button"
@@ -746,10 +746,10 @@ export default function DashboardPage() {
       </SwissGrid>
 
       {/* Conditional mount: closing discards workspace-only state/polls. */}
-      {isDiagnosisWorkspaceOpen && (
-        <DiagnosisWorkspace
+      {isImportWorkspaceOpen && (
+        <ResumeImportWorkspace
           open
-          onClose={() => setIsDiagnosisWorkspaceOpen(false)}
+          onClose={() => setIsImportWorkspaceOpen(false)}
           onResumeMutated={() => void loadTailoredResumes()}
         />
       )}

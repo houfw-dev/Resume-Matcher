@@ -503,11 +503,13 @@ competencyModelKey?, templateSettings?, renderedLayout? })`（240 秒超时；�
     17 项）。点击运行先进入 `measuring` 阶段按 builder 当前设置离屏测量
     （失败静默回退无快照诊断并显示 `layoutSkipped` 中性提示），再进入诊断
     阶段。
-  - `components/diagnosis/diagnosis-workspace.tsx`，Dashboard 的「简历诊断」
-    入口：上传 → 解析 → 测量（对与左侧分屏同形的
-    `withLocalizedDefaultSections` 显示态数据；模板设置在工作区生命周期内快照
-    一份）→ 自动诊断（无 JD 基础运行先解析标题的职级模型，因此意向匹配时
-    18–22 都会被评判）、简历/报告分屏、JD 重诊（再次测量）、Word 导出。
+  - Dashboard 的「简历导入」入口
+    （`components/dashboard/resume-import-workspace.tsx`）**只做导入**：
+    上传 → 轮询服务端解析（`useResumeProcessing`）→ 入库后以结构化简历
+    单视图预览，并显示成功横幅；解析失败提供重试、删除、重新上传。
+    它不调用任何 `lib/api/diagnosis` 接口，不做自动诊断、测量、报告或 Word
+    导出（测试以零调用断言锁定该导入-only 契约）。诊断能力仅保留在上方的
+    简历查看页弹窗入口。
   - `components/diagnosis/diagnosis-report-view.tsx` 是共享的纯维度驱动报告
     渲染器（`report.dimensions` + `item.dimension` 分组；无硬编码维度列表，
     因此 V4 的 7 维度布局无需组件改动）。
@@ -589,9 +591,12 @@ competencyModelKey?, templateSettings?, renderedLayout? })`（240 秒超时；�
   DOM 抛 `LayoutMeasurementError`），
   `tests/resume-viewer-template-layout.test.tsx`（查看页 `<Resume>`/PDF
   下载/诊断弹窗跟随 localStorage 模板设置与 uiLanguage，缺省回退默认），
-  `tests/job-intentions.test.ts`（切分/去重），以及 Dashboard 工作区套件
-  （`tests/diagnosis-workspace.test.tsx` 及相关规格），覆盖
-  上传→解析→测量→自动诊断（模型预先解析）、测量成功/失败两条路径、
-  JD 重诊（再次测量）门控与 Word 导出。
+  `tests/job-intentions.test.ts`（切分/去重），以及 Dashboard 导入工作区套件
+  `tests/resume-import-workspace.test.tsx`（MIME/大小本地拦截、422 错误面板
+  只渲染一次、导入→解析→结构化简历预览且诊断 API 零调用、主简历缓存、
+  StrictMode 单次成功、解析失败重试/删除、关闭不删除、完成、
+  主简历删除、重置后第二次导入、上传/解析期间关闭门控）与
+  `tests/dashboard-import-entry.test.tsx`（Dashboard 入口卡片、键盘打开、
+  页脚分组、定制按钮启用门控、变更后刷新列表）。
 
 没有任何测试发起真实 LLM 调用。

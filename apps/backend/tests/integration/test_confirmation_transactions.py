@@ -22,6 +22,10 @@ from app.preview import PreviewBusyError, PreviewConflictError
 from app.routers import resumes
 from app.schemas.models import ImproveDiffResult, ResumeChange, ResumeData
 
+# The mocked keyword extraction carries no role, so the deterministic title
+# falls back to the sample resume's own 求职意向: 姓名-岗位名称.
+EXPECTED_TAILORED_TITLE = "Jane Doe-Senior Backend Engineer"
+
 
 @pytest.fixture
 async def confirmation_client(
@@ -53,9 +57,6 @@ async def confirmation_client(
         resumes,
         "refine_resume",
         AsyncMock(side_effect=RuntimeError("synthetic unavailable refinement")),
-    )
-    monkeypatch.setattr(
-        resumes, "generate_resume_title", AsyncMock(return_value="Engineer @ Acme")
     )
     async with AsyncClient(
         transport=ASGITransport(app=app, raise_app_exceptions=False),
@@ -112,7 +113,8 @@ async def test_replayed_confirmation_returns_identical_committed_result(
     assert len(await isolated_db.list_applications()) == 1
     async with isolated_db._session() as session:
         assert len(list((await session.execute(select(Improvement))).scalars())) == 1
-    resumes.generate_resume_title.assert_awaited_once()
+    saved = await isolated_db.get_resume(first.json()["data"]["resume_id"])
+    assert saved is not None and saved["title"] == EXPECTED_TAILORED_TITLE
 
 
 async def test_concurrent_confirmation_does_not_repeat_optional_generation(
@@ -125,15 +127,21 @@ async def test_concurrent_confirmation_does_not_repeat_optional_generation(
     entered, release = asyncio.Event(), asyncio.Event()
     calls = 0
 
-    async def title(*_args: Any, **_kwargs: Any) -> str:
+    # The title is now deterministic (no awaitable barrier), so the optional
+    # cover-letter generator plays the role of the in-flight generation slot.
+    monkeypatch.setattr(
+        resumes, "_load_config", lambda: {"enable_cover_letter": True}
+    )
+
+    async def cover_letter(*_args: Any, **_kwargs: Any) -> str:
         nonlocal calls
         calls += 1
         if calls == 1:
             entered.set()
             await release.wait()
-        return "Engineer @ Acme"
+        return "Dear hiring manager"
 
-    monkeypatch.setattr(resumes, "generate_resume_title", title)
+    monkeypatch.setattr(resumes, "generate_cover_letter", cover_letter)
     first_task = asyncio.create_task(
         confirmation_client.post("/api/v1/resumes/improve/confirm", json=payload)
     )
@@ -190,7 +198,6 @@ async def test_changed_inputs_invalidate_unconfirmed_preview(
     )
     assert response.status_code == 409
     assert len(await isolated_db.list_resumes()) == 1
-    resumes.generate_resume_title.assert_not_awaited()
 
 
 @pytest.mark.parametrize("model", [Resume, Improvement])
@@ -365,7 +372,12 @@ async def test_preview_binding_and_expiry_are_enforced(
         "/api/v1/resumes/improve/confirm", json=payload
     )
     assert response.status_code == (400 if change == "payload" else 409), response.text
-    resumes.generate_resume_title.assert_not_awaited()
+    # Rejected before auxiliary generation: no tailored child was committed
+    # (the source_id case legitimately holds a second standalone resume).
+    assert all(
+        row.get("parent_id") is None
+        for row in await isolated_db.list_resumes()
+    )
 
 
 async def test_committed_replay_survives_later_input_changes_and_expiry(
@@ -394,7 +406,8 @@ async def test_committed_replay_survives_later_input_changes_and_expiry(
     )
     assert second.status_code == 200, second.text
     assert second.json() == first.json()
-    resumes.generate_resume_title.assert_awaited_once()
+    saved = await isolated_db.get_resume(first.json()["data"]["resume_id"])
+    assert saved is not None and saved["title"] == EXPECTED_TAILORED_TITLE
 
 
 async def test_source_edit_during_confirmation_prevents_stale_commit(
@@ -404,14 +417,17 @@ async def test_source_edit_during_confirmation_prevents_stale_commit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     payload = await preview_payload(isolated_db, confirmation_client, sample_resume)
+    monkeypatch.setattr(
+        resumes, "_load_config", lambda: {"enable_cover_letter": True}
+    )
 
-    async def title(*_args: Any, **_kwargs: Any) -> str:
+    async def cover_letter(*_args: Any, **_kwargs: Any) -> str:
         await isolated_db.update_resume(
             payload["resume_id"], {"content": "edited during AI"}
         )
-        return "Engineer @ Acme"
+        return "Dear hiring manager"
 
-    monkeypatch.setattr(resumes, "generate_resume_title", title)
+    monkeypatch.setattr(resumes, "generate_cover_letter", cover_letter)
     result = await confirmation_client.post(
         "/api/v1/resumes/improve/confirm", json=payload
     )
@@ -427,13 +443,16 @@ async def test_cancellation_releases_uncommitted_claim(
 ) -> None:
     payload = await preview_payload(isolated_db, confirmation_client, sample_resume)
     entered = asyncio.Event()
+    monkeypatch.setattr(
+        resumes, "_load_config", lambda: {"enable_cover_letter": True}
+    )
 
-    async def title(*_args: Any, **_kwargs: Any) -> str:
+    async def cover_letter(*_args: Any, **_kwargs: Any) -> str:
         entered.set()
         await asyncio.Event().wait()
         return "unreachable"
 
-    monkeypatch.setattr(resumes, "generate_resume_title", title)
+    monkeypatch.setattr(resumes, "generate_cover_letter", cover_letter)
     pending = asyncio.create_task(
         confirmation_client.post("/api/v1/resumes/improve/confirm", json=payload)
     )
@@ -446,7 +465,7 @@ async def test_cancellation_releases_uncommitted_claim(
         assert row is not None and row.claim_token is None
     assert len(await isolated_db.list_resumes()) == 1
     monkeypatch.setattr(
-        resumes, "generate_resume_title", AsyncMock(return_value="Retry title")
+        resumes, "generate_cover_letter", AsyncMock(return_value="Dear hiring manager")
     )
     retry = await confirmation_client.post(
         "/api/v1/resumes/improve/confirm", json=payload
@@ -464,6 +483,8 @@ async def test_deleted_result_is_not_recreated_or_retained_in_replay_storage(
         "/api/v1/resumes/improve/confirm", json=payload
     )
     assert first.status_code == 200
+    first_saved = await isolated_db.get_resume(first.json()["data"]["resume_id"])
+    assert first_saved is not None and first_saved["title"] == EXPECTED_TAILORED_TITLE
     await isolated_db.delete_resume(first.json()["data"]["resume_id"])
     async with isolated_db._session() as session:
         row = await session.get(TailoringPreview, payload["preview_id"])
@@ -473,7 +494,6 @@ async def test_deleted_result_is_not_recreated_or_retained_in_replay_storage(
     )
     assert replay.status_code == 409
     assert len(await isolated_db.list_resumes()) == 1
-    resumes.generate_resume_title.assert_awaited_once()
 
 
 async def test_new_explicit_preview_recovers_after_deleted_tokenless_result(
@@ -486,6 +506,8 @@ async def test_new_explicit_preview_recovers_after_deleted_tokenless_result(
         "/api/v1/resumes/improve/confirm", json=payload
     )
     assert first.status_code == 200, first.text
+    first_saved = await isolated_db.get_resume(first.json()["data"]["resume_id"])
+    assert first_saved is not None and first_saved["title"] == EXPECTED_TAILORED_TITLE
     deleted_id = first.json()["data"]["resume_id"]
     deleted = await confirmation_client.delete(f"/api/v1/resumes/{deleted_id}")
     assert deleted.status_code == 200, deleted.text
@@ -507,7 +529,6 @@ async def test_new_explicit_preview_recovers_after_deleted_tokenless_result(
     )
     assert replay.status_code == 409, replay.text
     assert len(await isolated_db.list_resumes()) == 1
-    resumes.generate_resume_title.assert_awaited_once()
 
     fresh_payload = {**payload, "preview_id": fresh["preview_id"]}
     confirmed = await confirmation_client.post(
@@ -524,7 +545,10 @@ async def test_new_explicit_preview_recovers_after_deleted_tokenless_result(
         "/api/v1/resumes/improve/confirm", json=fresh_payload
     )
     assert repeated.json() == confirmed.json()
-    assert resumes.generate_resume_title.await_count == 2
+    # The second, separately confirmed tailoring derives the same deterministic
+    # title; the cached replay does not regenerate anything.
+    new_saved = await isolated_db.get_resume(new_id)
+    assert new_saved is not None and new_saved["title"] == EXPECTED_TAILORED_TITLE
     async with isolated_db._session() as session:
         old = await session.get(TailoringPreview, payload["preview_id"])
         assert old is not None and old.response_data is None
@@ -572,8 +596,11 @@ async def test_timed_out_generation_releases_claim_and_creates_no_required_rows(
 ) -> None:
     payload = await preview_payload(isolated_db, confirmation_client, sample_resume)
     monkeypatch.setattr(resumes.settings, "request_timeout_seconds", 1)
+    monkeypatch.setattr(
+        resumes, "_load_config", lambda: {"enable_cover_letter": True}
+    )
 
-    async def title(*_args: Any, **_kwargs: Any) -> str:
+    async def cover_letter(*_args: Any, **_kwargs: Any) -> str:
         try:
             await asyncio.Event().wait()
         except asyncio.CancelledError:
@@ -584,7 +611,7 @@ async def test_timed_out_generation_releases_claim_and_creates_no_required_rows(
             raise
         return "unreachable"
 
-    monkeypatch.setattr(resumes, "generate_resume_title", title)
+    monkeypatch.setattr(resumes, "generate_cover_letter", cover_letter)
     response = await confirmation_client.post(
         "/api/v1/resumes/improve/confirm", json=payload
     )
@@ -684,7 +711,7 @@ async def test_replay_repairs_tracker_card_after_lost_followup(isolated_db: Data
     cards = await isolated_db.list_applications()
     assert len(cards) == 1
     saved = await isolated_db.get_resume(first.json()["data"]["resume_id"])
-    assert saved is not None and saved["title"] == "Engineer @ Acme"
+    assert saved is not None and saved["title"] == EXPECTED_TAILORED_TITLE
     assert cards[0]["role"] == saved["title"]
 
 
@@ -762,7 +789,7 @@ async def test_verified_description_append_survives_preview_and_confirmation(
     assert saved["processed_data"]["workExperience"][0]["description"] == descriptions
 
 
-async def test_optional_title_timeout_can_still_commit_required_resume(
+async def test_optional_cover_letter_timeout_can_still_commit_required_resume(
     isolated_db: Database,
     confirmation_client: AsyncClient,
     sample_resume: dict[str, Any],
@@ -770,18 +797,25 @@ async def test_optional_title_timeout_can_still_commit_required_resume(
 ) -> None:
     payload = await preview_payload(isolated_db, confirmation_client, sample_resume)
     monkeypatch.setattr(resumes.settings, "request_timeout_seconds", 1)
+    monkeypatch.setattr(
+        resumes, "_load_config", lambda: {"enable_cover_letter": True}
+    )
 
-    async def stalled_title(*_args: Any, **_kwargs: Any) -> str:
+    async def stalled_cover_letter(*_args: Any, **_kwargs: Any) -> str:
         await asyncio.Event().wait()
         return "unreachable"
 
-    monkeypatch.setattr(resumes, "generate_resume_title", stalled_title)
+    monkeypatch.setattr(resumes, "generate_cover_letter", stalled_cover_letter)
     response = await confirmation_client.post(
         "/api/v1/resumes/improve/confirm", json=payload
     )
     assert response.status_code == 200, response.text
-    assert "Title generation failed" in response.json()["data"]["warnings"]
+    assert "Cover Letter generation failed" in response.json()["data"]["warnings"]
     assert len(await isolated_db.list_resumes()) == 2
+    # The deterministic title does not depend on any LLM call, so it is still
+    # persisted even though an optional generator stalled.
+    saved = await isolated_db.get_resume(response.json()["data"]["resume_id"])
+    assert saved is not None and saved["title"] == EXPECTED_TAILORED_TITLE
     replay = await confirmation_client.post(
         "/api/v1/resumes/improve/confirm", json=payload
     )

@@ -76,7 +76,7 @@
     "processingFailedHint": "我们无法读取此文件。请重试或上传其他文件。",
     "retrySuccess": "处理成功！",
     "retryFailed": "重试失败。请尝试上传其他文件。",
-    "createResume": "创建简历",
+    "createResume": "定制简历",
     "edited": "编辑于 {date}",
     "statusLine": "状态：{status}",
     "status": {
@@ -207,7 +207,7 @@
     "previewTabs": {
       "resume": "简历",
       "coverLetter": "求职信",
-      "outreach": "联系邮件",
+      "outreach": "站内信",
       "jdMatch": "JD 匹配",
       "interviewPrep": "面试准备"
     },
@@ -220,17 +220,14 @@
       "usLetter": "美式信纸"
     },
     "generatePrompt": {
-      "notAvailableTitle": "{title} 暂不可用",
-      "notAvailableDescription": "要生成 {title}，请先填写职位描述并完成一次简历定制。",
-      "goToDashboard": "前往仪表板",
       "generateTitle": "生成 {title}",
-      "coverLetterDescription": "基于你的简历与职位描述生成定制求职信。",
-      "outreachDescription": "基于你的简历与职位描述生成用于 LinkedIn 或邮件的外联消息。",
+      "coverLetterDescription": "基于简历生成求职信；定制简历时会结合职位描述。",
+      "outreachDescription": "基于简历生成站内私信；定制简历时会结合职位描述。",
       "generateButton": "生成 {title}",
       "coverLetterFooter": "提示：先完成简历定制效果更佳。",
       "outreachFooter": "提示：尽量简短并加入个性化细节。",
-      "interviewPrepDescription": "基于已定制简历和职位描述生成针对性的面试准备内容。",
-      "interviewPrepFooter": "提示：定制简历后使用，准备真实且基于简历证据的回答。"
+      "interviewPrepDescription": "基于简历生成面试准备内容；定制简历时会结合职位描述。",
+      "interviewPrepFooter": "提示：准备真实且基于简历证据的回答。"
     },
     "regenerateDialog": {
       "title": "重新生成 {title}？",
@@ -490,7 +487,7 @@
     "leftPanel": {
       "editorPanel": "编辑面板",
       "coverLetterEditor": "求职信编辑",
-      "outreachEditor": "联系邮件编辑",
+      "outreachEditor": "站内信编辑",
       "jdMatchAnalysis": "JD 匹配分析",
       "interviewPrep": "面试准备"
     },
@@ -500,7 +497,7 @@
       "autoSaveFailed": "暂时无法同步，草稿已安全保存在本地。",
       "loadFailed": "无法从服务器加载此简历。请刷新重试；编辑已禁用，以免覆盖已保存的副本。",
       "coverLetterSaveSuccess": "求职信已保存",
-      "outreachSaveSuccess": "联系邮件已保存",
+      "outreachSaveSuccess": "站内信已保存",
       "downloadSuccess": "简历已下载",
       "reloadFailed": "变更已应用，但重新加载简历失败。请刷新页面。",
       "downloadNotAvailable": "仅已保存的简历可下载。",
@@ -509,10 +506,14 @@
       "coverLetterDownloadRequiresResume": "请先保存简历再下载求职信。",
       "coverLetterMissing": "暂无求职信内容。请在设置中启用求职信生成并完成一次简历定制。",
       "coverLetterDownloadFailed": "下载求职信失败：{error}",
-      "outreachSaveFailed": "保存联系邮件失败，请重试。",
+      "outreachSaveFailed": "保存站内信失败，请重试。",
       "coverLetterGenerateFailed": "生成求职信失败：{error}",
-      "outreachGenerateFailed": "生成联系邮件失败：{error}",
-      "interviewPrepGenerateFailed": "生成面试准备失败：{error}"
+      "outreachGenerateFailed": "生成站内信失败：{error}",
+      "interviewPrepGenerateFailed": "生成面试准备失败：{error}",
+      "interviewPrepDownloadRequiresContent": "请先生成面试准备内容，再进行下载。",
+      "interviewPrepDownloadFailed": "面试准备下载失败：{error}",
+      "jdMatchDownloadRequiresContext": "JD 匹配仅适用于已关联职位描述的定制简历。",
+      "jdMatchDownloadFailed": "JD 匹配下载失败：{error}"
     },
     "leaveWithoutDraft": {
       "title": "要带着未保存的更改离开吗？",
@@ -575,6 +576,9 @@
     "subtitle": "为特定职位优化您的简历",
     "heroTitle": "定制您的简历",
     "selectResume": "选择简历",
+    "sourceDescription": "选择主简历或独立简历作为定制来源，已定制的简历不能作为来源。",
+    "sourceMaster": "主简历",
+    "sourceStandalone": "独立简历",
     "pasteJobDescription": "粘贴职位描述",
     "pasteJobDescriptionBelow": "在下方粘贴职位描述",
     "jobDescriptionPlaceholder": "在此粘贴职位描述...",
@@ -766,8 +770,8 @@
         "description": "与简历一起生成定制求职信"
       },
       "outreachMessage": {
-        "label": "冷启动外联消息",
-        "description": "生成用于 LinkedIn 或邮件的社交/外联消息"
+        "label": "站内信",
+        "description": "生成用于招聘平台沟通的站内私信"
       },
       "customPromptLabel": "自定义提示词（可选）",
       "customPromptHelp": "必须包含以下占位符（各自使用大括号括起来）：job_description、resume_data、output_language。留空则使用默认提示词。",
@@ -834,7 +838,8 @@
     "titlePlaceholder": "输入简历标题...",
     "downloadFailedTitle": "下载失败",
     "renameFailedTitle": "重命名失败",
-    "diagnoseResume": "简历诊断"
+    "diagnoseResume": "简历诊断",
+    "tailorFromThis": "以此简历定制"
   },
   "preview": {
     "margins": "页边距",
@@ -907,33 +912,50 @@
     },
     "print": {
       "emptyContent": "暂无求职信内容。"
+    },
+    "studio": {
+      "backToResume": "返回简历",
+      "jobDescriptionLabel": "职位描述（JD）",
+      "jobDescriptionHint": "选填。留空则仅依据简历生成求职信；填写 JD 后将结合岗位要求定制求职信。",
+      "jobDescriptionPlaceholder": "在此粘贴目标职位描述（选填）……",
+      "resultLabel": "求职信",
+      "emptyResult": "生成的求职信将显示在这里，保存前可以直接编辑修改。",
+      "saved": "已保存",
+      "copyError": "复制失败，请手动选择并复制文本。",
+      "errors": {
+        "loadFailed": "简历加载失败，请返回仪表板后重试。",
+        "generateFailed": "求职信生成失败，请重试。",
+        "saveFailed": "求职信保存失败，请重试。",
+        "downloadFailed": "PDF 下载失败，请重试。",
+        "emptyContent": "请先生成求职信，再进行下载。"
+      }
     }
   },
   "outreach": {
-    "title": "联系邮件",
-    "generate": "生成联系邮件",
+    "title": "站内信",
+    "generate": "生成站内信",
     "regenerate": "重新生成",
     "copy": "复制",
     "copyToClipboard": "复制到剪贴板",
     "copied": "已复制！",
     "editor": {
-      "placeholder": "启用外联消息生成并完成一次简历定制后，外联消息会显示在这里...",
-      "tip": "提示：外联消息建议保持简短（100-150 词）。可复制后粘贴到 LinkedIn 或邮件中。"
+      "placeholder": "生成的站内信会显示在这里，可直接编辑...",
+      "tip": "提示：站内信建议保持简短（100-150 词）。可复制后粘贴到招聘平台的站内私信窗口。"
     },
     "preview": {
       "channels": {
         "linkedin": "LinkedIn",
-        "email": "邮件"
+        "email": "站内信"
       },
       "howToUseTitle": "使用方法：",
       "steps": {
         "step1": "1. 点击上方按钮复制消息",
-        "step2": "2. 打开 LinkedIn 或你的邮件客户端",
+        "step2": "2. 打开招聘平台的站内私信窗口",
         "step3": "3. 粘贴并按需个性化调整",
         "step4": "4. 发送给招聘人员或用人经理"
       },
-      "emptyTitle": "还没有外联消息。",
-      "emptyDescription": "请在设置中启用外联消息生成，然后完成一次简历定制。"
+      "emptyTitle": "还没有站内信。",
+      "emptyDescription": "点击生成按钮，即可基于当前简历生成站内信。"
     }
   },
   "errors": {
@@ -1138,6 +1160,19 @@
       "talkingPoints": "沟通要点"
     }
   },
+  "importWorkspace": {
+    "cta": "简历导入",
+    "dropzoneHint": "支持 PDF、DOCX、DOC，最大 4MB。",
+    "parsing": "正在解析上传的简历…",
+    "parseFailed": "该简历解析失败。可重试解析、删除该简历或重新上传文件。",
+    "importSuccess": "简历已成功导入并解析入库。",
+    "done": "完成",
+    "paneResume": "已导入的简历",
+    "deleteResume": "删除简历",
+    "deleteConfirmTitle": "删除这份简历？",
+    "deleteConfirmDescription": "上传的简历及其解析数据将被永久删除。",
+    "backToUpload": "重新上传"
+  },
   "diagnosis": {
     "title": "简历诊断",
     "subtitle": "按《简历诊断规范 V4》逐项给出符合 / 部分符合 / 不符合 / 不适用判定与红线结论。",
@@ -1189,30 +1224,7 @@
     "modelLoadError": "能力模型加载失败，仍可按基础检查项进行诊断。",
     "modelMatchedHint": "已按目标岗位自动匹配：{name}。可切换职级或选择不使用模型。",
     "modelNoMatchHint": "目标岗位未匹配到能力模型，可手动选择一个，或不使用模型直接检查。",
-    "modelNone": "不使用能力模型",
-    "workspace": {
-      "cta": "简历诊断",
-      "dropzoneHint": "支持 PDF、DOCX、DOC，最大 4MB — 解析完成后自动开始诊断",
-      "parsing": "正在解析上传的简历…",
-      "diagnosing": "正在运行诊断清单，AI 语义评审可能需要几分钟…",
-      "parseFailed": "该简历解析失败。可重试解析、删除该简历或重新上传文件。",
-      "paneResume": "上传的简历",
-      "paneReport": "诊断结果",
-      "structuredTab": "简历",
-      "originalTab": "原文",
-      "resizeHint": "拖拽调整两栏宽度",
-      "hideLeft": "隐藏简历栏",
-      "showLeft": "显示简历栏",
-      "hideRight": "隐藏结果栏",
-      "showRight": "显示结果栏",
-      "deleteResume": "删除简历",
-      "deleteConfirmTitle": "删除这份简历？",
-      "deleteConfirmDescription": "上传的简历及其解析数据将被永久删除；诊断报告仅可在导出后保留。",
-      "backToUpload": "重新上传",
-      "jdToggle": "粘贴岗位描述（JD）重新诊断",
-      "jdRun": "带 JD 重诊",
-      "exporting": "导出中…"
-    }
+    "modelNone": "不使用能力模型"
   },
   "fineTune": {
     "buttonLabel": "AI 智能微调",

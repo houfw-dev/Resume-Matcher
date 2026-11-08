@@ -3,8 +3,8 @@ import type { TranslationFunction } from './section-helpers';
 
 /**
  * Localized label props shared by every `<Resume>` render (viewer page,
- * diagnosis workspace). Centralized so all consumers pass exactly the same
- * localized section headings as the resume viewer.
+ * dashboard import workspace, diagnosis modal). Centralized so all consumers
+ * pass exactly the same localized section headings as the resume viewer.
  */
 export interface PersonalInfoLabels {
   gender: string;

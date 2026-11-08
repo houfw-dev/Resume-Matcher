@@ -51,6 +51,7 @@ async def test_resume_docx_endpoint_returns_word_document(isolated_db: object) -
         content="{}",
         content_type="json",
         processed_data=_processed_data(),
+        processing_status="ready",
         title="王浩的简历",
     )
 
@@ -82,6 +83,7 @@ async def test_resume_docx_endpoint_honours_lang_query(isolated_db: object) -> N
         content="{}",
         content_type="json",
         processed_data=_processed_data(),
+        processing_status="ready",
         title="resume",
     )
 
@@ -105,12 +107,32 @@ async def test_resume_docx_endpoint_404_unknown_resume(isolated_db: object) -> N
 
 
 @pytest.mark.asyncio
-async def test_resume_docx_endpoint_400_without_data(isolated_db: object) -> None:
-    # Raw markdown upload, never parsed: no processed_data and content is not JSON.
+async def test_resume_docx_endpoint_409_while_not_ready(isolated_db: object) -> None:
+    # A raw markdown upload whose parse never finished stays in a non-ready
+    # state; the readiness gate must reject it before any DOCX work happens.
     created = await isolated_db.create_resume(  # type: ignore[attr-defined]
         content="# 王浩\n后端工程师",
         content_type="md",
         processed_data=None,
+        processing_status="processing",
+    )
+
+    async with _client() as client:
+        response = await client.get(f"/api/v1/resumes/{created['resume_id']}/docx")
+
+    assert response.status_code == 409
+    assert "still being processed" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_resume_docx_endpoint_400_without_data(isolated_db: object) -> None:
+    # Defensive branch: a record marked ready (so it passes the readiness gate)
+    # but holding only non-JSON markdown has no structured ResumeData to build.
+    created = await isolated_db.create_resume(  # type: ignore[attr-defined]
+        content="# 王浩\n后端工程师",
+        content_type="md",
+        processed_data=None,
+        processing_status="ready",
     )
 
     async with _client() as client:
@@ -127,6 +149,7 @@ async def test_resume_docx_endpoint_falls_back_to_json_content(isolated_db: obje
         content=json.dumps(_processed_data(), ensure_ascii=False),
         content_type="json",
         processed_data=None,
+        processing_status="ready",
     )
 
     async with _client() as client:

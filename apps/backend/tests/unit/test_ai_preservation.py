@@ -1691,6 +1691,89 @@ def test_approved_preview_project_rows_helper_excludes_digits() -> None:
     assert not any("kafka" in row for row in approved)
 
 
+def test_near_verbatim_source_row_stays_out_of_preview_approval_set() -> None:
+    """A punctuation-only rewrite of a source row is a modification, not an insert.
+
+    Regression: the refiner may rewrite an em-dash as commas inside a highlight
+    bullet. Re-deriving the approval set at confirm used to treat the rewritten
+    row as an inserted row (its normalized text no longer equals the source),
+    so finalize kept the candidate without consuming the source slot and then
+    force-restored the original as a duplicate — preview -> confirm was no
+    longer idempotent and every confirmation failed with a 400.
+    """
+    from app.services.resume_preservation import _normalized
+
+    source_row = (
+        "全链路梯度降级：主模型故障切备用模型、图谱查询超时回退RAG"
+        "——单点故障不影响核心问答可用性"
+    )
+    rewritten_row = (
+        "全链路梯度降级：主模型故障切备用模型、图谱查询超时回退RAG, , "
+        "单点故障不影响核心问答可用性"
+    )
+    inserted_row = "使用Redis缓存热点数据并通过连接池优化解决空闲连接超时问题"
+    source = {
+        "personalInfo": {"name": "A"},
+        "personalProjects": [
+            {
+                "id": 7,
+                "name": "RAG Platform",
+                "role": "Backend",
+                "years": "2024 - 2026",
+                "description": [
+                    "技术栈：",
+                    "Redis",
+                    "项目亮点：",
+                    source_row,
+                ],
+                "descriptionStyles": ["label", "plain", "label", "bullet"],
+            }
+        ],
+        "additional": {
+            "technicalSkills": ["Redis"],
+            "languages": [],
+            "certificationsTraining": [],
+            "awards": [],
+        },
+    }
+    candidate = copy.deepcopy(source)
+    project = candidate["personalProjects"][0]
+    project["description"] = [
+        "技术栈：",
+        "Redis",
+        "项目亮点：",
+        rewritten_row,
+        inserted_row,
+    ]
+    project["descriptionStyles"] = ["label", "plain", "label", "bullet", "bullet"]
+
+    approved = approved_preview_project_rows(source, candidate)
+
+    assert _normalized(rewritten_row) not in approved
+    assert _normalized(inserted_row) in approved
+
+    # The exact confirm seam: re-finalizing the hash-bound echo must reproduce
+    # it byte-for-byte instead of restoring the original row as a duplicate.
+    echo = ResumeData.model_validate(candidate).model_dump()
+    finalized = finalize_ai_resume(
+        source,
+        echo,
+        allow_appended_rows=True,
+        approved_appended_rows=approved or None,
+    )
+    canonical = ResumeData.model_validate(finalized).model_dump()
+    assert canonical == echo
+    assert (
+        validate_confirmed_resume(
+            source,
+            canonical,
+            allow_appended_rows=True,
+            approved_project_rows=approved,
+        )
+        == []
+    )
+
+
 def test_apply_finalize_confirm_closed_loop() -> None:
     """End-to-end deterministic seam: apply_diffs -> preview finalize -> confirm.
 

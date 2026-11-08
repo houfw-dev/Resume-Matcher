@@ -151,7 +151,6 @@ export function InterviewPrepView({
             type="interview-prep"
             isGenerating={isGenerating}
             onGenerate={onGenerate}
-            isTailoredResume={isTailoredResume}
           />
         )}
       </div>

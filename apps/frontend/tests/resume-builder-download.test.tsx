@@ -7,9 +7,19 @@ const fetchResume = vi.fn();
 const updateResume = vi.fn();
 const downloadResumePdf = vi.fn();
 const downloadResumeDocx = vi.fn();
+const downloadInterviewPrepPdf = vi.fn();
+const downloadJdMatchPdf = vi.fn();
+const fetchJobDescription = vi.fn<(resumeId: string) => Promise<{ content: string } | null>>(() =>
+  Promise.resolve(null)
+);
+
+// Stable instance: the builder re-syncs its active tab from searchParams on
+// every reference change, so a fresh URLSearchParams per render would undo
+// tab switches driven inside the test.
+const SEARCH_PARAMS = new URLSearchParams('id=res-1');
 
 vi.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams('id=res-1'),
+  useSearchParams: () => SEARCH_PARAMS,
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
 }));
 
@@ -18,16 +28,20 @@ vi.mock('@/lib/api/resume', () => ({
   updateResume: (...args: unknown[]) => updateResume(...args),
   downloadResumePdf: (...args: unknown[]) => downloadResumePdf(...args),
   downloadResumeDocx: (...args: unknown[]) => downloadResumeDocx(...args),
+  downloadInterviewPrepPdf: (...args: unknown[]) => downloadInterviewPrepPdf(...args),
+  downloadJdMatchPdf: (...args: unknown[]) => downloadJdMatchPdf(...args),
   downloadCoverLetterPdf: vi.fn(),
   getResumePdfUrl: vi.fn(() => ''),
   getResumeDocxUrl: vi.fn(() => ''),
   getCoverLetterPdfUrl: vi.fn(() => ''),
+  getInterviewPrepPdfUrl: vi.fn(() => ''),
+  getJdMatchPdfUrl: vi.fn(() => ''),
   updateCoverLetter: vi.fn(),
   updateOutreachMessage: vi.fn(),
   generateCoverLetter: vi.fn(),
   generateOutreachMessage: vi.fn(),
   generateInterviewPrep: vi.fn(),
-  fetchJobDescription: vi.fn(() => Promise.resolve(null)),
+  fetchJobDescription: (resumeId: string) => fetchJobDescription(resumeId),
 }));
 
 vi.mock('@/lib/i18n', () => ({
@@ -99,6 +113,8 @@ beforeEach(() => {
   updateResume.mockResolvedValue({ processed_resume: RESUME });
   downloadResumePdf.mockResolvedValue(new Blob(['pdf']));
   downloadResumeDocx.mockResolvedValue(new Blob(['docx']));
+  downloadInterviewPrepPdf.mockResolvedValue(new Blob(['interview-pdf']));
+  downloadJdMatchPdf.mockResolvedValue(new Blob(['jd-pdf']));
 });
 
 afterEach(() => {
@@ -163,5 +179,93 @@ describe('builder resume download naming', () => {
 
     await waitFor(() => expect(saveBlobMock).toHaveBeenCalledTimes(1));
     expect(saveBlobMock).toHaveBeenCalledWith(expect.any(Blob), '王浩-硕士-后端开发.docx');
+  });
+});
+
+describe('builder downloads while the resume is not ready', () => {
+  // A processing/failed record used to render enabled download buttons: the
+  // print route then timed out on a hidden element (blank PDF) or Chromium
+  // burned the full 60s render timeout. The builder must keep both export
+  // controls disabled until the record has loaded successfully.
+  it.each([
+    ['processing', 'processing'],
+    ['failed', 'failed'],
+  ])('disables PDF and Word downloads for a %s record', async (_label, status) => {
+    fetchResume.mockResolvedValue({
+      processed_resume: RESUME,
+      raw_resume: { processing_status: status },
+      title: '王浩的简历',
+    });
+    const Builder = await importBuilder();
+    render(<Builder />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('builder.alerts.loadFailed');
+
+    const pdfButton = screen.getByRole('button', { name: 'dashboard.downloadPdf' });
+    const wordButton = screen.getByRole('button', { name: 'resumeViewer.downloadWord' });
+    expect(pdfButton).toBeDisabled();
+    expect(wordButton).toBeDisabled();
+
+    await act(async () => pdfButton.click());
+    await act(async () => wordButton.click());
+    expect(downloadResumePdf).not.toHaveBeenCalled();
+    expect(downloadResumeDocx).not.toHaveBeenCalled();
+    expect(saveBlobMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('builder interview prep / JD match PDF downloads', () => {
+  const INTERVIEW_PREP = {
+    role_fit_analysis: ['Strong backend background'],
+    resume_questions: [],
+    project_follow_ups: [],
+    skill_gaps: [],
+    talking_points: [],
+  };
+
+  it('downloads the stored interview preparation as a named PDF', async () => {
+    fetchResume.mockResolvedValue({
+      processed_resume: RESUME,
+      raw_resume: { processing_status: 'ready' },
+      title: '王浩的简历',
+      interview_prep: INTERVIEW_PREP,
+    });
+    const Builder = await importBuilder();
+    render(<Builder />);
+
+    const prepTab = await screen.findByRole('button', {
+      name: 'builder.previewTabs.interviewPrep',
+    });
+    await act(async () => prepTab.click());
+
+    const downloadButton = await screen.findByRole('button', { name: 'common.download' });
+    await act(async () => downloadButton.click());
+
+    await waitFor(() => expect(downloadInterviewPrepPdf).toHaveBeenCalledTimes(1));
+    expect(downloadInterviewPrepPdf).toHaveBeenCalledWith('res-1', 'A4', 'en');
+    expect(saveBlobMock).toHaveBeenCalledWith(expect.any(Blob), '王浩 - Interview Prep.pdf');
+  });
+
+  it('downloads the JD match report as a named PDF for a tailored resume', async () => {
+    fetchResume.mockResolvedValue({
+      processed_resume: RESUME,
+      raw_resume: { processing_status: 'ready' },
+      title: '王浩的简历',
+      parent_id: 'master-resume',
+    });
+    fetchJobDescription.mockResolvedValue({ content: 'Java Spring Boot Kubernetes' });
+    const Builder = await importBuilder();
+    render(<Builder />);
+
+    const jdTab = await screen.findByRole('button', { name: 'builder.previewTabs.jdMatch' });
+    await waitFor(() => expect(jdTab).not.toBeDisabled());
+    await act(async () => jdTab.click());
+
+    const downloadButton = await screen.findByRole('button', { name: 'common.download' });
+    await act(async () => downloadButton.click());
+
+    await waitFor(() => expect(downloadJdMatchPdf).toHaveBeenCalledTimes(1));
+    expect(downloadJdMatchPdf).toHaveBeenCalledWith('res-1', 'A4', 'en');
+    expect(saveBlobMock).toHaveBeenCalledWith(expect.any(Blob), '王浩 - JD Match.pdf');
   });
 });

@@ -84,11 +84,6 @@ def _pipeline_patches(initial: dict[str, Any], refinement: object) -> tuple[Any,
                 else {"return_value": refinement}
             ),
         ),
-        patch(
-            "app.routers.resumes.generate_resume_title",
-            new_callable=AsyncMock,
-            return_value="Backend Engineer - Example",
-        ),
     )
 
 

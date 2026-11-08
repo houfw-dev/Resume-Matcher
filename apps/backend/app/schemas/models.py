@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.ai_limits import validate_source_size
+from app.ai_limits import MAX_JOB_CHARACTERS, validate_source_size
 from app.schemas.refinement import RefinementStats
 
 
@@ -918,6 +918,16 @@ class UpdateCoverLetterRequest(BaseModel):
     """Request to update cover letter content."""
 
     content: str
+
+
+class GenerateCoverLetterRequest(BaseModel):
+    """Request body for resume-driven cover letter generation.
+
+    An empty job description is valid: the service then writes a
+    resume-only cover letter.
+    """
+
+    job_description: str = Field(default="", max_length=MAX_JOB_CHARACTERS)
 
 
 class UpdateOutreachMessageRequest(BaseModel):

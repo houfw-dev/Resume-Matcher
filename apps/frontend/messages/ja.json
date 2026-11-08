@@ -76,7 +76,7 @@
     "processingFailedHint": "このファイルを読み取れませんでした。再試行するか、別のファイルをアップロードしてください。",
     "retrySuccess": "処理に成功しました！",
     "retryFailed": "再処理に失敗しました。別のファイルをアップロードしてください。",
-    "createResume": "履歴書を作成",
+    "createResume": "履歴書をカスタマイズ",
     "edited": "編集 {date}",
     "statusLine": "ステータス: {status}",
     "status": {
@@ -220,17 +220,14 @@
       "usLetter": "USレター"
     },
     "generatePrompt": {
-      "notAvailableTitle": "{title}は利用できません",
-      "notAvailableDescription": "{title}を生成するには、まず求人内容を入力して履歴書をカスタマイズしてください。",
-      "goToDashboard": "ダッシュボードへ",
       "generateTitle": "{title}を生成",
-      "coverLetterDescription": "履歴書と求人内容に基づいてカバーレターを生成します。",
-      "outreachDescription": "履歴書と求人内容に基づいて、LinkedIn またはメール向けの外連絡メッセージを生成します。",
+      "coverLetterDescription": "履歴書からカバーレターを生成します。カスタマイズ済み履歴書では求人内容も反映されます。",
+      "outreachDescription": "履歴書から、LinkedIn またはメール向けの外連絡メッセージを生成します。カスタマイズ済み履歴書では求人内容も反映されます。",
       "generateButton": "{title}を生成",
       "coverLetterFooter": "ヒント：先にカスタマイズすると精度が上がります。",
       "outreachFooter": "ヒント：短く、個別性を入れましょう。",
-      "interviewPrepDescription": "カスタマイズ済み履歴書と求人内容に基づいて、職種別の面接準備を生成します。",
-      "interviewPrepFooter": "ヒント：カスタマイズ後に、履歴書の根拠に基づく正確な回答を準備しましょう。"
+      "interviewPrepDescription": "履歴書から面接準備を生成します。カスタマイズ済み履歴書では求人内容も反映されます。",
+      "interviewPrepFooter": "ヒント：履歴書の根拠に基づく、真実の回答を準備しましょう。"
     },
     "regenerateDialog": {
       "title": "{title}を再生成しますか？",
@@ -512,7 +509,11 @@
       "outreachSaveFailed": "連絡メールの保存に失敗しました。もう一度お試しください。",
       "coverLetterGenerateFailed": "カバーレターの生成に失敗しました: {error}",
       "outreachGenerateFailed": "連絡メールの生成に失敗しました: {error}",
-      "interviewPrepGenerateFailed": "面接準備の生成に失敗しました: {error}"
+      "interviewPrepGenerateFailed": "面接準備の生成に失敗しました: {error}",
+      "interviewPrepDownloadRequiresContent": "ダウンロードするには、まず面接準備を生成してください。",
+      "interviewPrepDownloadFailed": "面接準備のダウンロードに失敗しました: {error}",
+      "jdMatchDownloadRequiresContext": "JDマッチは求人内容に紐づくカスタマイズ履歴書でのみ利用できます。",
+      "jdMatchDownloadFailed": "JDマッチのダウンロードに失敗しました: {error}"
     },
     "leaveWithoutDraft": {
       "title": "未保存の変更を残して移動しますか？",
@@ -575,6 +576,9 @@
     "subtitle": "特定の求人に合わせて履歴書を最適化",
     "heroTitle": "履歴書をカスタマイズ",
     "selectResume": "履歴書を選択",
+    "sourceDescription": "カスタマイズの元になるマスターまたは単独の履歴書を選択してください。カスタマイズ済み履歴書は元にできません。",
+    "sourceMaster": "マスター履歴書",
+    "sourceStandalone": "単独履歴書",
     "pasteJobDescription": "求人内容を貼り付け",
     "pasteJobDescriptionBelow": "下に求人内容を貼り付け",
     "jobDescriptionPlaceholder": "求人内容をここに貼り付けてください...",
@@ -834,7 +838,8 @@
     "titlePlaceholder": "履歴書のタイトルを入力...",
     "downloadFailedTitle": "ダウンロードに失敗しました",
     "renameFailedTitle": "名前の変更に失敗しました",
-    "diagnoseResume": "履歴書を診断"
+    "diagnoseResume": "履歴書を診断",
+    "tailorFromThis": "この履歴書からカスタマイズ"
   },
   "preview": {
     "margins": "余白",
@@ -907,7 +912,24 @@
     "print": {
       "emptyContent": "カバーレターの内容がありません。"
     },
-    "copied": "コピーしました！"
+    "copied": "コピーしました！",
+    "studio": {
+      "backToResume": "履歴書に戻る",
+      "jobDescriptionLabel": "職務記述書（JD）",
+      "jobDescriptionHint": "任意。空欄の場合は履歴書のみからカバーレターを作成します。JDを入力すると求人に合わせてカスタマイズします。",
+      "jobDescriptionPlaceholder": "応募先の職務記述書をここに貼り付け（任意）...",
+      "resultLabel": "カバーレター",
+      "emptyResult": "生成されたカバーレターがここに表示されます。保存前に編集できます。",
+      "saved": "保存済み",
+      "copyError": "コピーに失敗しました。テキストを手動で選択してコピーしてください。",
+      "errors": {
+        "loadFailed": "履歴書の読み込みに失敗しました。ダッシュボードに戻って再試行してください。",
+        "generateFailed": "カバーレターの生成に失敗しました。再試行してください。",
+        "saveFailed": "カバーレターの保存に失敗しました。再試行してください。",
+        "downloadFailed": "PDFのダウンロードに失敗しました。再試行してください。",
+        "emptyContent": "ダウンロード前にカバーレターを生成してください。"
+      }
+    }
   },
   "outreach": {
     "title": "連絡メール",
@@ -1138,6 +1160,19 @@
       "talkingPoints": "話すべき要点"
     }
   },
+  "importWorkspace": {
+    "cta": "履歴書インポート",
+    "dropzoneHint": "PDF / DOCX / DOC（4MB以下）",
+    "parsing": "アップロードした履歴書を解析中…",
+    "parseFailed": "この履歴書の解析に失敗しました。再解析、削除、または別のファイルをアップロードしてください。",
+    "importSuccess": "履歴書のインポートと解析が完了しました。",
+    "done": "完了",
+    "paneResume": "インポートした履歴書",
+    "deleteResume": "履歴書を削除",
+    "deleteConfirmTitle": "この履歴書を削除しますか？",
+    "deleteConfirmDescription": "アップロードした履歴書と解析データは完全に削除されます。",
+    "backToUpload": "別のファイルをアップロード"
+  },
   "diagnosis": {
     "title": "履歴書診断",
     "subtitle": "V4 ルーブリックのチェックリスト：項目ごとの判定とレッドライン結果。",
@@ -1189,30 +1224,7 @@
     "modelLoadError": "能力モデルを読み込めませんでした。基本チェックリストで診断できます。",
     "modelMatchedHint": "対象ポジションに自動一致：{name}。レベルを変更するか、モデルなしで実行できます。",
     "modelNoMatchHint": "対象ポジションに一致する能力モデルがありません。手動で選択するか、モデルなしで実行してください。",
-    "modelNone": "能力モデルを使用しない",
-    "workspace": {
-      "cta": "履歴書診断",
-      "dropzoneHint": "PDF / DOCX / DOC（4MB以下）— 解析後に自動で診断が始まります",
-      "parsing": "アップロードした履歴書を解析中…",
-      "diagnosing": "チェックリストを実行中。AIによる確認には数分かかる場合があります…",
-      "parseFailed": "この履歴書の解析に失敗しました。再解析、削除、または別のファイルをアップロードしてください。",
-      "paneResume": "アップロードした履歴書",
-      "paneReport": "診断レポート",
-      "structuredTab": "履歴書",
-      "originalTab": "原文",
-      "resizeHint": "ドラッグしてペイン幅を調整",
-      "hideLeft": "履歴書ペインを非表示",
-      "showLeft": "履歴書ペインを表示",
-      "hideRight": "レポートペインを非表示",
-      "showRight": "レポートペインを表示",
-      "deleteResume": "履歴書を削除",
-      "deleteConfirmTitle": "この履歴書を削除しますか？",
-      "deleteConfirmDescription": "アップロードした履歴書と解析データは完全に削除されます。診断レポートはエクスポート後にのみ保存されます。",
-      "backToUpload": "別のファイルをアップロード",
-      "jdToggle": "職務記述書（JD）を使って再診断",
-      "jdRun": "JDで再実行",
-      "exporting": "エクスポート中…"
-    }
+    "modelNone": "能力モデルを使用しない"
   },
   "fineTune": {
     "buttonLabel": "AI微調整",

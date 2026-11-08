@@ -103,7 +103,11 @@ async function fetchResumeData(id: string): Promise<ResumeData> {
       throw new Error('Failed to parse resume data. The resume content may be corrupted.');
     }
   }
-  return {} as ResumeData;
+  // Never return an empty shell: a hidden zero-size .resume-print makes
+  // Playwright's readiness wait time out, and a direct visit would print a
+  // blank page. Throwing surfaces a real error (the PDF endpoint's 409 gate
+  // makes this branch unreachable for not-ready records).
+  throw new Error('Resume content is empty or still being processed.');
 }
 
 /**

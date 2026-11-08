@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { Suspense, useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,9 +12,12 @@ import {
   uploadJobDescriptions,
   previewImproveResume,
   confirmImproveResume,
+  fetchResumeList,
+  type ResumeListItem,
 } from '@/lib/api/resume';
 import { fetchPromptConfig, type PromptOption } from '@/lib/api/config';
 import { getPreviewErrorMessage } from '@/lib/utils/preview-error';
+import { selectTailorSource } from '@/lib/utils/tailor-source';
 import { Dropdown } from '@/components/ui/dropdown';
 import { useStatusCache } from '@/lib/context/status-cache';
 import { Loader2, ArrowLeft, AlertTriangle, Settings } from 'lucide-react';
@@ -24,7 +27,7 @@ import { ATSScoreCard } from '@/components/tailor/ats-score-card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useOperationOwner } from '@/hooks/use-operation-owner';
 
-export default function TailorPage() {
+function TailorPageContent() {
   const { t } = useTranslations();
   const { begin, isCurrent, invalidate } = useOperationOwner('tailor');
   const confirmedResponses = useRef(new WeakMap<ImprovedResult, ImprovedResult>());
@@ -33,7 +36,8 @@ export default function TailorPage() {
   const [jobDescription, setJobDescription] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [masterResumeId, setMasterResumeId] = useState<string | null>(null);
+  const [sourceResumeId, setSourceResumeId] = useState<string | null>(null);
+  const [sourceOptions, setSourceOptions] = useState<ResumeListItem[]>([]);
   const [promptOptions, setPromptOptions] = useState<PromptOption[]>([]);
   const [selectedPromptId, setSelectedPromptId] = useState('keywords');
   const [promptLoading, setPromptLoading] = useState(false);
@@ -73,6 +77,7 @@ export default function TailorPage() {
   }, []);
 
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setImprovedData } = useResumePreview();
   const {
     status: systemStatus,
@@ -85,14 +90,47 @@ export default function TailorPage() {
   // Check if LLM is configured
   const isLlmConfigured = !statusLoading && systemStatus?.llm_configured;
 
+  // Any master/standalone resume (parent_id NULL, ready) is an eligible
+  // tailoring source. Selection priority: ?source= query param → master →
+  // localStorage master → first eligible resume; none → back to dashboard.
   useEffect(() => {
-    const storedId = localStorage.getItem('master_resume_id');
-    if (!storedId) {
-      router.push('/dashboard');
-    } else {
-      setMasterResumeId(storedId);
-    }
-  }, [router]);
+    let cancelled = false;
+    const requestedSource = searchParams.get('source');
+
+    const loadSources = async () => {
+      try {
+        const list = await fetchResumeList(true);
+        if (cancelled) return;
+        const { eligible, selectedId } = selectTailorSource(
+          list,
+          requestedSource,
+          localStorage.getItem('master_resume_id')
+        );
+        setSourceOptions(eligible);
+        if (!selectedId) {
+          router.push('/dashboard');
+          return;
+        }
+        setSourceResumeId(selectedId);
+      } catch (err) {
+        // Network failure: preserve the old master-only fallback rather than
+        // blocking a user whose master id is still cached locally.
+        console.error('Failed to load tailoring source resumes', err);
+        if (cancelled) return;
+        const storedId = localStorage.getItem('master_resume_id');
+        if (!storedId) {
+          router.push('/dashboard');
+        } else {
+          setSourceResumeId(storedId);
+        }
+      }
+    };
+
+    loadSources();
+    return () => {
+      cancelled = true;
+    };
+  }, [router, searchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,7 +165,7 @@ export default function TailorPage() {
   };
 
   const buildConfirmPayload = (result: ImprovedResult) => {
-    if (!masterResumeId) {
+    if (!sourceResumeId) {
       throw new Error('Master resume ID is missing.');
     }
     const resumePreview = result.data.resume_preview;
@@ -143,7 +181,7 @@ export default function TailorPage() {
       throw new Error('Resume preview data is invalid.');
     }
     return {
-      resume_id: masterResumeId,
+      resume_id: sourceResumeId,
       job_id: result.data.job_id,
       preview_id: result.data.preview_id ?? null,
       improved_data: resumePreview as ResumeData,
@@ -241,13 +279,13 @@ export default function TailorPage() {
 
   const handleGenerate = async () => {
     const trimmedDescription = jobDescription.trim();
-    if (!trimmedDescription || !masterResumeId) return;
+    if (!trimmedDescription || !sourceResumeId) return;
     const validationError = getGenerateValidationError(trimmedDescription);
     if (validationError) {
       setError(validationError);
       return;
     }
-    const resumeId = masterResumeId;
+    const resumeId = sourceResumeId;
     const token = begin();
     if (token === null) return;
     setIsLoading(true);
@@ -355,13 +393,13 @@ export default function TailorPage() {
   const handleRegenerateConfirm = async () => {
     setShowRegenerateDialog(false);
     const trimmedDescription = jobDescription.trim();
-    if (!trimmedDescription || !masterResumeId) return;
+    if (!trimmedDescription || !sourceResumeId) return;
     const validationError = getGenerateValidationError(trimmedDescription);
     if (validationError) {
       setError(validationError);
       return;
     }
-    const resumeId = masterResumeId;
+    const resumeId = sourceResumeId;
     const token = begin();
     if (token === null) return;
     setIsLoading(true);
@@ -423,6 +461,19 @@ export default function TailorPage() {
         )}
 
         <div className="space-y-6">
+          <Dropdown
+            options={sourceOptions.map((item) => ({
+              id: item.resume_id,
+              label: item.title?.trim() || item.filename || item.resume_id,
+              description: item.is_master ? t('tailor.sourceMaster') : t('tailor.sourceStandalone'),
+            }))}
+            value={sourceResumeId ?? ''}
+            onChange={(value) => setSourceResumeId(value)}
+            label={t('tailor.selectResume')}
+            description={t('tailor.sourceDescription')}
+            disabled={isLoading || sourceOptions.length === 0}
+          />
+
           <Dropdown
             options={
               promptOptions.length > 0
@@ -561,5 +612,14 @@ export default function TailorPage() {
         errorMessage={missingDiffError ?? undefined}
       />
     </div>
+  );
+}
+
+export default function TailorPage() {
+  const { t } = useTranslations();
+  return (
+    <Suspense fallback={<div className="p-8 font-mono text-sm">{t('common.loading')}</div>}>
+      <TailorPageContent />
+    </Suspense>
   );
 }
