@@ -1224,13 +1224,26 @@ class Database:
             return self._application_to_dict(row)
 
     async def list_applications(
-        self, status: str | None = None
+        self, status: str | None = None, resume_id: str | None = None
     ) -> list[dict[str, Any]]:
-        """List applications ordered by (status, position)."""
+        """List applications ordered by (status, position).
+
+        ``resume_id`` matches a card when the resume was applied directly
+        (``resume_id``) or when it is the master/base resume of a tailored
+        application (``master_resume_id``), so the resume viewer can surface
+        every card that descends from one resume.
+        """
         async with self._session() as session:
             stmt = select(Application)
             if status is not None:
                 stmt = stmt.where(Application.status == status)
+            if resume_id is not None:
+                stmt = stmt.where(
+                    or_(
+                        Application.resume_id == resume_id,
+                        Application.master_resume_id == resume_id,
+                    )
+                )
             stmt = stmt.order_by(Application.status, Application.position)
             result = await session.execute(stmt)
             return [self._application_to_dict(row) for row in result.scalars().all()]

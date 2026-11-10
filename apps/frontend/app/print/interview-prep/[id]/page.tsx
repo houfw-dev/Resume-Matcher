@@ -7,7 +7,7 @@
  */
 
 import type { CSSProperties } from 'react';
-import { API_BASE } from '@/lib/api/client';
+import { fetchPrintResource } from '@/lib/print/fetch';
 import { translate } from '@/lib/i18n/server';
 import { resolveLocale } from '@/lib/i18n/locale';
 import type { Locale } from '@/i18n/config';
@@ -54,9 +54,7 @@ interface PersonalInfo {
 async function fetchInterviewPrep(
   resumeId: string
 ): Promise<{ interviewPrep: InterviewPrepData | null; name: string }> {
-  const res = await fetch(`${API_BASE}/resumes?resume_id=${encodeURIComponent(resumeId)}`, {
-    cache: 'no-store',
-  });
+  const res = await fetchPrintResource(`/resumes?resume_id=${encodeURIComponent(resumeId)}`);
   if (!res.ok) {
     throw new Error(`Failed to load resume (status ${res.status}).`);
   }

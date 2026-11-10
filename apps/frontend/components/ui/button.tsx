@@ -48,7 +48,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       // Avoids the perf footgun of `transition-all` and matches Swiss "snap" feel.
       'transition-[transform,box-shadow,background-color] duration-100 ease-out',
       // Focus state - sharp blue ring (not soft glow)
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 focus-visible:ring-offset-2',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
       // Disabled state
       'disabled:pointer-events-none disabled:opacity-50',
       // SVG icon sizing
@@ -72,7 +72,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       // PRIMARY - Hyper Blue (#1D4ED8 / blue-700)
       // Use for: Save, Submit, Create, Primary CTA
       default: cn(
-        'bg-blue-700 text-white',
+        'bg-primary text-white',
         'border border-black',
         'shadow-sw-sm',
         'hover:bg-blue-800',
@@ -83,7 +83,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       // DESTRUCTIVE - Alert Red (#DC2626 / red-600)
       // Use for: Delete, Remove, Destroy, Dangerous actions
       destructive: cn(
-        'bg-red-600 text-white',
+        'bg-destructive text-white',
         'border border-black',
         'shadow-sw-sm',
         'hover:bg-red-700',
@@ -94,7 +94,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       // SUCCESS - Signal Green (#15803D / green-700)
       // Use for: Download, Confirm, Complete, Positive actions
       success: cn(
-        'bg-green-700 text-white',
+        'bg-success text-white',
         'border border-black',
         'shadow-sw-sm',
         'hover:bg-green-800',
@@ -105,7 +105,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       // WARNING - Alert Orange (#F97316 / orange-500)
       // Use for: Reset, Clear, Undo, Caution actions
       warning: cn(
-        'bg-orange-500 text-white',
+        'bg-warning text-white',
         'border border-black',
         'shadow-sw-sm',
         'hover:bg-orange-600',
@@ -147,7 +147,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       // LINK - Text only with underline
       // Use for: Inline links, Text navigation
       link: cn(
-        'bg-transparent text-blue-700',
+        'bg-transparent text-primary',
         'border-none shadow-none',
         'underline-offset-4 hover:underline',
         'p-0 h-auto'

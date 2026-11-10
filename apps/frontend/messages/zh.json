@@ -21,6 +21,7 @@
     "finish": "完成",
     "optional": "可选",
     "close": "关闭",
+    "notifications": "通知",
     "ok": "确定",
     "search": "搜索",
     "filter": "筛选",
@@ -103,7 +104,16 @@
     },
     "errors": {
       "loadFailed": "无法加载简历，请重试。",
-      "deleteFailed": "无法删除简历。现有简历仍可使用。"
+      "deleteFailed": "无法删除简历。现有简历仍可使用。",
+      "uploadErrors": {
+        "fileTooLarge": "文件“{name}”超过最大限制 {limit}。",
+        "fileTypeNotAccepted": "不接受文件“{name}”的类型。允许的类型：{accept}",
+        "uploadUrlNotConfigured": "上传地址未配置。",
+        "uploadFailed": "{name} 上传失败，请重试。",
+        "uploadErrorFallback": "上传 {name} 时出错。",
+        "onlyOneFile": "只能选择一个文件。",
+        "maxFiles": "最多只能上传 {count} 个文件。"
+      }
     }
   },
   "builder": {
@@ -227,7 +237,14 @@
       "coverLetterFooter": "提示：先完成简历定制效果更佳。",
       "outreachFooter": "提示：尽量简短并加入个性化细节。",
       "interviewPrepDescription": "基于简历生成面试准备内容；定制简历时会结合职位描述。",
-      "interviewPrepFooter": "提示：准备真实且基于简历证据的回答。"
+      "interviewPrepFooter": "提示：准备真实且基于简历证据的回答。",
+      "jobDescriptionLabel": "职位描述（JD）",
+      "jobDescriptionHint": "选填。留空则仅依据简历生成内容；粘贴职位描述后将针对该岗位生成。",
+      "jobDescriptionPlaceholder": "在此粘贴目标职位描述（选填）……",
+      "generateWithJd": "根据职位描述生成",
+      "generateWithoutJd": "不使用职位描述生成",
+      "statusPending": "待生成",
+      "tailoredJdNote": "将基于本简历已关联的职位描述生成内容。"
     },
     "regenerateDialog": {
       "title": "重新生成 {title}？",
@@ -303,7 +320,7 @@
       "tips": {
         "items": {
           "addMissingKeywords": "在“简历”标签页补充缺失的关键词",
-          "focusTechnicalSkills": "重点关注 JD 中提到的技术技能与工具",
+          "focusTechnicalSkills": "重点关注职位描述中提到的技术技能与工具",
           "matchActionVerbs": "对齐岗位要求中的行动动词"
         }
       },
@@ -509,6 +526,9 @@
       "outreachSaveFailed": "保存站内信失败，请重试。",
       "coverLetterGenerateFailed": "生成求职信失败：{error}",
       "outreachGenerateFailed": "生成站内信失败：{error}",
+      "outreachDownloadRequiresResume": "请先保存简历再下载站内信。",
+      "outreachMissing": "暂无站内信内容，请先生成。",
+      "outreachDownloadFailed": "下载站内信失败：{error}",
       "interviewPrepGenerateFailed": "生成面试准备失败：{error}",
       "interviewPrepDownloadRequiresContent": "请先生成面试准备内容，再进行下载。",
       "interviewPrepDownloadFailed": "面试准备下载失败：{error}",
@@ -656,6 +676,10 @@
   "settings": {
     "title": "设置",
     "subtitle": "配置您的偏好",
+    "nav": {
+      "language": "语言",
+      "label": "设置分区"
+    },
     "aiProvider": "AI 供应商",
     "aiProviderDescription": "选择您首选的AI供应商进行简历分析",
     "apiKey": "API 密钥",
@@ -839,7 +863,8 @@
     "downloadFailedTitle": "下载失败",
     "renameFailedTitle": "重命名失败",
     "diagnoseResume": "简历诊断",
-    "tailorFromThis": "以此简历定制"
+    "tailorFromThis": "以此简历定制",
+    "trackApplications": "申请追踪看板"
   },
   "preview": {
     "margins": "页边距",
@@ -862,7 +887,7 @@
       "desiredCity": "意向城市",
       "email": "电子邮箱",
       "phone": "电话",
-      "location": "所在地",
+      "location": "求职城市",
       "foreignLanguage": "外语水平",
       "website": "个人网站",
       "linkedin": "领英",
@@ -916,7 +941,7 @@
     "studio": {
       "backToResume": "返回简历",
       "jobDescriptionLabel": "职位描述（JD）",
-      "jobDescriptionHint": "选填。留空则仅依据简历生成求职信；填写 JD 后将结合岗位要求定制求职信。",
+      "jobDescriptionHint": "选填。留空则仅依据简历生成求职信；填写职位描述后将结合岗位要求定制求职信。",
       "jobDescriptionPlaceholder": "在此粘贴目标职位描述（选填）……",
       "resultLabel": "求职信",
       "emptyResult": "生成的求职信将显示在这里，保存前可以直接编辑修改。",
@@ -956,6 +981,9 @@
       },
       "emptyTitle": "还没有站内信。",
       "emptyDescription": "点击生成按钮，即可基于当前简历生成站内信。"
+    },
+    "print": {
+      "emptyContent": "暂无站内信内容。"
     }
   },
   "errors": {
@@ -1016,6 +1044,7 @@
       "keepAdding": "继续添加",
       "backToDashboard": "返回仪表板",
       "openCreated": "打开已创建的简历",
+      "tailorCreated": "以此简历定制",
       "retryDraftBackup": "重试本地备份",
       "stay": "留在此页面",
       "leaveWithoutSaving": "不保存并离开"
@@ -1094,14 +1123,22 @@
     },
     "empty": {
       "title": "暂无申请",
-      "description": "为某个职位定制简历，或手动添加一项，即可开始追踪。"
+      "description": "为某个职位定制简历，或手动添加一项，即可开始追踪。",
+      "goDashboard": "前往仪表盘"
+    },
+    "filter": {
+      "banner": "仅显示与该简历关联的申请",
+      "clear": "清除筛选",
+      "emptyTitle": "该简历暂无申请记录",
+      "emptyDescription": "手动添加申请，或以此简历定制岗位后开始追踪。"
     },
     "card": {
       "companyUnknown": "未知公司",
       "roleUnknown": "未命名职位",
       "sharedResume": "共享简历",
       "selectAria": "选择申请",
-      "dragAria": "拖动以重新排序"
+      "dragAria": "拖动以重新排序",
+      "viewResume": "查看简历"
     },
     "modal": {
       "jobDescription": "职位描述",
@@ -1180,10 +1217,18 @@
     "measuringLayout": "正在按所选模板测量排版…",
     "layoutSkipped": "排版测量不可用，页数与段落密度按文本估算。",
     "error": "诊断失败，请重试。",
-    "intro": "报告结合确定性检查与一次结构化 AI 评审。可粘贴目标岗位描述，额外评估岗位匹配度检查项。",
-    "jobDescriptionLabel": "目标岗位描述（选填）",
-    "jobDescriptionPlaceholder": "粘贴岗位描述以启用岗位匹配度检查……",
-    "jdHint": "未提供岗位 JD 时，岗位匹配度检查项将标记为不适用；5 项职级专业能力检查项无需 JD，但需明确求职意向并匹配或选择对应职级能力模型，否则标记为不适用。",
+    "intro": "报告结合确定性检查与一次结构化 AI 评审。请选择适合你目标的诊断模式。",
+    "modeLabel": "诊断模式",
+    "modeExclusiveHint": "三种模式三选一——能力模型诊断与职位描述诊断不可叠加。",
+    "modeBasicTitle": "基础诊断",
+    "modeBasicDesc": "22 项规范检查与红线结论，不针对特定岗位。",
+    "modeModelTitle": "能力模型诊断",
+    "modeModelDesc": "基础诊断 ＋ 按 P3–P8 职级模型评判 5 项专业能力。",
+    "modeJdTitle": "职位描述诊断",
+    "modeJdDesc": "基础诊断 ＋ 针对粘贴的职位描述做匹配度检查。",
+    "jobDescriptionLabel": "目标职位描述",
+    "jobDescriptionPlaceholder": "粘贴职位描述以启用岗位匹配度检查……",
+    "jdHint": "岗位匹配度检查将针对该描述评判；职位描述诊断与能力模型诊断互斥，不能同时进行。",
     "run": "开始诊断",
     "rerun": "重新诊断",
     "specVersion": "规范版本 {version}",
@@ -1196,6 +1241,7 @@
     "allConform": "所有检查项均符合或不适用。",
     "evidenceLabel": "问题描述",
     "suggestionLabel": "优化建议",
+    "fixInBuilder": "在编辑器中修复",
     "rating": {
       "conform": "符合",
       "partial": "部分符合",
@@ -1221,10 +1267,12 @@
     "countsSummary": "适用 {effective} 项 —— 符合 {conform}、部分符合 {partial}、不符合 {nonconform}；不适用 {na} 项。",
     "modelLabel": "岗位能力模型",
     "modelLoading": "正在加载岗位能力模型……",
-    "modelLoadError": "能力模型加载失败，仍可按基础检查项进行诊断。",
-    "modelMatchedHint": "已按目标岗位自动匹配：{name}。可切换职级或选择不使用模型。",
-    "modelNoMatchHint": "目标岗位未匹配到能力模型，可手动选择一个，或不使用模型直接检查。",
-    "modelNone": "不使用能力模型"
+    "modelLoadError": "能力模型加载失败，可点击重试，或改用其他诊断模式。",
+    "modelMatchedHint": "已按目标岗位自动匹配：{name}。可切换职级，或改用其他诊断模式。",
+    "modelNoMatchHint": "目标岗位未匹配到能力模型，可手动选择一个，或改用其他诊断模式。",
+    "basicModeHint": "仅运行 V4 规范清单与红线检查，报告不针对任何岗位——专业能力与岗位匹配度检查项将标记为不适用。",
+    "jdRequiredHint": "请先粘贴职位描述后再开始诊断；职位描述诊断不能与能力模型同时使用。",
+    "modelRetry": "重试"
   },
   "fineTune": {
     "buttonLabel": "AI 智能微调",
@@ -1246,7 +1294,7 @@
         "education": "教育背景",
         "personalProjects": "项目经验",
         "additional": "技能及其他",
-        "customSections": "自定义区块"
+        "customSections": "自定义板块"
       },
       "selectEntries": "选择{module}中的条目",
       "selectRegions": "选择{module}中的子模块",

@@ -84,8 +84,24 @@ const REAL_RESUME = {
   additional: {},
 };
 
-const importBuilder = async () =>
-  (await import('@/components/builder/resume-builder')).ResumeBuilder;
+const importBuilder = async () => {
+  // Mirror the real (default) layout, which wraps the app in ToastProvider.
+  // Both modules must come from the SAME registry instance: afterEach calls
+  // vi.resetModules(), so a statically imported ToastProvider would hold a
+  // different React context object than the useToast() inside the
+  // dynamically re-imported builder.
+  const [{ ResumeBuilder }, { ToastProvider }] = await Promise.all([
+    import('@/components/builder/resume-builder'),
+    import('@/components/ui/toast'),
+  ]);
+  return function BuilderWithToast() {
+    return (
+      <ToastProvider>
+        <ResumeBuilder />
+      </ToastProvider>
+    );
+  };
+};
 
 beforeEach(() => {
   currentSearch = 'id=res-1';

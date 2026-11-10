@@ -4,6 +4,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_TIMEOUT_MS } from '@/lib/api/client';
 import { useFileUpload } from '@/hooks/use-file-upload';
 
+// The hook localizes its user-facing error strings; t() renders the key (with
+// a params suffix) so assertions stay independent of the wording in messages/.
+vi.mock('@/lib/i18n', () => ({
+  useTranslations: () => ({
+    t: (key: string, params?: Record<string, string | number>) =>
+      params ? `${key}#${JSON.stringify(params)}` : key,
+    locale: 'en',
+  }),
+}));
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -349,5 +359,71 @@ describe('saved upload error metadata', () => {
     await waitFor(() => expect(result.current[0].isUploadingGlobal).toBe(false));
     expect(onUploadError).not.toHaveBeenCalled();
     expect(result.current[0].files[0].file).toMatchObject({ name: 'new.pdf', uploaded: true });
+  });
+});
+
+describe('useFileUpload localized validation errors', () => {
+  it('rejects multiple files in single mode with the localized onlyOneFile key', () => {
+    const { result } = renderHook(() => useFileUpload({ uploadUrl: '/upload' }));
+    act(() => result.current[1].addFiles([resumeFile('a.pdf'), resumeFile('b.pdf')]));
+    expect(result.current[0].errors).toEqual([
+      expect.stringContaining('dashboard.errors.uploadErrors.onlyOneFile'),
+    ]);
+    expect(result.current[0].files).toHaveLength(0);
+  });
+
+  it('enforces maxFiles with the localized count-bearing key', () => {
+    const { result } = renderHook(() =>
+      useFileUpload({ multiple: true, maxFiles: 1, uploadUrl: '/upload' })
+    );
+    act(() => result.current[1].addFiles([resumeFile('a.pdf'), resumeFile('b.pdf')]));
+    expect(result.current[0].errors[0]).toContain('dashboard.errors.uploadErrors.maxFiles');
+    expect(result.current[0].errors[0]).toContain('"count":1');
+  });
+
+  it('reports oversize and wrong-type files through localized keys', () => {
+    const oversized = renderHook(() => useFileUpload({ maxSize: 1, uploadUrl: '/upload' }));
+    act(() => oversized.result.current[1].addFiles([resumeFile('big.pdf')]));
+    expect(oversized.result.current[0].errors[0]).toContain(
+      'dashboard.errors.uploadErrors.fileTooLarge'
+    );
+
+    const wrongType = renderHook(() => useFileUpload({ accept: '.docx', uploadUrl: '/upload' }));
+    act(() => wrongType.result.current[1].addFiles([resumeFile('resume.pdf')]));
+    expect(wrongType.result.current[0].errors[0]).toContain(
+      'dashboard.errors.uploadErrors.fileTypeNotAccepted'
+    );
+  });
+
+  it('marks locally retained files with the localized not-configured key without fetching', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useFileUpload({}));
+    act(() => result.current[1].addFiles([resumeFile('local.pdf')]));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current[0].files[0]?.file).toMatchObject({
+      uploaded: false,
+      uploadError: expect.stringContaining('dashboard.errors.uploadErrors.uploadUrlNotConfigured'),
+    });
+  });
+
+  it('surfaces a generic localized upload failure and never the raw server status text', async () => {
+    const onUploadError = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response('synthetic failure body', {
+          status: 500,
+          statusText: 'Internal Server Error',
+        })
+      )
+    );
+    const { result } = renderHook(() => useFileUpload({ uploadUrl: '/upload', onUploadError }));
+    act(() => result.current[1].addFiles([resumeFile('resume.pdf')]));
+    await waitFor(() => expect(onUploadError).toHaveBeenCalledTimes(1));
+    const message = onUploadError.mock.calls[0][1] as string;
+    expect(message).toContain('dashboard.errors.uploadErrors.uploadFailed');
+    expect(message).not.toContain('Internal Server Error');
+    expect(message).not.toContain('synthetic failure body');
   });
 });

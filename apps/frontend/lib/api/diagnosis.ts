@@ -6,6 +6,11 @@
  * JD; items 18–22 independently require a resolved level model (clear target
  * intention) but no JD. Payloads expose only the public `topic` label per
  * item — criteria and QC guidance stay server-side.
+ *
+ * Three mutually exclusive diagnosis modes (the backend rejects a
+ * model-key + JD combination with HTTP 400): basic (no model, no JD),
+ * model (real level key, no JD) and JD (description + the explicit 'none'
+ * opt-out, which also suppresses title auto-matching server-side).
  */
 import { apiFetch, apiPost } from './client';
 import type { TemplateSettings } from '@/lib/types/template-settings';
@@ -87,7 +92,11 @@ export interface DiagnosisReport {
 }
 
 export interface DiagnoseOptions {
-  /** Optional target JD; without it the JD-fit items come back rated na. */
+  /**
+   * Optional target JD; without it the JD-fit item 17 comes back rated na.
+   * Mutually exclusive with a real competency model key — the modal sends
+   * the 'none' opt-out together with the JD.
+   */
   jobDescription?: string;
   /**
    * Explicit diagnosis target title (求职意向). Sent when the resume lists
@@ -96,9 +105,12 @@ export interface DiagnoseOptions {
    */
   targetTitle?: string;
   /**
-   * Explicit competency-model choice (picker confirmation). Null/omitted:
-   * the backend auto-matches the model by target title and runs the base
-   * rubric when nothing matches.
+   * Explicit competency-model choice. The modal always sends either a real
+   * level key (model mode, no JD) or 'none' (basic/JD modes); 'none' wins
+   * over title auto-matching, and with a JD present the backend forces the
+   * effective key to 'none'. Null/omitted is kept for direct callers: the
+   * backend then auto-matches by target title, running the base rubric when
+   * nothing matches. A real key together with a JD raises HTTP 400.
    */
   competencyModelKey?: string | null;
   /**
@@ -118,7 +130,8 @@ export interface DiagnoseOptions {
  */
 export async function diagnoseResume(
   resumeId: string,
-  options?: DiagnoseOptions
+  options?: DiagnoseOptions,
+  signal?: AbortSignal
 ): Promise<DiagnosisReport> {
   const jobDescription = options?.jobDescription?.trim();
   const targetTitle = options?.targetTitle?.trim();
@@ -126,8 +139,8 @@ export async function diagnoseResume(
   const body: Record<string, unknown> = {
     job_description: jobDescription ? jobDescription : null,
     target_title: targetTitle ? targetTitle : null,
-    // Omitted when the user never touched the picker: backend auto-matches by
-    // title. Explicit values (a model key or NONE_COMPETENCY_MODEL_KEY) win.
+    // Explicit values (a real model key or the 'none' opt-out) win; an
+    // omitted field lets the backend auto-match by target title.
     competency_model_key: competencyModelKey ? competencyModelKey : null,
   };
   // Only ship the pair together; a layout without the settings it was
@@ -136,7 +149,12 @@ export async function diagnoseResume(
     body.template_settings = options.templateSettings;
     body.rendered_layout = options.renderedLayout;
   }
-  const res = await apiPost(`/resumes/${encodeURIComponent(resumeId)}/diagnose`, body);
+  const res = await apiPost(
+    `/resumes/${encodeURIComponent(resumeId)}/diagnose`,
+    body,
+    undefined,
+    signal
+  );
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));

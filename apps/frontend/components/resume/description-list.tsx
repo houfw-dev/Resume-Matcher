@@ -162,15 +162,21 @@ export const DescriptionList: React.FC<DescriptionListProps> = ({
                   marker = `${level1}.`;
                 }
               }
+              // Peer modules outside the big four (项目成效/…) align their
+              // unnumbered rows flush with the label edge: no empty 3ch marker
+              // gutter. Numbered rows keep the marker at the label edge.
+              const flushUnnumbered = block.flush && level === 1 && !row.numbered;
               return (
                 <li key={rowIndex} className="flex items-baseline gap-[0.5ch] text-left">
                   {/* Level-2 sub-points indent one extra number gutter. */}
                   {level === 2 && (
                     <span aria-hidden="true" className="w-[3ch] flex-none tabular-nums" />
                   )}
-                  <span aria-hidden="true" className="w-[3ch] flex-none tabular-nums">
-                    {marker}
-                  </span>
+                  {!flushUnnumbered && (
+                    <span aria-hidden="true" className="w-[3ch] flex-none tabular-nums">
+                      {marker}
+                    </span>
+                  )}
                   <span
                     className={cn('min-w-0 flex-1 text-left', row.bold && 'font-bold')}
                     data-nested-head={row.bold ? '' : undefined}

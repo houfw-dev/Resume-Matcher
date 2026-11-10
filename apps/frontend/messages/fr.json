@@ -21,6 +21,7 @@
     "finish": "Terminer",
     "optional": "Optionnel",
     "close": "Fermer",
+    "notifications": "Notifications",
     "ok": "OK",
     "search": "Rechercher",
     "filter": "Filtrer",
@@ -103,7 +104,16 @@
     },
     "errors": {
       "loadFailed": "Impossible de charger les CV. Veuillez réessayer.",
-      "deleteFailed": "Impossible de supprimer le CV. Votre CV actuel reste disponible."
+      "deleteFailed": "Impossible de supprimer le CV. Votre CV actuel reste disponible.",
+      "uploadErrors": {
+        "fileTooLarge": "Le fichier « {name} » dépasse la taille maximale de {limit}.",
+        "fileTypeNotAccepted": "Type de fichier « {name} » non accepté. Types acceptés : {accept}",
+        "uploadUrlNotConfigured": "L'URL de téléversement n'est pas configurée.",
+        "uploadFailed": "Échec du téléversement de {name}. Veuillez réessayer.",
+        "uploadErrorFallback": "Erreur lors du téléversement de {name}.",
+        "onlyOneFile": "Veuillez sélectionner un seul fichier.",
+        "maxFiles": "Vous ne pouvez téléverser que {count} fichiers au maximum."
+      }
     }
   },
   "builder": {
@@ -227,7 +237,14 @@
       "coverLetterFooter": "Conseil : personnalisez d'abord pour de meilleurs résultats.",
       "outreachFooter": "Conseil : restez bref et personnalisé.",
       "interviewPrepDescription": "Générez une préparation à l'entretien à partir de votre CV ; pour les CV personnalisés, la fiche de poste est également prise en compte.",
-      "interviewPrepFooter": "Conseil : préparez des réponses sincères et fondées sur votre CV."
+      "interviewPrepFooter": "Conseil : préparez des réponses sincères et fondées sur votre CV.",
+      "jobDescriptionLabel": "Description de poste",
+      "jobDescriptionHint": "Facultatif. Laissez vide pour un contenu basé uniquement sur le CV ; collez une description de poste pour cibler ce rôle.",
+      "jobDescriptionPlaceholder": "Collez ici la description du poste visé (facultatif)...",
+      "generateWithJd": "Générer avec la description de poste",
+      "generateWithoutJd": "Générer sans description de poste",
+      "statusPending": "En attente",
+      "tailoredJdNote": "Le contenu sera généré à partir de la description de poste déjà associée à ce CV."
     },
     "regenerateDialog": {
       "title": "Régénérer {title} ?",
@@ -509,11 +526,14 @@
       "outreachSaveFailed": "Impossible d'enregistrer le message de contact. Veuillez réessayer.",
       "coverLetterGenerateFailed": "Impossible de générer la lettre de motivation : {error}",
       "outreachGenerateFailed": "Impossible de générer le message de contact : {error}",
+      "outreachDownloadRequiresResume": "Enregistrez d'abord le CV pour télécharger le message de contact.",
+      "outreachMissing": "Aucun message de contact disponible. Générez-en un d'abord.",
+      "outreachDownloadFailed": "Impossible de télécharger le message de contact : {error}",
       "interviewPrepGenerateFailed": "Impossible de générer la préparation à l'entretien : {error}",
       "interviewPrepDownloadRequiresContent": "Générez d'abord la préparation à l'entretien pour pouvoir la télécharger.",
       "interviewPrepDownloadFailed": "Échec du téléchargement de la préparation à l'entretien : {error}",
-      "jdMatchDownloadRequiresContext": "La correspondance avec l'offre n'est disponible que pour les CV personnalisés avec une fiche de poste.",
-      "jdMatchDownloadFailed": "Échec du téléchargement de la correspondance avec l'offre : {error}"
+      "jdMatchDownloadRequiresContext": "La correspondance FP n'est disponible que pour les CV personnalisés avec une fiche de poste.",
+      "jdMatchDownloadFailed": "Échec du téléchargement de la correspondance FP : {error}"
     },
     "leaveWithoutDraft": {
       "title": "Quitter avec des modifications non enregistrées ?",
@@ -656,6 +676,10 @@
   "settings": {
     "title": "Paramètres",
     "subtitle": "Configurez vos préférences",
+    "nav": {
+      "language": "Langue",
+      "label": "Sections des paramètres"
+    },
     "aiProvider": "Fournisseur d'IA",
     "aiProviderDescription": "Sélectionnez votre fournisseur d'IA préféré pour l'analyse de CV",
     "apiKey": "Clé API",
@@ -839,7 +863,8 @@
     "downloadFailedTitle": "Échec du téléchargement",
     "renameFailedTitle": "Échec du renommage",
     "diagnoseResume": "Diagnostiquer le CV",
-    "tailorFromThis": "Adapter à partir de ce CV"
+    "tailorFromThis": "Adapter à partir de ce CV",
+    "trackApplications": "Suivi des candidatures"
   },
   "preview": {
     "margins": "Marges",
@@ -956,6 +981,9 @@
       },
       "emptyTitle": "Aucun message de contact pour l'instant.",
       "emptyDescription": "Activez la génération de message de contact dans les paramètres, puis personnalisez un CV."
+    },
+    "print": {
+      "emptyContent": "Aucun contenu de message de contact disponible."
     }
   },
   "errors": {
@@ -1016,6 +1044,7 @@
       "keepAdding": "Continuer à ajouter",
       "backToDashboard": "Retour au tableau de bord",
       "openCreated": "Ouvrir le CV créé",
+      "tailorCreated": "Adapter ce CV",
       "retryDraftBackup": "Réessayer la sauvegarde locale",
       "stay": "Rester ici",
       "leaveWithoutSaving": "Quitter sans enregistrer"
@@ -1094,14 +1123,22 @@
     },
     "empty": {
       "title": "Aucune candidature pour l'instant",
-      "description": "Personnalisez un CV pour un poste, ou ajoutez-en un manuellement, pour commencer le suivi."
+      "description": "Personnalisez un CV pour un poste, ou ajoutez-en un manuellement, pour commencer le suivi.",
+      "goDashboard": "Aller au tableau de bord"
+    },
+    "filter": {
+      "banner": "Affichage des candidatures liées à ce CV",
+      "clear": "Effacer le filtre",
+      "emptyTitle": "Aucune candidature pour ce CV pour le moment",
+      "emptyDescription": "Ajoutez-en une manuellement ou adaptez ce CV à un poste pour commencer le suivi."
     },
     "card": {
       "companyUnknown": "Entreprise inconnue",
       "roleUnknown": "Poste sans titre",
       "sharedResume": "CV partagé",
       "selectAria": "Sélectionner la candidature",
-      "dragAria": "Faire glisser pour réorganiser"
+      "dragAria": "Faire glisser pour réorganiser",
+      "viewResume": "Voir le CV"
     },
     "modal": {
       "jobDescription": "Fiche de poste",
@@ -1180,10 +1217,18 @@
     "measuringLayout": "Mesure de la pagination avec le modèle sélectionné…",
     "layoutSkipped": "Mesure de la mise en page indisponible — le nombre de pages et la densité des paragraphes sont estimés à partir du texte.",
     "error": "Échec du diagnostic. Veuillez réessayer.",
-    "intro": "Le rapport combine des contrôles déterministes avec une revue IA structurée. Collez éventuellement la description du poste cible pour également évaluer l'adéquation au poste.",
-    "jobDescriptionLabel": "Description du poste cible (facultatif)",
+    "intro": "Le rapport combine des contrôles déterministes avec une revue IA structurée. Choisissez le mode de diagnostic adapté à votre objectif.",
+    "modeLabel": "Mode de diagnostic",
+    "modeExclusiveHint": "Choisissez un mode — le diagnostic par modèle de compétences et le diagnostic par fiche de poste ne peuvent pas être combinés.",
+    "modeBasicTitle": "Diagnostic de base",
+    "modeBasicDesc": "Check-list de 22 critères et résultat de ligne rouge, sans cibler de poste précis.",
+    "modeModelTitle": "Diagnostic par modèle de compétences",
+    "modeModelDesc": "Diagnostic de base plus 5 critères de compétences du rôle évalués avec un modèle de niveau P3–P8.",
+    "modeJdTitle": "Diagnostic par fiche de poste",
+    "modeJdDesc": "Diagnostic de base plus contrôles d'adéquation face à la fiche de poste collée.",
+    "jobDescriptionLabel": "Description du poste cible",
     "jobDescriptionPlaceholder": "Collez la description du poste pour activer les critères d'adéquation…",
-    "jdHint": "Sans description de poste, le critère d'adéquation au poste est marqué non applicable. Les 5 critères de compétences du rôle ne nécessitent pas de fiche de poste, mais exigent une intention professionnelle claire correspondant à un modèle de niveau (ou sélectionné explicitement) ; sinon, ils sont marqués non applicables.",
+    "jdHint": "Le critère d'adéquation au poste est évalué à partir de cette description. Le diagnostic par fiche de poste et le diagnostic par modèle de compétences sont mutuellement exclusifs.",
     "run": "Lancer le diagnostic",
     "rerun": "Relancer",
     "specVersion": "Barème {version}",
@@ -1196,6 +1241,7 @@
     "allConform": "Tous les critères sont conformes ou non applicables.",
     "evidenceLabel": "Problème",
     "suggestionLabel": "Action corrective",
+    "fixInBuilder": "Corriger dans l'éditeur",
     "rating": {
       "conform": "Conforme",
       "partial": "Partiel",
@@ -1221,10 +1267,12 @@
     "countsSummary": "{effective} applicables — conforme {conform}, partiel {partial}, non conforme {nonconform} ; N/A {na}.",
     "modelLabel": "Modèle de compétences",
     "modelLoading": "Chargement des modèles de compétences…",
-    "modelLoadError": "Impossible de charger les modèles de compétences ; vous pouvez quand même exécuter la check-list de base.",
-    "modelMatchedHint": "Correspondance automatique avec le poste visé : {name}. Changez de niveau ou lancez sans modèle.",
-    "modelNoMatchHint": "Aucun modèle de compétences ne correspond au poste visé. Choisissez-en un pour confirmer, ou lancez sans modèle.",
-    "modelNone": "Lancer sans modèle de compétences"
+    "modelLoadError": "Impossible de charger les modèles de compétences. Réessayez ou choisissez un autre mode de diagnostic.",
+    "modelMatchedHint": "Correspondance automatique avec le poste visé : {name}. Changez de niveau ou choisissez un autre mode de diagnostic.",
+    "modelNoMatchHint": "Aucun modèle de compétences ne correspond au poste visé. Choisissez-en un pour confirmer, ou un autre mode de diagnostic.",
+    "basicModeHint": "Exécute uniquement la check-list V4 et les lignes rouges. Le rapport ne cible aucun poste : les critères de compétences et d'adéquation au poste sont marqués non applicables.",
+    "jdRequiredHint": "Collez une fiche de poste pour lancer — le diagnostic par fiche de poste ne peut pas se combiner avec un modèle de compétences.",
+    "modelRetry": "Réessayer"
   },
   "fineTune": {
     "buttonLabel": "Ajustement IA",

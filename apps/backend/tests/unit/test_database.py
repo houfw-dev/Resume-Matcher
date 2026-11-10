@@ -238,6 +238,22 @@ class TestApplications:
         assert [x["application_id"] for x in applied] == [b["application_id"]]
         assert applied[0]["position"] == 0
 
+    async def test_list_filters_by_resume_id_or_master(self, db):
+        direct = await db.create_application(job_id="j1", resume_id="r1")
+        child = await db.create_application(
+            job_id="j2", resume_id="r2", master_resume_id="r1"
+        )
+        await db.create_application(job_id="j3", resume_id="r3")
+        hits = await db.list_applications(resume_id="r1")
+        assert {x["application_id"] for x in hits} == {
+            direct["application_id"],
+            child["application_id"],
+        }
+        # An unknown resume matches nothing rather than falling back to all rows.
+        assert await db.list_applications(resume_id="ghost") == []
+        # The unrelated card stays visible on the unfiltered board.
+        assert len(await db.list_applications()) == 3
+
     async def test_bulk_update_and_delete(self, db):
         a = await db.create_application(job_id="j1", resume_id="r1")
         b = await db.create_application(job_id="j2", resume_id="r2")

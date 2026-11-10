@@ -21,6 +21,7 @@
     "finish": "Finish",
     "optional": "Optional",
     "close": "Close",
+    "notifications": "Notifications",
     "ok": "OK",
     "search": "Search",
     "filter": "Filter",
@@ -103,7 +104,16 @@
     },
     "errors": {
       "loadFailed": "Unable to load resumes. Please try again.",
-      "deleteFailed": "Unable to delete the resume. Your existing resume is still available."
+      "deleteFailed": "Unable to delete the resume. Your existing resume is still available.",
+      "uploadErrors": {
+        "fileTooLarge": "File \"{name}\" exceeds the maximum size of {limit}.",
+        "fileTypeNotAccepted": "File \"{name}\" type not accepted. Accepted types: {accept}",
+        "uploadUrlNotConfigured": "Upload URL is not configured.",
+        "uploadFailed": "Upload failed for {name}. Please try again.",
+        "uploadErrorFallback": "Error uploading {name}.",
+        "onlyOneFile": "Please select only one file.",
+        "maxFiles": "You can only upload a maximum of {count} files."
+      }
     }
   },
   "builder": {
@@ -227,7 +237,14 @@
       "coverLetterFooter": "Tip: tailor first for best results.",
       "outreachFooter": "Tip: keep it short and personalized.",
       "interviewPrepDescription": "Generate interview preparation from your resume; tailored resumes also incorporate the job description.",
-      "interviewPrepFooter": "Tip: prepare truthful, resume-grounded answers."
+      "interviewPrepFooter": "Tip: prepare truthful, resume-grounded answers.",
+      "jobDescriptionLabel": "Job Description",
+      "jobDescriptionHint": "Optional. Leave empty for resume-only content; paste a job description to target this role.",
+      "jobDescriptionPlaceholder": "Paste the target job description here (optional)...",
+      "generateWithJd": "Generate with Job Description",
+      "generateWithoutJd": "Generate Without Job Description",
+      "statusPending": "Pending",
+      "tailoredJdNote": "Content will be generated using the job description already linked to this resume."
     },
     "regenerateDialog": {
       "title": "Regenerate {title}?",
@@ -509,6 +526,9 @@
       "outreachSaveFailed": "Failed to save outreach message. Please try again.",
       "coverLetterGenerateFailed": "Failed to generate cover letter: {error}",
       "outreachGenerateFailed": "Failed to generate outreach message: {error}",
+      "outreachDownloadRequiresResume": "Save the resume first to download the outreach message.",
+      "outreachMissing": "No outreach message available. Generate one first.",
+      "outreachDownloadFailed": "Failed to download outreach message: {error}",
       "interviewPrepGenerateFailed": "Failed to generate interview preparation: {error}",
       "interviewPrepDownloadRequiresContent": "Generate interview preparation first to download it.",
       "interviewPrepDownloadFailed": "Failed to download interview preparation: {error}",
@@ -656,6 +676,10 @@
   "settings": {
     "title": "Settings",
     "subtitle": "Configure your preferences",
+    "nav": {
+      "language": "Language",
+      "label": "Settings sections"
+    },
     "aiProvider": "AI Provider",
     "aiProviderDescription": "Select your preferred AI provider for resume analysis",
     "apiKey": "API Key",
@@ -839,7 +863,8 @@
     "downloadFailedTitle": "Download Failed",
     "renameFailedTitle": "Rename Failed",
     "diagnoseResume": "Diagnose Resume",
-    "tailorFromThis": "Tailor from this resume"
+    "tailorFromThis": "Tailor from this resume",
+    "trackApplications": "Application tracker"
   },
   "preview": {
     "margins": "Margins",
@@ -956,6 +981,9 @@
       },
       "emptyTitle": "No outreach message yet.",
       "emptyDescription": "Enable outreach message generation in Settings, then tailor a resume."
+    },
+    "print": {
+      "emptyContent": "No outreach message content available."
     }
   },
   "errors": {
@@ -1016,6 +1044,7 @@
       "keepAdding": "Keep adding",
       "backToDashboard": "Back to Dashboard",
       "openCreated": "Open Created Resume",
+      "tailorCreated": "Tailor this resume",
       "retryDraftBackup": "Retry local backup",
       "stay": "Stay here",
       "leaveWithoutSaving": "Leave without saving"
@@ -1094,14 +1123,22 @@
     },
     "empty": {
       "title": "No applications yet",
-      "description": "Tailor a resume to a job, or add one manually, to start tracking."
+      "description": "Tailor a resume to a job, or add one manually, to start tracking.",
+      "goDashboard": "Go to dashboard"
+    },
+    "filter": {
+      "banner": "Showing applications linked to this resume",
+      "clear": "Clear filter",
+      "emptyTitle": "No applications for this resume yet",
+      "emptyDescription": "Add one manually, or tailor this resume to a job to start tracking it."
     },
     "card": {
       "companyUnknown": "Unknown company",
       "roleUnknown": "Untitled role",
       "sharedResume": "Shared resume",
       "selectAria": "Select application",
-      "dragAria": "Drag to reorder"
+      "dragAria": "Drag to reorder",
+      "viewResume": "View resume"
     },
     "modal": {
       "jobDescription": "Job Description",
@@ -1180,10 +1217,18 @@
     "measuringLayout": "Measuring pagination with the selected template…",
     "layoutSkipped": "Layout measurement unavailable — page count and paragraph density are estimated from text.",
     "error": "Diagnosis failed. Please try again.",
-    "intro": "The report combines deterministic checks with one structured AI review. Optionally paste a target job description to also assess job-fit items.",
-    "jobDescriptionLabel": "Target job description (optional)",
+    "intro": "The report combines deterministic checks with one structured AI review. Choose the diagnosis mode that fits your goal.",
+    "modeLabel": "Diagnosis mode",
+    "modeExclusiveHint": "Choose one mode — competency-model diagnosis and job-description diagnosis cannot be combined.",
+    "modeBasicTitle": "Basic diagnosis",
+    "modeBasicDesc": "The 22-item rubric and red-line result, not targeted at any specific role.",
+    "modeModelTitle": "Competency-model diagnosis",
+    "modeModelDesc": "Basic diagnosis plus 5 role-capability items judged against a P3–P8 level model.",
+    "modeJdTitle": "Job-description diagnosis",
+    "modeJdDesc": "Basic diagnosis plus job-fit checks against the pasted job description.",
+    "jobDescriptionLabel": "Target job description",
     "jobDescriptionPlaceholder": "Paste the job description here to enable job-fit checks…",
-    "jdHint": "Without a job description, the job-fit check is marked N/A. The 5 role-capability checks do not need a JD, but they require a clear target intention that matches (or explicitly selects) a level model; otherwise they are N/A.",
+    "jdHint": "The job-fit check is judged against this description. JD diagnosis and competency-model diagnosis are mutually exclusive.",
     "run": "Start Diagnosis",
     "rerun": "Re-run",
     "specVersion": "Rubric {version}",
@@ -1196,6 +1241,7 @@
     "allConform": "Every check conforms or is not applicable.",
     "evidenceLabel": "Problem",
     "suggestionLabel": "Fix",
+    "fixInBuilder": "Fix in builder",
     "rating": {
       "conform": "Conforms",
       "partial": "Partial",
@@ -1221,10 +1267,12 @@
     "countsSummary": "Applicable {effective} — conform {conform}, partial {partial}, nonconform {nonconform}; N/A {na}.",
     "modelLabel": "Competency model",
     "modelLoading": "Loading competency models…",
-    "modelLoadError": "Could not load competency models — you can still run the base checklist.",
-    "modelMatchedHint": "Auto-matched to the target role: {name}. Switch the level or run without a model.",
-    "modelNoMatchHint": "No competency model matches the target role. Pick one to confirm, or run without a model.",
-    "modelNone": "Run without a competency model"
+    "modelLoadError": "Could not load competency models. Retry, or choose another diagnosis mode.",
+    "modelMatchedHint": "Auto-matched to the target role: {name}. Switch the level, or choose another diagnosis mode.",
+    "modelNoMatchHint": "No competency model matches the target role. Pick one to confirm, or choose another diagnosis mode.",
+    "basicModeHint": "Runs only the V4 rubric and red-line checks. The report targets no role — role-capability and job-fit items are marked N/A.",
+    "jdRequiredHint": "Paste a job description to start — JD diagnosis cannot combine with a competency model.",
+    "modelRetry": "Retry"
   },
   "fineTune": {
     "buttonLabel": "AI Fine-Tune",

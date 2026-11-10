@@ -342,7 +342,7 @@ export const FineTunePreviewDialog: React.FC<FineTunePreviewDialogProps> = ({
             <div className="px-6 pt-3 shrink-0">
               <div
                 role="alert"
-                className="border-2 border-orange-500 bg-orange-50 px-4 py-3 flex items-start gap-2"
+                className="border-2 border-warning bg-orange-50 px-4 py-3 flex items-start gap-2"
               >
                 <AlertTriangle className="w-4 h-4 text-orange-600 mt-0.5 shrink-0" />
                 <div className="space-y-1">
@@ -365,7 +365,7 @@ export const FineTunePreviewDialog: React.FC<FineTunePreviewDialogProps> = ({
             <div className="px-6 pt-3 shrink-0">
               <div
                 role="alert"
-                className="border-2 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-800"
+                className="border-2 border-destructive bg-red-50 px-4 py-3 text-sm text-red-800"
               >
                 {error}
               </div>
@@ -512,7 +512,7 @@ const CHANGE_META: Record<
 > = {
   added: {
     labelKey: 'fineTune.preview.changeAdded',
-    className: 'border-green-700 text-green-800 bg-green-50',
+    className: 'border-success text-green-800 bg-green-50',
     icon: <Plus className="w-3 h-3" />,
   },
   removed: {
@@ -522,7 +522,7 @@ const CHANGE_META: Record<
   },
   modified: {
     labelKey: 'fineTune.preview.changeModified',
-    className: 'border-blue-700 text-blue-800 bg-blue-50',
+    className: 'border-primary text-blue-800 bg-blue-50',
     icon: <RefreshCw className="w-3 h-3" />,
   },
 };

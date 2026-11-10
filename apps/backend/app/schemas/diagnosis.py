@@ -146,11 +146,25 @@ class RenderedLayoutIn(BaseModel):
 
 
 class DiagnosisRequest(BaseModel):
-    """Body of POST /resumes/{id}/diagnose."""
+    """Body of POST /resumes/{id}/diagnose.
+
+    Three mutually exclusive diagnosis modes are supported:
+    1. base only — neither a competency model nor a job description;
+    2. base + competency model — a real model key, no job description;
+    3. base + target JD — a job description, model key omitted or ``none``.
+
+    A real model key together with a job description is rejected with 400.
+    When a job description is present, title-based model auto-matching is
+    suppressed so the base+model+JD triple overlap can never run.
+    """
 
     job_description: str | None = Field(
         default=None,
-        description="Optional target JD; without it the JD-fit items are rated na.",
+        description=(
+            "Target JD for JD-fit diagnosis. Its presence activates JD mode: "
+            "competency model auto-matching is suppressed and a real "
+            "competency_model_key alongside it is rejected with 400."
+        ),
     )
     target_title: str | None = Field(
         default=None,
@@ -163,9 +177,10 @@ class DiagnosisRequest(BaseModel):
     competency_model_key: str | None = Field(
         default=None,
         description=(
-            "Explicitly chosen competency model key (e.g. java-p5). Sent when "
-            "the user picks/confirms a level in the UI; overrides title-based "
-            "auto-matching. 400 when the key does not identify a shipped model."
+            "Explicitly chosen competency model key (e.g. java-p5). Sent in "
+            "model mode; overrides title-based auto-matching. 400 when the key "
+            "does not identify a shipped model, or when it is combined with a "
+            "job description. 'none' explicitly opts out of auto-matching."
         ),
     )
     template_settings: TemplateSettingsIn | None = Field(

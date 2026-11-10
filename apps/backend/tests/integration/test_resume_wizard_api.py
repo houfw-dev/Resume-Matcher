@@ -4,6 +4,7 @@ import json
 from unittest.mock import AsyncMock, patch
 
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 
 from app.database import Database
 from app.main import app
@@ -12,6 +13,7 @@ from app.services.resume_wizard import (
     RESUME_WIZARD_MAX_QUESTIONS,
     build_initial_wizard_state,
 )
+from tests.integration.test_storage_busy_writes import fast_busy_database  # noqa: F401
 
 _AI_RESULT = {
     "resume_data": {
@@ -222,6 +224,42 @@ async def test_finalize_rejects_when_master_exists(isolated_db, sample_resume) -
 
     assert response.status_code == 409
     assert "already exists" in response.json()["detail"].lower()
+
+
+async def test_finalize_contention_returns_503_and_unchanged_request_succeeds(
+    fast_busy_database: Database,
+) -> None:
+    # Real SQLite write-lock contention must surface as the retryable 503
+    # contract, not collapse into the endpoint's generic 500 handler.
+    database = fast_busy_database
+    state = build_initial_wizard_state()
+    state.resume_data.personalInfo.name = "James"
+    state.resume_data.personalInfo.email = "james@example.com"
+    state.resume_data.additional.technicalSkills = ["Python"]
+    body = {"state": state.model_dump(mode="json")}
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False),
+        base_url="http://test",
+    ) as client:
+        async with database._session() as writer:
+            await writer.execute(text("BEGIN IMMEDIATE"))
+            blocked = await client.post(
+                "/api/v1/resume-wizard/finalize", json=body
+            )
+        assert blocked.status_code == 503, blocked.text
+        assert blocked.headers["retry-after"] == "1"
+        assert blocked.json() == {
+            "detail": "Database is busy. Please retry shortly."
+        }
+        # The contended write never created a partial master resume.
+        assert len(await database.list_resumes()) == 0
+
+        retried = await client.post("/api/v1/resume-wizard/finalize", json=body)
+
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["is_master"] is True
+    assert len(await database.list_resumes()) == 1
 
 
 async def test_turn_start_returns_initial_state(isolated_db) -> None:

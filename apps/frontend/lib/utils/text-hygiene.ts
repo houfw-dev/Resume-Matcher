@@ -132,6 +132,59 @@ const trimHeaderFields = <T extends object>(entry: T, fields: readonly string[])
   return { ...entry, ...next };
 };
 
+// Mirrors parser._MARKDOWN_INLINE_LINK_RE / _BARE_URL_RE / _EMBEDDED_LABEL_RE
+// and the sanitize_header_fact_value / normalize_header_link_value pair.
+// Inline Markdown link/image, e.g. "[fengba.blog.csdn.net](https://…)" — the
+// URL target is captured so link fields can collapse to it.
+const MARKDOWN_INLINE_LINK_RE = /!?\[([^\]]*)\]\(\s*([^)\s]*)\s*\)/;
+const BARE_URL_RE = /(?:https?:\/\/|www\.)[^\s|｜，,；;）)】\]]+/;
+// A second "label：" inside a fact value marks the next glued cell. The label
+// must follow whitespace (the cell separator); spaces inside the label are
+// allowed because markitdown splits CJK runs ("学 校"). No lookbehind (target
+// is ES2017): the leading whitespace is consumed, then trimmed away.
+const EMBEDDED_LABEL_RE = /\s[一-鿿A-Za-z][一-鿿A-Za-z\s]{0,11}\s*[:：]/;
+
+/**
+ * Drop glued next-cell content from a short header fact value.
+ *
+ * Header facts (gender/age/workYears/educationLevel) are short tokens; an
+ * inline Markdown link, bare URL, or embedded `label：` inside the value means
+ * another header cell was glued onto it. Everything from the glued boundary
+ * onward is truncated; the clean prefix survives verbatim.
+ */
+export const sanitizeHeaderFactValue = (value: string): string => {
+  let cut = value.length;
+  for (const pattern of [MARKDOWN_INLINE_LINK_RE, BARE_URL_RE, EMBEDDED_LABEL_RE]) {
+    const match = value.match(pattern);
+    if (match && match.index !== undefined && match.index > 0 && match.index < cut) {
+      cut = match.index;
+    }
+  }
+  return value.slice(0, cut).replace(/^[ \t　:：;；,，、]+|[ \t　:：;；,，、]+$/g, '');
+};
+
+/**
+ * Normalize one personal-link header cell (website/linkedin/github).
+ *
+ * Markdown links collapse to their URL target; a bare URL embedded in prose is
+ * extracted; plain hosts and other text pass through stripped, since the
+ * render layer promotes bare hosts to "https://…" itself.
+ */
+export const normalizeHeaderLinkValue = (value: string): string => {
+  const inline = value.match(MARKDOWN_INLINE_LINK_RE);
+  if (inline) {
+    if (inline[2]) return inline[2].trim();
+    // Empty target "[text]()": fall back to the bracket text.
+    return inline[1].trim();
+  }
+  const bare = value.match(BARE_URL_RE);
+  if (bare) return bare[0].replace(/[.,;)）】\]]+$/, '');
+  return value.trim();
+};
+
+const HEADER_FACT_FIELDS = ['gender', 'age', 'workYears', 'educationLevel'] as const;
+const HEADER_LINK_FIELDS = ['website', 'linkedin', 'github'] as const;
+
 const PERSONAL_INFO_FIELDS = [
   'name',
   'title',
@@ -181,7 +234,28 @@ export const normalizeTextHygiene = (resume: ResumeData): ResumeData => {
   result.summary = cleanTextBlock(data.summary, { stripEndings: true });
 
   if (isRecord(data.personalInfo)) {
-    result.personalInfo = trimHeaderFields(data.personalInfo, PERSONAL_INFO_FIELDS);
+    // Self-heal glued header cells from pre-fix uploads (e.g. workYears
+    // "13年 博客地址：[blog](https://…)", educationLevel "本科 学 校： …") and
+    // resolve Markdown links stored verbatim in personal-link fields. Mirrors
+    // the backend normalize_text_hygiene block; idempotent.
+    const personalInfo = trimHeaderFields(data.personalInfo, PERSONAL_INFO_FIELDS) as Record<
+      string,
+      unknown
+    >;
+    const healedInfo: Record<string, unknown> = { ...personalInfo };
+    for (const field of HEADER_FACT_FIELDS) {
+      const factValue = healedInfo[field];
+      if (typeof factValue === 'string') {
+        healedInfo[field] = sanitizeHeaderFactValue(factValue);
+      }
+    }
+    for (const field of HEADER_LINK_FIELDS) {
+      const linkValue = healedInfo[field];
+      if (typeof linkValue === 'string' && linkValue) {
+        healedInfo[field] = normalizeHeaderLinkValue(linkValue);
+      }
+    }
+    result.personalInfo = healedInfo;
   }
 
   if (Array.isArray(data.workExperience)) {

@@ -383,6 +383,47 @@ class TestGenerateInterviewPrep:
         update_payload = mock_db.update_resume.await_args.args[1]
         assert json.loads(update_payload["interview_prep"]) == SAMPLE_INTERVIEW_PREP
 
+    @patch("app.routers.resumes.get_content_language", return_value="en")
+    @patch("app.routers.resumes.generate_interview_prep", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_ad_hoc_jd_targets_standalone_generation(
+        self, mock_db, mock_generate, _mock_language, client, mock_resume_record
+    ):
+        # A JD pasted in the request body drives role-targeted preparation for
+        # a standalone resume, with no improvement/job lookup.
+        mock_db.get_resume.return_value = mock_resume_record
+        mock_generate.return_value = InterviewPrepData.model_validate(SAMPLE_INTERVIEW_PREP)
+
+        async with client:
+            resp = await client.post(
+                "/api/v1/resumes/res-123/generate-interview-prep",
+                json={"job_description": "  Need Kubernetes and FastAPI  "},
+            )
+
+        assert resp.status_code == 200
+        mock_db.get_improvement_by_tailored_resume.assert_not_called()
+        mock_db.get_job.assert_not_called()
+        # Whitespace is trimmed before the JD reaches the service.
+        mock_generate.assert_awaited_once_with(
+            mock_resume_record["processed_data"], "Need Kubernetes and FastAPI", "en"
+        )
+
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_ad_hoc_jd_oversized_returns_422(
+        self, mock_db, client, mock_resume_record
+    ):
+        mock_db.get_resume.return_value = mock_resume_record
+
+        async with client:
+            resp = await client.post(
+                "/api/v1/resumes/res-123/generate-interview-prep",
+                json={"job_description": "x" * (MAX_JOB_CHARACTERS + 1)},
+            )
+
+        assert resp.status_code == 422
+        # Request validation fails before the handler runs.
+        mock_db.update_resume.assert_not_called()
+
     @patch("app.routers.resumes.db", new_callable=AsyncMock)
     async def test_rejects_missing_improvement_context(
         self, mock_db, client, mock_resume_record
@@ -456,6 +497,63 @@ class TestOnDemandCoverLetter:
         mock_db.update_resume.assert_awaited_once_with(
             "res-123", {"cover_letter": "Resume-only cover letter"}
         )
+
+    @patch("app.routers.resumes.get_content_language", return_value="en")
+    @patch("app.routers.resumes.generate_cover_letter", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_ad_hoc_jd_targets_standalone_generation(
+        self, mock_db, mock_generate, _mock_language, client, mock_resume_record
+    ):
+        # A JD pasted in the request body produces a role-targeted letter for
+        # a standalone resume, with no improvement/job lookup.
+        mock_db.get_resume.return_value = mock_resume_record
+        mock_generate.return_value = "JD-targeted cover letter"
+
+        async with client:
+            resp = await client.post(
+                "/api/v1/resumes/res-123/generate-cover-letter",
+                json={"job_description": "Need Kubernetes and FastAPI"},
+            )
+
+        assert resp.status_code == 200
+        mock_db.get_improvement_by_tailored_resume.assert_not_called()
+        mock_db.get_job.assert_not_called()
+        mock_generate.assert_awaited_once_with(
+            mock_resume_record["processed_data"], "Need Kubernetes and FastAPI", "en"
+        )
+        mock_db.update_resume.assert_awaited_once_with(
+            "res-123", {"cover_letter": "JD-targeted cover letter"}
+        )
+
+    @patch("app.routers.resumes.get_content_language", return_value="en")
+    @patch("app.routers.resumes.generate_cover_letter", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_ad_hoc_jd_takes_precedence_over_stored_job(
+        self,
+        mock_db,
+        mock_generate,
+        _mock_language,
+        client,
+        mock_resume_record,
+        sample_resume,
+    ):
+        # Even a tailored resume uses the pasted JD when one is supplied.
+        mock_db.get_resume.return_value = {
+            **mock_resume_record,
+            "parent_id": "master-1",
+            "processed_data": sample_resume,
+        }
+        mock_generate.return_value = "Ad-hoc targeted letter"
+
+        async with client:
+            resp = await client.post(
+                "/api/v1/resumes/res-123/generate-cover-letter",
+                json={"job_description": "Fresh role requirements"},
+            )
+
+        assert resp.status_code == 200
+        mock_db.get_improvement_by_tailored_resume.assert_not_called()
+        mock_generate.assert_awaited_once_with(sample_resume, "Fresh role requirements", "en")
 
     @patch("app.routers.resumes.get_content_language", return_value="en")
     @patch("app.routers.resumes.generate_cover_letter", new_callable=AsyncMock)
@@ -557,6 +655,49 @@ class TestOnDemandOutreach:
     @patch("app.routers.resumes.get_content_language", return_value="en")
     @patch("app.routers.resumes.generate_outreach_message", new_callable=AsyncMock)
     @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_ad_hoc_jd_targets_standalone_generation(
+        self, mock_db, mock_generate, _mock_language, client, mock_resume_record
+    ):
+        # A JD pasted in the request body produces a role-targeted message for
+        # a standalone resume, with no improvement/job lookup.
+        mock_db.get_resume.return_value = mock_resume_record
+        mock_generate.return_value = "JD-targeted outreach"
+
+        async with client:
+            resp = await client.post(
+                "/api/v1/resumes/res-123/generate-outreach",
+                json={"job_description": "Need Kubernetes and FastAPI"},
+            )
+
+        assert resp.status_code == 200
+        mock_db.get_improvement_by_tailored_resume.assert_not_called()
+        mock_db.get_job.assert_not_called()
+        mock_generate.assert_awaited_once_with(
+            mock_resume_record["processed_data"], "Need Kubernetes and FastAPI", "en"
+        )
+        mock_db.update_resume.assert_awaited_once_with(
+            "res-123", {"outreach_message": "JD-targeted outreach"}
+        )
+
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
+    async def test_ad_hoc_jd_oversized_returns_422(
+        self, mock_db, client, mock_resume_record
+    ):
+        mock_db.get_resume.return_value = mock_resume_record
+
+        async with client:
+            resp = await client.post(
+                "/api/v1/resumes/res-123/generate-outreach",
+                json={"job_description": "x" * (MAX_JOB_CHARACTERS + 1)},
+            )
+
+        assert resp.status_code == 422
+        # Request validation fails before the handler runs.
+        mock_db.update_resume.assert_not_called()
+
+    @patch("app.routers.resumes.get_content_language", return_value="en")
+    @patch("app.routers.resumes.generate_outreach_message", new_callable=AsyncMock)
+    @patch("app.routers.resumes.db", new_callable=AsyncMock)
     async def test_tailored_resume_uses_stored_job(
         self,
         mock_db,
@@ -614,6 +755,12 @@ class TestContentPdfExports:
                 "cover_letter",
                 "Dear team, ...",
             ),
+            (
+                "/api/v1/resumes/res-123/outreach/pdf",
+                ".outreach-print",
+                "outreach_message",
+                "Hello recruiter, ...",
+            ),
         ],
     )
     @patch("app.routers.resumes.render_resume_pdf", new_callable=AsyncMock)
@@ -646,6 +793,7 @@ class TestContentPdfExports:
         [
             ("/api/v1/resumes/res-123/interview-prep/pdf", "interview_prep"),
             ("/api/v1/resumes/res-123/cover-letter/pdf", "cover_letter"),
+            ("/api/v1/resumes/res-123/outreach/pdf", "outreach_message"),
         ],
     )
     @patch("app.routers.resumes.db", new_callable=AsyncMock)

@@ -129,7 +129,7 @@ export function Dropdown({
                     onClick={() => handleSelect(option.id)}
                     className={`w-full px-4 py-3 text-left font-mono transition-colors duration-150 border border-black ${
                       option.id === value
-                        ? 'bg-green-700 text-white'
+                        ? 'bg-success text-white'
                         : 'bg-white text-black hover:bg-paper-tint'
                     } ${index > 0 ? '-mt-[1px]' : ''} active:bg-paper-tint`}
                   >

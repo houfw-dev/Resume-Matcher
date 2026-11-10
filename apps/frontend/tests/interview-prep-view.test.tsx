@@ -55,6 +55,40 @@ describe('InterviewPrepView', () => {
     expect(onGenerate).toHaveBeenCalledTimes(1);
   });
 
+  it('threads the standalone JD input and with-JD action through the empty state', () => {
+    const onGenerate = vi.fn();
+    const onGenerateWithJobDescription = vi.fn();
+    const onJobDescriptionChange = vi.fn();
+    render(
+      <InterviewPrepView
+        interviewPrep={null}
+        isGenerating={false}
+        onGenerate={onGenerate}
+        isTailoredResume={false}
+        showJobDescription
+        jobDescription="Need Kubernetes"
+        onJobDescriptionChange={onJobDescriptionChange}
+        onGenerateWithJobDescription={onGenerateWithJobDescription}
+      />
+    );
+
+    const textarea = screen.getByLabelText('builder.generatePrompt.jobDescriptionLabel');
+    expect(textarea).toHaveValue('Need Kubernetes');
+    fireEvent.change(textarea, { target: { value: 'Need FastAPI' } });
+    expect(onJobDescriptionChange).toHaveBeenCalledWith('Need FastAPI');
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /builder\.generatePrompt\.generateWithJd/ })
+    );
+    expect(onGenerateWithJobDescription).toHaveBeenCalledTimes(1);
+
+    // The resume-only action stays available alongside the JD-targeted one.
+    fireEvent.click(
+      screen.getByRole('button', { name: /builder\.generatePrompt\.generateWithoutJd/ })
+    );
+    expect(onGenerate).toHaveBeenCalledTimes(1);
+  });
+
   it('renders loading and error states in the empty view', () => {
     render(
       <InterviewPrepView

@@ -416,9 +416,15 @@ templates (components under `apps/frontend/components/resume/`):
   and `外语水平` joins `additional.languages` with `、`. Labels come from
   `PersonalInfoLabels` (`lib/utils/resume-headings.ts`, i18n keyed under
   `resume.personalInfo.*`) and are plumbed through the viewer page, print
-  page, and `PaginatedPreview`. Website / LinkedIn / GitHub are not
-  labeled facts; they stay on a separate links row so imported links are
-  never dropped.
+  page, and `PaginatedPreview`. Website / LinkedIn / GitHub stay on their
+  own links row (or the contact row / sidebar in other templates), each
+  prefixed with its localized label (个人网站 / 领英 / GitHub) and rendered
+  as a clickable anchor even when the stored value is an absolute
+  `https://…` URL; the anchor text strips the protocol / `www.` prefix.
+  The DOCX export mirrors the same contract in one borderless
+  three-column header grid: facts occupy one labeled `label：value` cell
+  each (so Word can never split a label from its value across lines), and
+  the personal links occupy their own labeled, muted-gray row.
 - **Language proficiency never renders under 专业技能 (swiss-single).**
   `additional.languages` (英语 CET-6 / 日语 N1 / 雅思…) feeds only the
   header fact grid as 外语水平; the early `additional` slot (heading

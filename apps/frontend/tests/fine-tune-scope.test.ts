@@ -255,6 +255,26 @@ describe('fine-tune custom_<key> tokens', () => {
     expect(isCustomSectionToken('customSections')).toBe(false);
   });
 
+  it('accepts every supported-locale script in custom keys without unicode property escapes', () => {
+    // The ES2017 build cannot use \p{L}/\p{N}; these lock the explicit
+    // character ranges that replaced them (Latin accents, kana, Hangul, CJK).
+    for (const token of [
+      'custom_café_2',
+      'custom_やる気',
+      'custom_이력서_1',
+      'custom_Опыт.1',
+      'custom_Εμπειρία-α',
+    ]) {
+      expect(isValidTargetToken(token)).toBe(true);
+      expect(customKeyFromToken(token)).toBe(token.slice('custom_'.length));
+    }
+    // Whitespace and emoji stay outside the key grammar, mirroring the
+    // backend custom_[\w.-]+ gate.
+    for (const bad of ['custom_foo bar', 'custom_⭐️']) {
+      expect(isValidTargetToken(bad)).toBe(false);
+    }
+  });
+
   it('builds tokens and decodes the key exactly once (double prefix round-trip)', () => {
     expect(customSectionToken('publications')).toBe('custom_publications');
     expect(customSectionToken('custom_1')).toBe('custom_custom_1');

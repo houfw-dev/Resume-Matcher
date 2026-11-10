@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { render, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import {
   DiagnosisReportView,
   type FilterMode,
@@ -56,13 +56,18 @@ function makeReport(itemOverrides: Partial<DiagnosisReport['items'][number]>): D
   } satisfies DiagnosisReport;
 }
 
-function renderView(report: DiagnosisReport, filter: FilterMode = 'all') {
+function renderView(
+  report: DiagnosisReport,
+  filter: FilterMode = 'all',
+  onFixInBuilder?: (itemId: number) => void
+) {
   return render(
     <DiagnosisReportView
       report={report}
       filter={filter}
       onFilterChange={vi.fn()}
       ratingLabel={(rating) => rating}
+      onFixInBuilder={onFixInBuilder}
       t={t}
     />
   );
@@ -134,5 +139,48 @@ describe('DiagnosisReportView — problem description and fix as ordered lists',
   it('renders no finding blocks when evidence and suggestion are empty', () => {
     const { container } = renderView(makeReport({ rating: 'conform' }));
     expect(container.querySelectorAll('ol')).toHaveLength(0);
+  });
+});
+
+describe('DiagnosisReportView — fix-in-builder CTA', () => {
+  it('shows the CTA for a partial item mapped to one builder section and fires with its id', () => {
+    const onFixInBuilder = vi.fn();
+    // Default fixture item is id 9 (项目经验 → personalProjects) rated partial.
+    renderView(makeReport({}), 'all', onFixInBuilder);
+
+    const button = screen.getByRole('button', { name: 'diagnosis.fixInBuilder' });
+    fireEvent.click(button);
+    expect(onFixInBuilder).toHaveBeenCalledTimes(1);
+    expect(onFixInBuilder).toHaveBeenCalledWith(9);
+  });
+
+  it('shows the CTA for nonconform items as well', () => {
+    const onFixInBuilder = vi.fn();
+    renderView(makeReport({ rating: 'nonconform' }), 'all', onFixInBuilder);
+
+    expect(screen.getByRole('button', { name: 'diagnosis.fixInBuilder' })).toBeInTheDocument();
+  });
+
+  it('never shows the CTA on conform or N/A items', () => {
+    const onFixInBuilder = vi.fn();
+    const conformView = renderView(makeReport({ rating: 'conform' }), 'all', onFixInBuilder);
+    expect(conformView.queryByRole('button', { name: 'diagnosis.fixInBuilder' })).toBeNull();
+    conformView.unmount();
+
+    const naView = renderView(makeReport({ rating: 'na' }), 'all', onFixInBuilder);
+    expect(naView.queryByRole('button', { name: 'diagnosis.fixInBuilder' })).toBeNull();
+  });
+
+  it('hides the CTA on problem items without a single owning section', () => {
+    const onFixInBuilder = vi.fn();
+    // id 13 (时间线自洽) spans education + work: no canonical owner → no CTA.
+    renderView(makeReport({ id: 13, rating: 'partial' }), 'all', onFixInBuilder);
+
+    expect(screen.queryByRole('button', { name: 'diagnosis.fixInBuilder' })).toBeNull();
+  });
+
+  it('renders no CTA when the host does not provide the callback', () => {
+    renderView(makeReport({}));
+    expect(screen.queryByRole('button', { name: 'diagnosis.fixInBuilder' })).toBeNull();
   });
 });

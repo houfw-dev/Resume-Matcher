@@ -115,9 +115,9 @@ export default function ApiKeyMenu(): React.ReactElement {
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder={t('settings.llmConfiguration.apiKeyPlaceholder')}
-              className="mt-1 w-full rounded-none border-2 border-black bg-background px-3 py-2 text-sm text-black focus:border-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-700"
+              className="mt-1 w-full rounded-none border-2 border-black bg-background px-3 py-2 text-sm text-black focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
-            {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
+            {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
             <div className="mt-4 flex items-center justify-between gap-2">
               <button
                 type="button"
@@ -133,14 +133,14 @@ export default function ApiKeyMenu(): React.ReactElement {
                 className={`rounded-none border-2 border-black px-4 py-2 text-xs font-semibold transition-all ${
                   status === 'saving'
                     ? 'bg-steel-grey text-ink-soft cursor-wait'
-                    : 'bg-blue-700 text-white shadow-sw-sm hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none'
+                    : 'bg-primary text-white shadow-sw-sm hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none'
                 }`}
               >
                 {status === 'saving' ? t('common.saving') : t('common.save')}
               </button>
             </div>
             {status === 'saved' ? (
-              <p className="mt-2 text-xs text-green-700 font-medium">
+              <p className="mt-2 text-xs text-success font-medium">
                 {t('settings.apiKeyMenu.savedMessage')}
               </p>
             ) : null}

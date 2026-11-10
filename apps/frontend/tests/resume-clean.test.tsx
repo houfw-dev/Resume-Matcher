@@ -34,4 +34,42 @@ describe('ResumeClean', () => {
     expect(screen.getByText('+91-700')).toBeInTheDocument();
     expect(container.querySelector('a[href^="tel:"]')).toBeNull();
   });
+
+  it('prefixes website / linkedin / github links with their localized labels', () => {
+    const linkedData: ResumeData = {
+      ...(data as object),
+      personalInfo: {
+        name: '王浩',
+        website: 'https://fengba.blog.csdn.net/',
+        linkedin: 'linkedin.com/in/wanghao',
+        github: 'github.com/wanghao',
+      },
+    } as ResumeData;
+
+    render(
+      <ResumeClean
+        data={linkedData}
+        personalInfoLabels={{
+          website: '个人网站',
+          linkedin: '领英',
+          github: 'GitHub',
+        }}
+      />
+    );
+
+    // Absolute URLs keep their href and render with protocol stripped as the
+    // anchor text; bare hostnames are promoted to clickable https URLs.
+    const cases: Array<[string, string, string]> = [
+      ['个人网站', 'fengba.blog.csdn.net/', 'https://fengba.blog.csdn.net/'],
+      ['领英', 'linkedin.com/in/wanghao', 'https://linkedin.com/in/wanghao'],
+      ['GitHub', 'github.com/wanghao', 'https://github.com/wanghao'],
+    ];
+    for (const [label, anchorName, expectedHref] of cases) {
+      const anchor = screen.getByRole('link', { name: anchorName });
+      const wrapper = anchor.parentElement!;
+      expect(wrapper.textContent).toContain(label);
+      expect(wrapper.querySelector('span')?.textContent).toBe(label);
+      expect(anchor.getAttribute('href')).toBe(expectedHref);
+    }
+  });
 });

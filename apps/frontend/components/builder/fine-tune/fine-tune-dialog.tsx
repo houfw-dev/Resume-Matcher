@@ -211,7 +211,7 @@ export const FineTuneDialog: React.FC<FineTuneDialogProps> = ({
 
         {isGenerating ? (
           <div className="p-10 flex flex-col items-center gap-4" role="status" aria-live="polite">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-700" aria-hidden="true" />
+            <Loader2 className="w-8 h-8 animate-spin text-primary" aria-hidden="true" />
             <p className="font-mono text-xs uppercase tracking-wider text-ink-soft text-center">
               {t('fineTune.generating.body')}
             </p>
@@ -398,7 +398,7 @@ export const FineTuneDialog: React.FC<FineTuneDialogProps> = ({
                   maxLength={MAX_INSTRUCTION_LENGTH}
                   rows={3}
                   placeholder={t('fineTune.dialog.instructionPlaceholder')}
-                  className="w-full rounded-none border border-black bg-white p-3 text-sm font-sans resize-y focus:outline-none focus:ring-2 focus:ring-blue-700"
+                  className="w-full rounded-none border border-black bg-white p-3 text-sm font-sans resize-y focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 <div className="text-right font-mono text-[10px] text-steel-grey">
                   {instruction.length}/{MAX_INSTRUCTION_LENGTH}
@@ -408,7 +408,7 @@ export const FineTuneDialog: React.FC<FineTuneDialogProps> = ({
               {error && (
                 <div
                   role="alert"
-                  className="border-2 border-red-600 bg-red-50 px-4 py-3 flex items-start gap-2"
+                  className="border-2 border-destructive bg-red-50 px-4 py-3 flex items-start gap-2"
                 >
                   <AlertTriangle className="w-4 h-4 text-red-700 mt-0.5 shrink-0" />
                   <p className="text-sm text-red-800">{error}</p>
@@ -451,7 +451,7 @@ const ScopeOption: React.FC<{
       name="fine-tune-scope"
       checked={checked}
       onChange={onChange}
-      className="mt-1 h-4 w-4 accent-blue-700"
+      className="mt-1 h-4 w-4 accent-primary"
     />
     <span>
       <span className="block font-sans text-sm font-medium">{label}</span>
@@ -468,9 +468,9 @@ const CheckboxMark: React.FC<{ checked: boolean; partial?: boolean }> = ({
     aria-hidden="true"
     className={`w-5 h-5 border-2 shrink-0 flex items-center justify-center ${
       checked
-        ? 'border-blue-700 bg-blue-700'
+        ? 'border-primary bg-primary'
         : partial
-          ? 'border-blue-700 bg-white'
+          ? 'border-primary bg-white'
           : 'border-black bg-white'
     }`}
   >
@@ -480,7 +480,7 @@ const CheckboxMark: React.FC<{ checked: boolean; partial?: boolean }> = ({
       </svg>
     )}
     {/* Partial selection: some label sub-modules of this entry are checked. */}
-    {!checked && partial && <span className="w-2 h-2 bg-blue-700" aria-hidden="true" />}
+    {!checked && partial && <span className="w-2 h-2 bg-primary" aria-hidden="true" />}
   </span>
 );
 

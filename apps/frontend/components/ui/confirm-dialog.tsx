@@ -37,6 +37,8 @@ export interface ConfirmDialogProps {
   onConfirm: () => void;
   onCancel?: () => void;
   showCancelButton?: boolean;
+  /** Optional body content rendered between the header and the error block. */
+  children?: React.ReactNode;
 }
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -54,6 +56,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onConfirm,
   onCancel,
   showCancelButton = true,
+  children,
 }) => {
   const { t } = useTranslations();
   const finalConfirmLabel = confirmLabel ?? t('common.confirm');
@@ -76,32 +79,32 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   const variantStyles = {
     danger: {
       icon: (
-        <div className="w-12 h-12 border-2 border-red-600 bg-red-50 flex items-center justify-center">
-          <span className="text-red-600 text-2xl font-bold">!</span>
+        <div className="w-12 h-12 border-2 border-destructive bg-red-50 flex items-center justify-center">
+          <span className="text-destructive text-2xl font-bold">!</span>
         </div>
       ),
       buttonVariant: 'destructive' as const,
     },
     warning: {
       icon: (
-        <div className="w-12 h-12 border-2 border-orange-500 bg-orange-50 flex items-center justify-center">
-          <span className="text-orange-500 text-2xl font-bold">!</span>
+        <div className="w-12 h-12 border-2 border-warning bg-orange-50 flex items-center justify-center">
+          <span className="text-warning text-2xl font-bold">!</span>
         </div>
       ),
       buttonVariant: 'warning' as const,
     },
     success: {
       icon: (
-        <div className="w-12 h-12 border-2 border-green-700 bg-green-50 flex items-center justify-center">
-          <span className="text-green-700 text-2xl font-bold">&#10003;</span>
+        <div className="w-12 h-12 border-2 border-success bg-green-50 flex items-center justify-center">
+          <span className="text-success text-2xl font-bold">&#10003;</span>
         </div>
       ),
       buttonVariant: 'success' as const,
     },
     default: {
       icon: (
-        <div className="w-12 h-12 border-2 border-blue-700 bg-blue-50 flex items-center justify-center">
-          <span className="text-blue-700 text-2xl font-bold">?</span>
+        <div className="w-12 h-12 border-2 border-primary bg-blue-50 flex items-center justify-center">
+          <span className="text-primary text-2xl font-bold">?</span>
         </div>
       ),
       buttonVariant: 'default' as const,
@@ -132,9 +135,10 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             </div>
           </div>
         </DialogHeader>
+        {children && <div className="px-6 pb-4">{children}</div>}
         {errorMessage && (
           <div className="px-6 pb-4">
-            <div className="border-2 border-red-600 bg-red-50 p-3 font-mono text-xs text-red-700 max-h-60 overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
+            <div className="border-2 border-destructive bg-red-50 p-3 font-mono text-xs text-red-700 max-h-60 overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
               {errorMessage}
             </div>
           </div>

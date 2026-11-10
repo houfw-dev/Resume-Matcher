@@ -188,8 +188,8 @@ POST /api/v1/jobs/upload
 ## Application Tracker
 
 ```
-GET /api/v1/applications
-├── db.list_applications()
+GET /api/v1/applications[?resume_id=<id>]
+├── db.list_applications(resume_id=...)   # optional filter: resume_id OR master_resume_id match
 └── Return {columns}        # grouped by the 7 status keys (all present):
                             #   saved/applied/no_response/response/interview/accepted/rejected
 

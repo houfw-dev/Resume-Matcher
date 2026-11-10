@@ -20,6 +20,11 @@ interface InterviewPrepViewProps {
   canGenerate?: boolean;
   unavailableMessage?: string | null;
   className?: string;
+  /** Standalone resumes can paste an ad-hoc JD for role-targeted generation. */
+  showJobDescription?: boolean;
+  jobDescription?: string;
+  onJobDescriptionChange?: (value: string) => void;
+  onGenerateWithJobDescription?: () => void;
 }
 
 function Section({
@@ -34,7 +39,7 @@ function Section({
   return (
     <section className="border-2 border-black bg-white p-4 space-y-3">
       <div className="flex items-center gap-2 border-b border-black/10 pb-2">
-        <Icon className="w-4 h-4 text-blue-700" />
+        <Icon className="w-4 h-4 text-primary" />
         <h3 className="font-mono text-sm font-bold uppercase tracking-wider">{title}</h3>
       </div>
       {children}
@@ -48,7 +53,7 @@ function StringList({ items }: { items: string[] }) {
     <ul className="space-y-2">
       {items.map((item, index) => (
         <li key={`${item}-${index}`} className="flex gap-2 text-sm leading-relaxed text-ink-soft">
-          <span className="mt-2 h-1.5 w-1.5 shrink-0 bg-blue-700" />
+          <span className="mt-2 h-1.5 w-1.5 shrink-0 bg-primary" />
           <span>{item}</span>
         </li>
       ))}
@@ -66,7 +71,7 @@ function QuestionList({ items }: { items: InterviewPrepQuestion[] }) {
         <div key={`${item.question}-${index}`} className="border border-black bg-paper-tint p-3">
           <p className="font-mono text-sm font-bold leading-relaxed">{item.question}</p>
           {item.focus_area && (
-            <p className="mt-2 text-xs font-mono uppercase tracking-wide text-blue-700">
+            <p className="mt-2 text-xs font-mono uppercase tracking-wide text-primary">
               {t('interviewPrep.focusArea')}: {item.focus_area}
             </p>
           )}
@@ -122,6 +127,10 @@ export function InterviewPrepView({
   canGenerate = true,
   unavailableMessage,
   className,
+  showJobDescription = false,
+  jobDescription = '',
+  onJobDescriptionChange,
+  onGenerateWithJobDescription,
 }: InterviewPrepViewProps) {
   const { t } = useTranslations();
 
@@ -129,28 +138,49 @@ export function InterviewPrepView({
     return (
       <div className={className}>
         {error && (
-          <div className="mb-4 flex items-start gap-3 border-2 border-red-700 bg-red-50 p-4 text-red-900">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <p className="text-sm font-mono leading-relaxed">{error}</p>
+          <div className="mb-4 flex items-start gap-3 border border-destructive bg-[#FEF2F2] p-4">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+            <p className="font-mono text-sm leading-relaxed text-destructive">{error}</p>
           </div>
         )}
         {isTailoredResume && !canGenerate ? (
-          <div className="flex flex-col items-center justify-center min-h-[400px] p-12 text-center">
-            <div className="w-16 h-16 border-2 border-amber-700 bg-amber-50 flex items-center justify-center mb-6">
-              <AlertTriangle className="w-8 h-8 text-amber-700" />
+          // Same workbench-card shell as GeneratePrompt, so the three
+          // attachment tabs share one visual language even when generation is
+          // unavailable: header band, info rail, contextual note, no actions.
+          <div className="flex min-h-[360px] items-center justify-center p-6 md:p-10">
+            <div className="w-full max-w-4xl border border-black bg-white shadow-sw-default">
+              <div className="flex items-center gap-2 border-b border-black bg-[#F5F5F0] px-5 py-2.5">
+                <MessageSquareText className="h-4 w-4 shrink-0 text-warning" />
+                <span className="font-mono text-xs font-bold uppercase tracking-wider">
+                  {t('interviewPrep.title')}
+                </span>
+              </div>
+              <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                <div className="flex flex-col gap-3 border-b border-black p-5 md:border-b-0 md:border-r">
+                  <AlertTriangle className="h-5 w-5 text-warning" />
+                  <h3 className="font-serif text-lg font-bold leading-snug">
+                    {t('interviewPrep.unavailableTitle')}
+                  </h3>
+                </div>
+                <div className="p-5">
+                  <div className="border border-warning bg-[#FFF7ED] p-4">
+                    <p className="font-mono text-xs leading-relaxed text-ink-soft">
+                      {unavailableMessage ?? t('interviewPrep.missingContextDescription')}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
-            <h3 className="font-mono text-sm font-bold uppercase tracking-wider text-ink-soft mb-3">
-              {t('interviewPrep.unavailableTitle')}
-            </h3>
-            <p className="font-mono text-xs text-steel-grey max-w-md leading-relaxed">
-              {unavailableMessage ?? t('interviewPrep.missingContextDescription')}
-            </p>
           </div>
         ) : (
           <GeneratePrompt
             type="interview-prep"
             isGenerating={isGenerating}
             onGenerate={onGenerate}
+            showJobDescription={showJobDescription}
+            jobDescription={jobDescription}
+            onJobDescriptionChange={onJobDescriptionChange}
+            onGenerateWithJobDescription={onGenerateWithJobDescription}
           />
         )}
       </div>
@@ -160,15 +190,15 @@ export function InterviewPrepView({
   return (
     <div className={cn('space-y-4 p-6', className)}>
       {error && (
-        <div className="flex items-start gap-3 border-2 border-red-700 bg-red-50 p-4 text-red-900">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <p className="text-sm font-mono leading-relaxed">{error}</p>
+        <div className="flex items-start gap-3 border border-destructive bg-[#FEF2F2] p-4">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <p className="font-mono text-sm leading-relaxed text-destructive">{error}</p>
         </div>
       )}
       {isTailoredResume && !canGenerate && (
-        <div className="flex items-start gap-3 border-2 border-amber-700 bg-amber-50 p-4 text-amber-900">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <p className="text-sm font-mono leading-relaxed">
+        <div className="flex items-start gap-3 border border-warning bg-[#FFF7ED] p-4">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+          <p className="font-mono text-sm leading-relaxed text-ink-soft">
             {unavailableMessage ?? t('interviewPrep.missingContextDescription')}
           </p>
         </div>

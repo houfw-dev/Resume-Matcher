@@ -40,7 +40,7 @@ export const AdditionalForm: React.FC<AdditionalFormProps> = ({ data, onChange }
 
   return (
     <div className="space-y-6">
-      <p className="font-mono text-xs uppercase tracking-wider text-blue-700">
+      <p className="font-mono text-xs uppercase tracking-wider text-primary">
         {t('builder.additionalForm.instructions')}
       </p>
 
@@ -58,7 +58,7 @@ export const AdditionalForm: React.FC<AdditionalFormProps> = ({ data, onChange }
             onChange={(e) => handleArrayChange('technicalSkills', e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('builder.additionalForm.placeholders.technicalSkills')}
-            className="min-h-[120px] text-black rounded-none border-black bg-white focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700"
+            className="min-h-[120px] text-black rounded-none border-black bg-white focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary"
           />
         </div>
         <div className="space-y-2">
@@ -74,7 +74,7 @@ export const AdditionalForm: React.FC<AdditionalFormProps> = ({ data, onChange }
             onChange={(e) => handleArrayChange('languages', e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('builder.additionalForm.placeholders.languages')}
-            className="min-h-[120px] text-black rounded-none border-black bg-white focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700"
+            className="min-h-[120px] text-black rounded-none border-black bg-white focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary"
           />
         </div>
         <div className="space-y-2">
@@ -90,7 +90,7 @@ export const AdditionalForm: React.FC<AdditionalFormProps> = ({ data, onChange }
             onChange={(e) => handleArrayChange('certificationsTraining', e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('builder.additionalForm.placeholders.certifications')}
-            className="min-h-[120px] text-black rounded-none border-black bg-white focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700"
+            className="min-h-[120px] text-black rounded-none border-black bg-white focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary"
           />
         </div>
         <div className="space-y-2">
@@ -106,7 +106,7 @@ export const AdditionalForm: React.FC<AdditionalFormProps> = ({ data, onChange }
             onChange={(e) => handleArrayChange('awards', e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('builder.additionalForm.placeholders.awards')}
-            className="min-h-[120px] text-black rounded-none border-black bg-white focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700"
+            className="min-h-[120px] text-black rounded-none border-black bg-white focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary"
           />
         </div>
       </div>

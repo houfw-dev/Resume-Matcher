@@ -399,6 +399,7 @@ describe('buildDescriptionBlocks', () => {
     expect(blocks[1]).toEqual({
       kind: 'list',
       indented: true,
+      flush: false,
       rows: [
         { desc: '后端：Java、Go', numbered: true },
         { desc: 'Docker', numbered: true },
@@ -946,5 +947,114 @@ describe('nested heads inside duty/highlight modules', () => {
       { desc: '架构演进与技术债务治理', numbered: false },
       { desc: '负责架构设计。', numbered: true },
     ]);
+  });
+
+  it('renders 项目成效 as a peer module label instead of a nested head of 项目亮点', () => {
+    // Real upload (resume de8ce72b): in the source PDF 技术栈/项目背景/我的职责/
+    // 项目亮点/项目成效 are same-level headings. The renderer used to treat the
+    // unknown 项目成效： heading as a bold numbered point ("4.") inside the
+    // 项目亮点 module, with its prose numbered "4.1". Outcome/effectiveness
+    // labels are known sub-labels, so they open their own peer module instead.
+    const blocks = buildDescriptionBlocks(
+      [
+        '项目亮点：',
+        '使用 Scala 编写 Spark Streaming 作业承接多源数据采集。',
+        '用 Spark SQL 构建格式校验与逻辑校验两层规则。',
+        '将报送结果写入 HBase，兼顾批量写入性能与秒级查询。',
+        '项目成效：',
+        '平台稳定支撑多家金融机构的数据报送，错报率下降约 70%。',
+      ],
+      ['label', 'bullet', 'bullet', 'bullet', 'label', 'plain'],
+      { canonicalizeLabels: true }
+    );
+
+    expect(blocks.map((block) => block.kind)).toEqual(['label', 'list', 'label', 'list']);
+    expect(blocks[0]).toMatchObject({ kind: 'label', desc: '项目亮点：' });
+    // The big-four module keeps its numbered list; the peer outcome module
+    // opens a FLUSH list whose unnumbered prose aligns with the label edge.
+    if (blocks[1].kind !== 'list' || blocks[3].kind !== 'list') {
+      throw new Error('expected two list blocks');
+    }
+    expect(blocks[1].flush).toBe(false);
+    expect(blocks[3].flush).toBe(true);
+    // 项目成效 keeps its verbatim name: it is a peer label, never canonicalized
+    // into 项目亮点.
+    expect(blocks[2]).toEqual({ kind: 'label', desc: '项目成效：', descriptive: false });
+    // The outcome prose is an ordinary unnumbered row of its own module — not a
+    // bold head and not a level-2 sub-point of 项目亮点.
+    expect(blocks[3].rows).toEqual([
+      { desc: '平台稳定支撑多家金融机构的数据报送，错报率下降约 70%。', numbered: false },
+    ]);
+    expect(blocks[3].rows.some((row) => row.bold || row.level === 2)).toBe(false);
+  });
+
+  it('treats every 成效/效果 outcome alias as a peer module label', () => {
+    for (const outcomeLabel of ['项目效果：', '工作成效：', '落地效果：', '量化成效：']) {
+      const blocks = buildDescriptionBlocks(
+        ['项目亮点：', '完成核心链路重构。', outcomeLabel, '交付周期缩短 40%。'],
+        ['label', 'bullet', 'label', 'plain'],
+        { canonicalizeLabels: true }
+      );
+      expect(blocks.map((block) => block.kind)).toEqual(['label', 'list', 'label', 'list']);
+      expect(blocks[2]).toMatchObject({ kind: 'label', desc: outcomeLabel });
+      if (blocks[3].kind !== 'list') throw new Error('expected list block');
+      expect(blocks[3].flush).toBe(true);
+      expect(blocks[3].rows).toEqual([{ desc: '交付周期缩短 40%。', numbered: false }]);
+    }
+  });
+
+  it('keeps numbered rows inside a flush peer module while dropping only the empty gutter', () => {
+    // Real upload shape (e.g. 责任描述 peers seen in stored resumes): a
+    // non-big-four label can own bullets. Numbered rows keep their markers at
+    // the label edge; only unnumbered prose rows go flush.
+    const blocks = buildDescriptionBlocks(
+      [
+        '项目亮点：',
+        '完成核心链路重构。',
+        '责任描述：',
+        '参与异步任务链路重构，基于 RabbitMQ 实现任务异步处理。',
+        '参与流程引擎底层设计，支持可插拔的流程扩展。',
+      ],
+      ['label', 'bullet', 'label', 'bullet', 'plain'],
+      { canonicalizeLabels: true }
+    );
+    expect(blocks.map((block) => block.kind)).toEqual(['label', 'list', 'label', 'list']);
+    if (blocks[1].kind !== 'list' || blocks[3].kind !== 'list') {
+      throw new Error('expected two list blocks');
+    }
+    expect(blocks[1].flush).toBe(false);
+    expect(blocks[3].flush).toBe(true);
+    expect(blocks[3].rows).toEqual([
+      { desc: '参与异步任务链路重构，基于 RabbitMQ 实现任务异步处理。', numbered: true },
+      { desc: '参与流程引擎底层设计，支持可插拔的流程扩展。', numbered: false },
+    ]);
+  });
+
+  it('never marks big-four or loose lists flush, and stays non-flush off project sites', () => {
+    const projectBlocks = buildDescriptionBlocks(
+      ['项目职责：', '负责核心模块。', '项目背景：', '面向多系统重复建设问题。'],
+      ['label', 'bullet', 'label', 'plain'],
+      { canonicalizeLabels: true }
+    );
+    // 项目职责 list and the descriptive body are neither peer-flush.
+    if (projectBlocks[1].kind !== 'list') throw new Error('expected duty list');
+    expect(projectBlocks[1].flush).toBe(false);
+    expect(projectBlocks[3].kind).toBe('body');
+
+    // Loose bullets with no label above them are never flush.
+    const loose = buildDescriptionBlocks(['第一项。', '第二项。'], ['bullet', 'bullet'], {
+      canonicalizeLabels: true,
+    });
+    if (loose[0].kind !== 'list') throw new Error('expected loose list');
+    expect(loose[0].flush).toBe(false);
+
+    // Work/custom sites (no canonicalize flag) keep every list non-flush even
+    // when a peer label name appears.
+    const workBlocks = buildDescriptionBlocks(
+      ['项目成效：', '交付周期缩短 40%。'],
+      ['label', 'plain']
+    );
+    if (workBlocks[1].kind !== 'list') throw new Error('expected work list');
+    expect(workBlocks[1].flush).toBe(false);
   });
 });

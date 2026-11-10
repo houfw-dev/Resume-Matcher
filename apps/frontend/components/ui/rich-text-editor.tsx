@@ -85,7 +85,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       attributes: {
         class: cn(
           'outline-none prose prose-sm max-w-none',
-          'prose-strong:font-bold prose-em:italic prose-a:text-blue-700 prose-a:underline'
+          'prose-strong:font-bold prose-em:italic prose-a:text-primary prose-a:underline'
         ),
         style: `min-height: calc(${minHeight} - 24px)`,
       },
@@ -167,10 +167,10 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
         className={cn(
           'w-full border border-black bg-white',
           'px-3 py-2 text-sm text-black rounded-none',
-          'focus-within:ring-1 focus-within:ring-blue-700',
+          'focus-within:ring-1 focus-within:ring-primary',
           '[&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[36px]',
           '[&_.ProseMirror_p]:m-0',
-          '[&_.ProseMirror_a]:text-blue-700 [&_.ProseMirror_a]:underline'
+          '[&_.ProseMirror_a]:text-primary [&_.ProseMirror_a]:underline'
         )}
         style={{ minHeight }}
       >

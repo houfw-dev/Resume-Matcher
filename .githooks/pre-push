@@ -10,17 +10,21 @@
 #   3. frontend test suite        (vitest — runs when Node is available, else skipped)
 #   4. frontend typecheck         (tsc --noEmit — catches test fixtures that
 #                                  `next build` never sees)
+#   5. frontend lint              (eslint . — style/rule gate, never auto-fixes)
+#   6. frontend format check      (prettier --check . — read-only; run
+#                                  `npm run format` to fix, the gate never writes)
 #
 # Activate once per clone:   git config core.hooksPath .githooks
 # Bypass intentionally:      git push --no-verify     (e.g. docs-only / WIP branch)
 # Disable entirely:          git config --unset core.hooksPath
 #
 # Notes:
-#  - Both checks always run so you see ALL failures, not just the first.
+#  - All checks always run so you see ALL failures, not just the first.
 #  - The backend suite is ~8s and makes NO network/LLM calls (evals are opt-in).
-#  - The frontend vitest suite and typecheck run only when Node is on PATH (git
-#    hooks may run without nvm's node). A full `next build` is still NOT run
-#    here — it is slow, and `tsc --noEmit` covers the type surface it would.
+#  - The frontend Node checks run only when Node is on PATH and the local
+#    binaries exist (git hooks may run without nvm's node). A full `next build`
+#    is still NOT run here — it is slow, and `tsc --noEmit` covers the type
+#    surface it would.
 
 set -uo pipefail
 
@@ -77,6 +81,31 @@ if command -v node >/dev/null 2>&1 && [ -x "$TSC" ]; then
   fi
 else
   echo "  ⚠ node or tsc not available — skipping frontend typecheck" >&2
+fi
+
+# 5) Frontend lint (eslint .) — read-only; a gate must never rewrite source.
+ESLINT="$REPO_ROOT/apps/frontend/node_modules/.bin/eslint"
+if command -v node >/dev/null 2>&1 && [ -x "$ESLINT" ]; then
+  echo "▶ frontend : eslint ."
+  if ! ( cd "$REPO_ROOT/apps/frontend" && "$ESLINT" . ); then
+    echo "  ✗ frontend lint failed" >&2
+    status=1
+  fi
+else
+  echo "  ⚠ node or eslint not available — skipping frontend lint" >&2
+fi
+
+# 6) Frontend format check (prettier --check .) — read-only. Fix with
+#    `npm run format` in apps/frontend; the gate itself never writes files.
+PRETTIER="$REPO_ROOT/apps/frontend/node_modules/.bin/prettier"
+if command -v node >/dev/null 2>&1 && [ -x "$PRETTIER" ]; then
+  echo "▶ frontend : prettier --check ."
+  if ! ( cd "$REPO_ROOT/apps/frontend" && "$PRETTIER" --check . ); then
+    echo "  ✗ frontend formatting failed — run 'npm run format' to fix" >&2
+    status=1
+  fi
+else
+  echo "  ⚠ node or prettier not available — skipping frontend format check" >&2
 fi
 
 printf '─────────────────────────────────────────────────────────\n'

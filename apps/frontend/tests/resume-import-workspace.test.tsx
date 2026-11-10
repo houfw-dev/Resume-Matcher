@@ -157,9 +157,10 @@ describe('ResumeImportWorkspace upload dropzone', () => {
     uploadFromInput(pdfFile('big.pdf', 5 * 1024 * 1024));
 
     expect(apiFetchMock).not.toHaveBeenCalled();
-    // Still on the idle dropzone, with an inline validation error.
+    // Still on the idle dropzone, with an inline validation error rendered
+    // through the localized error key, not a hardcoded English sentence.
     expect(screen.getByRole('button', { name: 'dashboard.uploadResume' })).toBeInTheDocument();
-    expect(screen.getByText(/exceeds the maximum size/)).toBeInTheDocument();
+    expect(screen.getByText(/dashboard\.errors\.uploadErrors\.fileTooLarge/)).toBeInTheDocument();
   });
 });
 
@@ -182,10 +183,12 @@ describe('ResumeImportWorkspace upload error panel', () => {
 
     // useFileUpload mirrors the same failure into its errors array AND echoes
     // it through onUploadError; the workspace panel must show it once, not twice.
-    const messages = await screen.findAllByText(/Upload failed for legacy\.doc/);
+    const messages = await screen.findAllByText(/dashboard\.errors\.uploadErrors\.uploadFailed/);
     expect(messages).toHaveLength(1);
-    expect(messages[0]?.textContent).toContain('Status: 422');
-    expect(messages[0]?.textContent).toContain('Failed to parse document');
+    // The client UI gets a generic localized message; raw HTTP status text and
+    // server response bodies stay in the console, never on screen.
+    expect(screen.queryByText(/Status: 422/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Failed to parse document/)).not.toBeInTheDocument();
 
     // A rejected upload returns to the dropzone instead of entering processing.
     expect(screen.getByRole('button', { name: 'dashboard.uploadResume' })).toBeInTheDocument();

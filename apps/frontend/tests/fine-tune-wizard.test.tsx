@@ -364,17 +364,17 @@ describe('fine-tune wizard: scope dialog', () => {
 
     // The check must be VISIBLE: blue fill + white glyph. A regression left
     // the fill white, making the white checkmark impossible to see.
-    expect(checkboxMark(highlightsRow)).toHaveClass('bg-blue-700');
+    expect(checkboxMark(highlightsRow)).toHaveClass('bg-primary');
     const techStackRow = screen.getByRole('button', {
       name: 'fineTune.dialog.regions.techStack',
     });
-    expect(checkboxMark(techStackRow)).not.toHaveClass('bg-blue-700');
+    expect(checkboxMark(techStackRow)).not.toHaveClass('bg-primary');
 
     // The entry row shows the partial state (some regions checked): blue
     // border, white fill, inner blue square — not a filled check.
     const entryMark = checkboxMark(screen.getByRole('button', { name: 'Project X' }));
-    expect(entryMark).toHaveClass('border-blue-700');
-    expect(entryMark).not.toHaveClass('bg-blue-700');
+    expect(entryMark).toHaveClass('border-primary');
+    expect(entryMark).not.toHaveClass('bg-primary');
     expect(entryMark?.querySelector('span.w-2')).not.toBeNull();
 
     fireEvent.click(generateButton());
@@ -415,7 +415,7 @@ describe('fine-tune wizard: scope dialog', () => {
     // Exact name: the drill chevron's aria-label also contains "Project X".
     fireEvent.click(screen.getByRole('button', { name: 'Project X' }));
     expect(checkboxMark(screen.getByRole('button', { name: 'Project X' }))).toHaveClass(
-      'bg-blue-700'
+      'bg-primary'
     );
     expect(screen.queryByRole('button', { name: 'fineTune.dialog.regions.highlights' })).toBeNull();
     expect(

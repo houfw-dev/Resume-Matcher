@@ -108,7 +108,7 @@ export function ATSScoreCard({ atsScore }: ATSScoreCardProps) {
             {injectable_keywords.map((kw, i) => (
               <span
                 key={`injectable-${i}-${kw}`}
-                className="text-xs bg-blue-900/40 border border-blue-700/50 text-blue-300 rounded px-2 py-0.5"
+                className="text-xs bg-blue-900/40 border border-primary/50 text-blue-300 rounded px-2 py-0.5"
               >
                 {kw}
               </span>

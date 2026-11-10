@@ -233,6 +233,7 @@ const Resume: React.FC<ResumeProps> = ({
           data={displayData}
           showContactIcons={mergedSettings.showContactIcons}
           sectionHeadings={sectionHeadings}
+          personalInfoLabels={personalInfoLabels}
         />
       )}
       {mergedSettings.template === 'modern' && (
@@ -241,6 +242,7 @@ const Resume: React.FC<ResumeProps> = ({
           showContactIcons={mergedSettings.showContactIcons}
           additionalSectionLabels={additionalSectionLabels}
           sectionHeadings={sectionHeadings}
+          personalInfoLabels={personalInfoLabels}
         />
       )}
       {mergedSettings.template === 'modern-two-column' && (
@@ -249,6 +251,7 @@ const Resume: React.FC<ResumeProps> = ({
           showContactIcons={mergedSettings.showContactIcons}
           sectionHeadings={sectionHeadings}
           fallbackLabels={fallbackLabels}
+          personalInfoLabels={personalInfoLabels}
         />
       )}
       {mergedSettings.template === 'latex' && (
@@ -257,6 +260,7 @@ const Resume: React.FC<ResumeProps> = ({
           showContactIcons={mergedSettings.showContactIcons}
           additionalSectionLabels={additionalSectionLabels}
           sectionHeadings={sectionHeadings}
+          personalInfoLabels={personalInfoLabels}
         />
       )}
       {mergedSettings.template === 'clean' && (
@@ -265,6 +269,7 @@ const Resume: React.FC<ResumeProps> = ({
           showContactIcons={mergedSettings.showContactIcons}
           additionalSectionLabels={additionalSectionLabels}
           sectionHeadings={sectionHeadings}
+          personalInfoLabels={personalInfoLabels}
         />
       )}
       {mergedSettings.template === 'vivid' && (
@@ -273,6 +278,7 @@ const Resume: React.FC<ResumeProps> = ({
           showContactIcons={mergedSettings.showContactIcons}
           sectionHeadings={sectionHeadings}
           fallbackLabels={fallbackLabels}
+          personalInfoLabels={personalInfoLabels}
         />
       )}
     </div>

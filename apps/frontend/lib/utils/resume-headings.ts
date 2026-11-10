@@ -16,7 +16,26 @@ export interface PersonalInfoLabels {
   phone: string;
   email: string;
   foreignLanguage: string;
+  website: string;
+  linkedin: string;
+  github: string;
 }
+
+/** English fallbacks used when a template renders without localized labels. */
+export const DEFAULT_PERSONAL_INFO_LABELS: PersonalInfoLabels = {
+  gender: 'Gender',
+  age: 'Age',
+  educationLevel: 'Education',
+  workYears: 'Years of Experience',
+  jobIntention: 'Job Objective',
+  desiredCity: 'Desired City',
+  phone: 'Phone',
+  email: 'Email',
+  foreignLanguage: 'Foreign Languages',
+  website: 'Website',
+  linkedin: 'LinkedIn',
+  github: 'GitHub',
+};
 
 export interface ResumeHeadingProps {
   personalInfoLabels: PersonalInfoLabels;
@@ -52,6 +71,9 @@ export function buildResumeHeadingProps(t: TranslationFunction): ResumeHeadingPr
       phone: t('resume.personalInfo.phone'),
       email: t('resume.personalInfo.email'),
       foreignLanguage: t('resume.personalInfo.foreignLanguage'),
+      website: t('resume.personalInfo.website'),
+      linkedin: t('resume.personalInfo.linkedin'),
+      github: t('resume.personalInfo.github'),
     },
     additionalSectionLabels: {
       technicalSkills: t('resume.additionalLabels.technicalSkills'),

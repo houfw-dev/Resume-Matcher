@@ -4,9 +4,9 @@
 
 ## Current State
 
-- UI uses `next-intl` with locale files in `messages/`
+- UI uses a plain JSON translation engine (no external i18n lib) with locale files in `messages/`
 - Content language preference stored via `LanguageProvider`
-- Supported: en, es, zh, ja
+- Supported: en, es, zh, ja, pt, fr, ko (7 locales; the Portuguese file is `pt-BR.json`, imported as `pt`)
 
 ## Translation File Location
 
@@ -15,7 +15,10 @@ apps/frontend/messages/
 ├── en.json
 ├── es.json
 ├── zh.json
-└── ja.json
+├── ja.json
+├── pt-BR.json
+├── fr.json
+└── ko.json
 ```
 
 ## Adding New Locale
@@ -23,9 +26,11 @@ apps/frontend/messages/
 1. Create `messages/{locale}.json`
 2. Add locale to `i18n/config.ts`:
    ```typescript
-   export const locales = ['en', 'es', 'zh', 'ja', 'de'] as const;
+   export const locales = ['en', 'es', 'zh', 'ja', 'pt', 'fr', 'ko'] as const;
    ```
-3. Add to `SUPPORTED_LANGUAGES` in backend `config.py`
+3. Add to `SUPPORTED_LANGUAGES` in backend `routers/config.py`
+
+> The full seven-step checklist (loader map, `SupportedLanguage` union, `LANGUAGE_NAMES`, parity test) lives in [i18n.md](i18n.md#adding-a-new-language).
 
 ## Translation Keys
 

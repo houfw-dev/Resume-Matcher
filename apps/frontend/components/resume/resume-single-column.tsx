@@ -15,6 +15,7 @@ import {
   LATE_CERTIFICATIONS_KEY,
 } from '@/lib/utils/section-order';
 import {
+  DEFAULT_PERSONAL_INFO_LABELS,
   resolveAdditionalModuleTitle,
   type LateAdditionalModuleKind,
   type PersonalInfoLabels,
@@ -35,18 +36,6 @@ interface ResumeSingleColumnProps {
   personalInfoLabels?: Partial<PersonalInfoLabels>;
   sectionHeadings?: Partial<ResumeSectionHeadings>;
 }
-
-const DEFAULT_PERSONAL_INFO_LABELS: PersonalInfoLabels = {
-  gender: 'Gender',
-  age: 'Age',
-  educationLevel: 'Education',
-  workYears: 'Years of Experience',
-  jobIntention: 'Job Objective',
-  desiredCity: 'Desired City',
-  phone: 'Phone',
-  email: 'Email',
-  foreignLanguage: 'Foreign Languages',
-};
 
 /** Split a list into consecutive rows of at most `size` items. */
 const chunk = <T,>(items: T[], size: number): T[][] => {
@@ -93,8 +82,14 @@ export const ResumeSingleColumn: React.FC<ResumeSingleColumnProps> = ({
     GitHub: <Github size={12} />,
   };
 
-  // Helper function to render contact details
-  const renderContactDetail = (label: string, value?: string, hrefPrefix: string = '') => {
+  // Helper function to render contact details. `displayLabel` renders a muted
+  // label before the value (e.g. 个人网站： https://…) for personal links.
+  const renderContactDetail = (
+    label: string,
+    value?: string,
+    hrefPrefix: string = '',
+    displayLabel?: string
+  ) => {
     if (!value) return null;
 
     let finalHrefPrefix = hrefPrefix;
@@ -107,10 +102,9 @@ export const ResumeSingleColumn: React.FC<ResumeSingleColumnProps> = ({
     }
 
     const href = finalHrefPrefix + value;
-    const isLink =
-      finalHrefPrefix.startsWith('http') ||
-      finalHrefPrefix.startsWith('mailto:') ||
-      finalHrefPrefix.startsWith('tel:');
+    // Test the composed href (not just the prefix): an already-absolute
+    // "https://…" value with an empty prefix must still render as a link.
+    const isLink = href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:');
 
     let displayText = value;
     if (isLink && (label === 'LinkedIn' || label === 'GitHub' || label === 'Website')) {
@@ -120,6 +114,7 @@ export const ResumeSingleColumn: React.FC<ResumeSingleColumnProps> = ({
     return (
       <span className="inline-flex items-center gap-1">
         {showContactIcons && contactIcons[label]}
+        {displayLabel && <span className={styles.infoLabel}>{displayLabel}</span>}
         {isLink ? (
           <a
             href={href}
@@ -176,12 +171,12 @@ export const ResumeSingleColumn: React.FC<ResumeSingleColumnProps> = ({
     });
   }
 
-  // Website / social links are not part of the labeled fact list, but stay
-  // available on their own row so imported links are never dropped.
+  // Website / social links stay on their own row, each prefixed with its
+  // localized label (个人网站 / 领英 / GitHub) so imported links are named.
   const linkItems = [
-    renderContactDetail('Website', personalInfo?.website),
-    renderContactDetail('LinkedIn', personalInfo?.linkedin),
-    renderContactDetail('GitHub', personalInfo?.github),
+    renderContactDetail('Website', personalInfo?.website, '', infoLabels.website),
+    renderContactDetail('LinkedIn', personalInfo?.linkedin, '', infoLabels.linkedin),
+    renderContactDetail('GitHub', personalInfo?.github, '', infoLabels.github),
   ].filter(Boolean);
 
   // Render a section based on its key

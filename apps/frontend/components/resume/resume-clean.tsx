@@ -12,8 +12,10 @@ import {
   LATE_CERTIFICATIONS_KEY,
 } from '@/lib/utils/section-order';
 import {
+  DEFAULT_PERSONAL_INFO_LABELS,
   resolveAdditionalModuleTitle,
   type LateAdditionalModuleKind,
+  type PersonalInfoLabels,
 } from '@/lib/utils/resume-headings';
 import { formatDateRange } from '@/lib/utils';
 import { DescriptionList } from './description-list';
@@ -27,6 +29,7 @@ interface ResumeCleanProps {
   showContactIcons?: boolean;
   additionalSectionLabels?: Partial<AdditionalSectionLabels>;
   sectionHeadings?: Partial<ResumeSectionHeadings>;
+  personalInfoLabels?: Partial<PersonalInfoLabels>;
 }
 
 /**
@@ -46,8 +49,14 @@ export const ResumeClean: React.FC<ResumeCleanProps> = ({
   showContactIcons = false,
   additionalSectionLabels,
   sectionHeadings,
+  personalInfoLabels,
 }) => {
   const { personalInfo, summary, workExperience, education, personalProjects, additional } = data;
+
+  const infoLabels: PersonalInfoLabels = {
+    ...DEFAULT_PERSONAL_INFO_LABELS,
+    ...personalInfoLabels,
+  };
 
   // Visible sections in canonical order plus the render-only late markers for
   // 培训与证书 / 荣誉奖项 (projected to the back by getRenderSections).
@@ -62,7 +71,13 @@ export const ResumeClean: React.FC<ResumeCleanProps> = ({
     GitHub: <Github size={12} />,
   };
 
-  const renderContactDetail = (label: string, value?: string, hrefPrefix: string = '') => {
+  // `displayLabel` renders a muted label before the value (e.g. 个人网站： …).
+  const renderContactDetail = (
+    label: string,
+    value?: string,
+    hrefPrefix: string = '',
+    displayLabel?: string
+  ) => {
     if (!value) return null;
 
     let finalHrefPrefix = hrefPrefix;
@@ -75,10 +90,9 @@ export const ResumeClean: React.FC<ResumeCleanProps> = ({
     }
 
     const href = finalHrefPrefix + value;
-    const isLink =
-      finalHrefPrefix.startsWith('http') ||
-      finalHrefPrefix.startsWith('mailto:') ||
-      finalHrefPrefix.startsWith('tel:');
+    // Test the composed href (not just the prefix): an already-absolute
+    // "https://…" value with an empty prefix must still render as a link.
+    const isLink = href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:');
 
     let displayText = value;
     if (isLink && (label === 'LinkedIn' || label === 'GitHub' || label === 'Website')) {
@@ -88,6 +102,7 @@ export const ResumeClean: React.FC<ResumeCleanProps> = ({
     return (
       <span className="inline-flex items-center gap-1">
         {showContactIcons && contactIcons[label]}
+        {displayLabel && <span className={baseStyles['text-muted']}>{displayLabel}</span>}
         {isLink ? (
           <a
             href={href}
@@ -108,9 +123,9 @@ export const ResumeClean: React.FC<ResumeCleanProps> = ({
     renderContactDetail('Location', personalInfo?.location),
     renderContactDetail('Phone', personalInfo?.phone),
     renderContactDetail('Email', personalInfo?.email, 'mailto:'),
-    renderContactDetail('LinkedIn', personalInfo?.linkedin),
-    renderContactDetail('GitHub', personalInfo?.github),
-    renderContactDetail('Website', personalInfo?.website),
+    renderContactDetail('LinkedIn', personalInfo?.linkedin, '', infoLabels.linkedin),
+    renderContactDetail('GitHub', personalInfo?.github, '', infoLabels.github),
+    renderContactDetail('Website', personalInfo?.website, '', infoLabels.website),
   ].filter(Boolean);
 
   // Single-line entry header: COMPANY | Role (left), Location | Dates (right).

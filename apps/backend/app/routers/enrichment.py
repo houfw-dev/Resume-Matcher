@@ -17,7 +17,7 @@ from app.ai_budget import (
     remaining_timeout,
 )
 from app.config_cache import get_content_language
-from app.database import DatabaseBusyError, db
+from app.database import DatabaseBusyError, ResumeNotFoundError, db
 from app.llm import complete_json
 from app.prompts.enrichment import (
     ANALYZE_RESUME_PROMPT,
@@ -496,6 +496,8 @@ async def apply_enhancements(
                 "processed_data": updated_data,
             },
         )
+    except ResumeNotFoundError as e:
+        raise HTTPException(status_code=404, detail="Resume not found") from e
     except DatabaseBusyError:
         raise
     except Exception as e:
@@ -943,6 +945,8 @@ async def apply_regenerated_items(
                 "processed_data": updated_data,
             },
         )
+    except ResumeNotFoundError as e:
+        raise HTTPException(status_code=404, detail="Resume not found") from e
     except DatabaseBusyError:
         raise
     except Exception as e:

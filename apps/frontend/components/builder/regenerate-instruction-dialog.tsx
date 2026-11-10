@@ -93,7 +93,7 @@ export const RegenerateInstructionDialog: React.FC<RegenerateInstructionDialogPr
 
         <div className="p-6 space-y-6">
           {error ? (
-            <div className="border border-red-600 bg-red-50 px-4 py-3">
+            <div className="border border-destructive bg-red-50 px-4 py-3">
               <p className="font-mono text-xs text-red-700">{resolveErrorMessage(error)}</p>
             </div>
           ) : null}

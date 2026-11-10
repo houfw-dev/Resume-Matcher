@@ -2,6 +2,7 @@
 
 import io
 import json
+import threading
 from urllib.parse import unquote
 
 import pytest
@@ -9,6 +10,7 @@ from docx import Document
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
+from app.routers import resumes
 from app.services.resume_docx import DOCX_MEDIA_TYPE
 
 
@@ -157,3 +159,34 @@ async def test_resume_docx_endpoint_falls_back_to_json_content(isolated_db: obje
 
     assert response.status_code == 200
     assert response.content[:4] == b"PK\x03\x04"
+
+
+@pytest.mark.asyncio
+async def test_resume_docx_build_runs_off_event_loop_thread(
+    isolated_db: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Synchronous python-docx generation must be offloaded via asyncio.to_thread
+    # so it never blocks the event loop.
+    created = await isolated_db.create_resume(  # type: ignore[attr-defined]
+        content="{}",
+        content_type="json",
+        processed_data=_processed_data(),
+        processing_status="ready",
+    )
+    real_builder = resumes.build_resume_docx
+    builder_thread: dict[str, int] = {}
+
+    def recording_builder(*args: object, **kwargs: object) -> bytes:
+        builder_thread["ident"] = threading.get_ident()
+        return real_builder(*args, **kwargs)
+
+    monkeypatch.setattr(resumes, "build_resume_docx", recording_builder)
+    loop_thread = threading.get_ident()
+
+    async with _client() as client:
+        response = await client.get(f"/api/v1/resumes/{created['resume_id']}/docx")
+
+    assert response.status_code == 200
+    assert response.content[:4] == b"PK\x03\x04"
+    assert "ident" in builder_thread
+    assert builder_thread["ident"] != loop_thread

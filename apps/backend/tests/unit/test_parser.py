@@ -29,6 +29,8 @@ from app.services.parser import (
     normalize_cjk_compat_deep,
     normalize_item_sub_labels,
     normalize_text_hygiene,
+    normalize_header_link_value,
+    sanitize_header_fact_value,
     parse_resume_to_json,
     reconcile_custom_section_shapes,
     repair_project_label_regions,
@@ -210,6 +212,133 @@ class TestBackfillPersonalInfoFromMarkdown:
         )
         assert result["personalInfo"] == {"gender": "", "educationLevel": ""}
         assert "additional" not in result
+
+    def test_blog_label_ends_work_years_span_and_backfills_website(self):
+        # Real upload (resume de8ce72b): an unrecognized "博客地址：" cell used
+        # to glue its Markdown link onto the verbatim workYears value.
+        markdown = (
+            "性 别：男 联系电话：15222165957 邮箱：3398905445@qq.com\n"
+            "工作年限：13年 博客地址：[fengba.blog.csdn.net]"
+            "(https://fengba.blog.csdn.net/)\n\n"
+            "**教育背景**\n陕西科技大学\n"
+        )
+        parsed: dict = {"personalInfo": {}}
+        result = backfill_personal_info_from_markdown(parsed, markdown)
+        info = result["personalInfo"]
+        assert info["workYears"] == "13年"
+        assert info["website"] == "https://fengba.blog.csdn.net/"
+
+    def test_existing_llm_website_is_not_overwritten(self):
+        markdown = (
+            "工作年限：13年 博客地址：[fengba.blog.csdn.net]"
+            "(https://fengba.blog.csdn.net/)\n\n◆教育背景\n"
+        )
+        parsed = {"personalInfo": {"website": "https://llm-kept.example.com"}}
+        result = backfill_personal_info_from_markdown(parsed, markdown)
+        assert result["personalInfo"]["website"] == "https://llm-kept.example.com"
+        assert result["personalInfo"]["workYears"] == "13年"
+
+    def test_bare_url_glued_to_work_years_is_truncated(self):
+        markdown = "工作年限：13年 https://fengba.blog.csdn.net/\n\n◆教育背景\n"
+        result = backfill_personal_info_from_markdown({"personalInfo": {}}, markdown)
+        assert result["personalInfo"]["workYears"] == "13年"
+
+    def test_embedded_spaced_label_glued_to_education_level_is_truncated(self):
+        # Real uploads (resume a3902761): next table cell "学 校：…" glued on.
+        markdown = "学 历：本科 学 校： 西安电子科技大学\n\n◆教育背景\n"
+        result = backfill_personal_info_from_markdown({"personalInfo": {}}, markdown)
+        assert result["personalInfo"]["educationLevel"] == "本科"
+
+    def test_linkedin_and_github_header_cells_are_backfilled(self):
+        markdown = (
+            "领英：[Wang Hao](https://www.linkedin.com/in/wanghao) "
+            "GitHub：github.com/wanghao\n\n◆工作经历\n"
+        )
+        result = backfill_personal_info_from_markdown({"personalInfo": {}}, markdown)
+        info = result["personalInfo"]
+        assert info["linkedin"] == "https://www.linkedin.com/in/wanghao"
+        # Bare hosts pass through: the render layer promotes them to https://.
+        assert info["github"] == "github.com/wanghao"
+
+    def test_english_website_label_is_recognized(self):
+        markdown = "Website: [blog](https://example.com/blog)\n\n◆工作经历\n"
+        result = backfill_personal_info_from_markdown({"personalInfo": {}}, markdown)
+        assert result["personalInfo"]["website"] == "https://example.com/blog"
+
+    def test_fact_values_with_internal_punctuation_survive(self):
+        # No colon/link inside a legitimate fact: comma-qualified values stay.
+        markdown = "工作年限：5年大型医院项目，3年电商\n\n◆工作经历\n"
+        result = backfill_personal_info_from_markdown({"personalInfo": {}}, markdown)
+        assert result["personalInfo"]["workYears"] == "5年大型医院项目，3年电商"
+
+
+class TestSanitizeHeaderFactValue:
+    def test_truncates_markdown_link_glue(self):
+        value = "13年 博客地址：[fengba.blog.csdn.net](https://fengba.blog.csdn.net/)"
+        assert sanitize_header_fact_value(value) == "13年"
+
+    def test_truncates_bare_url_glue(self):
+        assert sanitize_header_fact_value("13年 https://fengba.blog.csdn.net/") == "13年"
+
+    def test_truncates_embedded_spaced_label(self):
+        assert sanitize_header_fact_value("本科 学 校： 西安电子科技大学") == "本科"
+
+    def test_clean_values_are_unchanged(self):
+        for value in ("男", "35岁", "8年", "统招本科(211)", "5年大型医院项目，3年电商"):
+            assert sanitize_header_fact_value(value) == value
+
+
+class TestNormalizeHeaderLinkValue:
+    def test_markdown_link_collapses_to_url_target(self):
+        assert (
+            normalize_header_link_value(
+                "[fengba.blog.csdn.net](https://fengba.blog.csdn.net/)"
+            )
+            == "https://fengba.blog.csdn.net/"
+        )
+
+    def test_bare_url_embedded_in_prose_is_extracted(self):
+        assert (
+            normalize_header_link_value("see https://example.com/x here")
+            == "https://example.com/x"
+        )
+
+    def test_plain_host_passes_through(self):
+        assert normalize_header_link_value("github.com/wanghao") == "github.com/wanghao"
+
+    def test_empty_target_falls_back_to_bracket_text(self):
+        assert normalize_header_link_value("[my-blog]()") == "my-blog"
+
+
+class TestHeaderFactSelfHealOnHygiene:
+    def test_hygiene_heals_glued_facts_and_links_from_stored_resumes(self):
+        # Exact shapes found in stored uploads: no raw markdown is available at
+        # read time, so hygiene must repair them without a re-parse.
+        parsed = {
+            "personalInfo": {
+                "workYears": "13年 博客地址：[fengba.blog.csdn.net]"
+                "(https://fengba.blog.csdn.net/)",
+                "educationLevel": "本科 学 校： 西安电子科技大学",
+                "website": "[fengba.blog.csdn.net](https://fengba.blog.csdn.net/)",
+            }
+        }
+        result = normalize_text_hygiene(copy.deepcopy(parsed))
+        info = result["personalInfo"]
+        assert info["workYears"] == "13年"
+        assert info["educationLevel"] == "本科"
+        assert info["website"] == "https://fengba.blog.csdn.net/"
+
+    def test_hygiene_heal_is_idempotent(self):
+        parsed = {
+            "personalInfo": {
+                "workYears": "13年 博客地址：[fengba.blog.csdn.net]"
+                "(https://fengba.blog.csdn.net/)"
+            }
+        }
+        once = normalize_text_hygiene(copy.deepcopy(parsed))
+        twice = normalize_text_hygiene(copy.deepcopy(once))
+        assert once == twice
+        assert once["personalInfo"]["workYears"] == "13年"
 
 
 class TestSortTimelineSectionsNewestFirst:
@@ -856,6 +985,102 @@ class TestProjectDescriptiveRowsArePlain:
         }
         result = normalize_item_sub_labels(parsed)
         assert result["personalProjects"][0]["descriptionStyles"] == ["label", "bullet"]
+
+
+class TestOutcomeSubLabelsStayPeerModules:
+    """成效/效果 modules are peers of 项目亮点， never its nested sub-heads.
+
+    The vocabulary lives in parser._SUB_LABEL_CANDIDATES (mirrored by
+    resume_docx._SUB_LABEL_CANDIDATES and the frontend SUB_LABEL_CANDIDATES
+    set). It must NOT be added to PROJECT_SUB_LABEL_CANONICAL: outcome labels
+    keep their verbatim names instead of being renamed to 项目亮点.
+    """
+
+    @pytest.mark.parametrize(
+        "label",
+        [
+            "项目成效",
+            "工作成效",
+            "实施成效",
+            "建设成效",
+            "应用成效",
+            "业务成效",
+            "落地成效",
+            "实际成效",
+            "量化成效",
+            "运营成效",
+            "项目效果",
+            "实施效果",
+            "应用效果",
+            "落地效果",
+            "运行效果",
+            "实际效果",
+        ],
+    )
+    def test_glued_outcome_label_is_split_but_kept_verbatim(self, label: str):
+        # The inline-split regex is fed by _SUB_LABEL_CANDIDATES: without the
+        # outcome vocabulary the glued row would survive as one content row.
+        parsed = {
+            "personalProjects": [
+                {
+                    "name": "P",
+                    "description": [f"{label}：错报率下降约 70%，客服工作量明显下降。"],
+                    "descriptionStyles": ["plain"],
+                }
+            ]
+        }
+        result = normalize_item_sub_labels(parsed)
+        item = result["personalProjects"][0]
+        assert item["description"] == [
+            f"{label}：",
+            "错报率下降约 70%，客服工作量明显下降。",
+        ]
+        assert item["descriptionStyles"] == ["label", "plain"]
+
+    def test_standalone_outcome_label_is_forced_label_style_without_rename(self):
+        # Real upload (resume de8ce72b): 项目亮点 and 项目成效 are same-level
+        # headings. A weak model may store the label row as a plain/bullet row;
+        # the repair promotes it to "label" and never renames it.
+        parsed = {
+            "personalProjects": [
+                {
+                    "name": "P",
+                    "description": [
+                        "项目亮点：",
+                        "用 Spark SQL 构建两层校验规则。",
+                        "项目成效：",
+                        "平台稳定支撑多家机构报送，错报率下降约 70%。",
+                    ],
+                    "descriptionStyles": ["label", "bullet", "plain", "plain"],
+                }
+            ]
+        }
+        result = normalize_item_sub_labels(parsed)
+        item = result["personalProjects"][0]
+        assert item["description"] == [
+            "项目亮点：",
+            "用 Spark SQL 构建两层校验规则。",
+            "项目成效：",
+            "平台稳定支撑多家机构报送，错报率下降约 70%。",
+        ]
+        assert item["descriptionStyles"] == ["label", "bullet", "label", "plain"]
+
+    def test_work_entry_outcome_label_glued_row_is_split_without_canonical_map(self):
+        # Work entries get no canonical rename, but the inline split still
+        # applies because the outcome names are curated sub-labels.
+        parsed = {
+            "workExperience": [
+                {
+                    "company": "C",
+                    "description": ["工作成效：交付周期缩短 40%。"],
+                    "descriptionStyles": ["bullet"],
+                }
+            ]
+        }
+        result = normalize_item_sub_labels(parsed)
+        item = result["workExperience"][0]
+        assert item["description"] == ["工作成效：", "交付周期缩短 40%。"]
+        assert item["descriptionStyles"] == ["label", "bullet"]
 
 
 class TestExtractProjectHeaderFields:

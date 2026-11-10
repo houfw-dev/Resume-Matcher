@@ -242,7 +242,7 @@ export function ResumeImportWorkspace({
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded-none border-red-600 text-red-600 hover:bg-red-50"
+                className="rounded-none border-destructive text-destructive hover:bg-red-50"
                 onClick={() => setShowDeleteDialog(true)}
                 disabled={busy}
               >
@@ -356,7 +356,7 @@ export function ResumeImportWorkspace({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="rounded-none border-red-600 text-red-600 hover:bg-red-50"
+                      className="rounded-none border-destructive text-destructive hover:bg-red-50"
                       onClick={() => setShowDeleteDialog(true)}
                     >
                       <Trash2 className="h-4 w-4" />

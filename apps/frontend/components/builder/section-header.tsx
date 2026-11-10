@@ -130,7 +130,7 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-green-700 hover:text-green-800 hover:bg-green-50"
+                  className="h-8 w-8 text-success hover:text-green-800 hover:bg-green-50"
                   onClick={handleSaveEdit}
                   disabled={!canSave}
                   aria-label={t('common.save')}
@@ -184,7 +184,7 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
                 </span>
               )}
               {isHidden && (
-                <span className="font-mono text-[10px] uppercase tracking-wider text-orange-600 bg-white px-1.5 py-0.5 border border-orange-500">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-orange-600 bg-white px-1.5 py-0.5 border border-warning">
                   {t('builder.sectionHeader.hiddenFromPdfTag')}
                 </span>
               )}
@@ -198,7 +198,7 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-blue-700 hover:text-blue-800"
+              className="h-8 w-8 text-primary hover:text-blue-800"
               onClick={onFineTune}
               aria-label={t('fineTune.sectionButtonLabel')}
               title={t('fineTune.sectionButtonLabel')}

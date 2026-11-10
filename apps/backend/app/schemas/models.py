@@ -920,14 +920,20 @@ class UpdateCoverLetterRequest(BaseModel):
     content: str
 
 
-class GenerateCoverLetterRequest(BaseModel):
-    """Request body for resume-driven cover letter generation.
+class GenerateFromJobRequest(BaseModel):
+    """Request body for on-demand content generation with an optional JD.
 
-    An empty job description is valid: the service then writes a
-    resume-only cover letter.
+    An empty job description is valid: standalone (non-tailored) resumes then
+    generate resume-only content through the service's no-JD prompt. A pasted
+    JD lets a standalone resume produce role-targeted cover letters, outreach
+    messages, and interview preparation without going through tailoring.
     """
 
     job_description: str = Field(default="", max_length=MAX_JOB_CHARACTERS)
+
+
+# Backwards-compatible name from the cover-letter endpoint that introduced it.
+GenerateCoverLetterRequest = GenerateFromJobRequest
 
 
 class UpdateOutreachMessageRequest(BaseModel):

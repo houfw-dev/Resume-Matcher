@@ -31,6 +31,16 @@ default to `applied` but can be created as `saved`.
 4. **Detail modal:** shows the JD + the applied resume; **Edit** opens
    `/builder?id=<resume_id>`. Tolerates a deleted resume (`resume: null`).
 5. **Bulk actions:** multi-select cards to move or delete in one request.
+6. **Bidirectional resume links:** every card has a **View resume** button
+   linking to `/resumes/<resume_id>` (the read-only viewer; the modal keeps
+   the `/builder` edit path). The resume viewer header has an **Application
+   tracker** button (with a live count badge) linking to
+   `/tracker?resume=<id>`; the board then filters every column to cards whose
+   `resume_id` **or** `master_resume_id` matches, shows a filter banner with
+   **Clear filter**, and disables drag/drop while filtered (visible indices do
+   not map to authoritative column positions). An empty board shows
+   **Add Application** and **Go to dashboard** CTAs; a filter with no matches
+   shows its own empty message plus the add CTA.
 
 ## Data Model
 
@@ -45,7 +55,7 @@ dedupes on `(job_id, resume_id)` to survive double-submit.
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/applications` | All cards grouped by column (all 7 keys present) |
+| GET | `/applications` | All cards grouped by column (all 7 keys present); optional `?resume_id=<id>` narrows to cards whose `resume_id` **or** `master_resume_id` matches (powers the resume-viewer → tracker deep link) |
 | POST | `/applications` | Manual add (creates job + card; best-effort extraction) |
 | GET | `/applications/{id}` | Card + embedded JD + resume (resume null if deleted) |
 | PATCH | `/applications/{id}` | Update status/position/notes/company/role/applied_at |
@@ -66,12 +76,20 @@ dedupes on `(job_id, resume_id)` to survive double-submit.
 | `apps/frontend/app/(default)/tracker/page.tsx` | Route |
 | `apps/frontend/components/tracker/*` | Board, column, card, detail modal, bulk bar, manual-add dialog |
 | `apps/frontend/components/tracker/reorder.ts` | Pure drag-end resolution (`planMove`) |
+| `apps/frontend/lib/utils/tracker-resume-filter.ts` | Pure `?resume=` column filter + count (mirrors the backend OR predicate) |
 | `apps/frontend/lib/api/tracker.ts` | Typed API client |
 
 ## Tests
 
-- Backend: `tests/integration/test_applications_api.py` (CRUD, grouping, detail
-  tolerance, bulk), `tests/integration/test_tracker_autocreate.py` (confirm
-  auto-creates an `applied` card), `tests/unit/test_database.py::TestApplications`.
+- Backend: `tests/integration/test_applications_api.py` (CRUD, grouping,
+  `?resume_id=` filter, detail tolerance, bulk),
+  `tests/integration/test_tracker_autocreate.py` (confirm auto-creates an
+  `applied` card), `tests/unit/test_database.py::TestApplications`
+  (incl. resume/master filter semantics).
 - Frontend: `tests/tracker-reorder.test.ts` (`planMove` within/cross-column +
-  empty-column drop), `tests/api-tracker.test.ts` (client payloads/URLs).
+  empty-column drop), `tests/api-tracker.test.ts` (client payloads/URLs incl.
+  the `resume_id` query), `tests/tracker-resume-filter.test.ts` (pure filter
+  predicate), `tests/tracker-kanban-board.test.tsx` (empty CTAs, filter
+  banner/clear, drag-off), `tests/tracker-application-card.test.tsx` (view
+  resume routing, disabled grip), `tests/resume-viewer-tracker-entry.test.tsx`
+  (count badge, encoded deep link, fetch-failure resilience).

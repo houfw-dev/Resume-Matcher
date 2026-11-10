@@ -78,6 +78,9 @@ export function PaginatedPreview({ resumeData, settings }: PaginatedPreviewProps
       phone: t('resume.personalInfo.phone'),
       email: t('resume.personalInfo.email'),
       foreignLanguage: t('resume.personalInfo.foreignLanguage'),
+      website: t('resume.personalInfo.website'),
+      linkedin: t('resume.personalInfo.linkedin'),
+      github: t('resume.personalInfo.github'),
     }),
     [t]
   );

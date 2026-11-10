@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   DndContext,
   DragEndEvent,
@@ -39,6 +40,7 @@ import {
   toggleHiddenStatus,
   writeHiddenStatuses,
 } from '@/lib/utils/tracker-column-visibility';
+import { countApplications, filterColumnsByResume } from '@/lib/utils/tracker-resume-filter';
 
 function emptyColumns(): ApplicationColumns {
   return APPLICATION_STATUS_ORDER.reduce((acc, status) => {
@@ -48,7 +50,28 @@ function emptyColumns(): ApplicationColumns {
 }
 
 export function KanbanBoard() {
+  // useSearchParams requires a Suspense boundary (static-render bail-out).
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-steel-grey" />
+        </div>
+      }
+    >
+      <KanbanBoardContent />
+    </Suspense>
+  );
+}
+
+function KanbanBoardContent() {
   const { t } = useTranslations();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // `/tracker?resume=<id>` deep link from the resume viewer. An empty
+  // `?resume=` is treated as absent so no card can match a blank id.
+  const focusResumeId = searchParams.get('resume') || null;
+  const isFilterActive = focusResumeId !== null;
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -123,6 +146,15 @@ export function KanbanBoard() {
 
   const isEmpty = allCards.length === 0;
 
+  // Resume-focused view (?resume=): filter every column while keeping the full
+  // board in state so drag math and shared-resume badges stay authoritative.
+  const displayColumns = useMemo(
+    () => filterColumnsByResume(columns, focusResumeId),
+    [columns, focusResumeId]
+  );
+  const visibleCount = useMemo(() => countApplications(displayColumns), [displayColumns]);
+  const isFilteredEmpty = isFilterActive && !isEmpty && visibleCount === 0;
+
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -139,7 +171,7 @@ export function KanbanBoard() {
       el.removeEventListener('scroll', sync);
       window.removeEventListener('resize', sync);
     };
-  }, [loading, isEmpty]);
+  }, [loading, isEmpty, isFilteredEmpty, visibleCount]);
 
   const scrollByColumn = (direction: 1 | -1) => {
     scrollRef.current?.scrollBy({ left: direction * 320, behavior: 'smooth' });
@@ -154,6 +186,9 @@ export function KanbanBoard() {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
+    // In a filtered view the visible indices differ from the authoritative
+    // column positions, so reordering is disabled (grips are disabled too).
+    if (isFilterActive) return;
     const plan = planMove(columns, String(active.id), String(over.id));
     if (!plan) return;
 
@@ -207,7 +242,7 @@ export function KanbanBoard() {
     }
   };
 
-  const showScrollControls = !isEmpty && (canScrollLeft || canScrollRight);
+  const showScrollControls = visibleCount > 0 && (canScrollLeft || canScrollRight);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -261,6 +296,17 @@ export function KanbanBoard() {
         </div>
       )}
 
+      {isFilterActive && (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-black bg-paper-tint px-6 py-2 md:px-8">
+          <p className="font-mono text-xs uppercase tracking-wide text-ink-soft">
+            {t('tracker.filter.banner')}
+          </p>
+          <Button variant="outline" size="sm" onClick={() => router.push('/tracker')}>
+            {t('tracker.filter.clear')}
+          </Button>
+        </div>
+      )}
+
       {selectedIds.size > 0 && (
         <div className="shrink-0 border-b border-black px-6 py-3 md:px-8">
           <BulkActionBar
@@ -283,6 +329,28 @@ export function KanbanBoard() {
           <div className="flex flex-1 flex-col items-center justify-center p-10 text-center">
             <p className="font-serif text-lg text-ink">{t('tracker.empty.title')}</p>
             <p className="mt-1 font-mono text-xs text-ink-soft">{t('tracker.empty.description')}</p>
+            <div className="mt-5 flex flex-wrap justify-center gap-3">
+              <Button onClick={() => setManualAddOpen(true)}>
+                <Plus className="h-4 w-4" />
+                {t('tracker.addApplication')}
+              </Button>
+              <Button variant="outline" onClick={() => router.push('/dashboard')}>
+                {t('tracker.empty.goDashboard')}
+              </Button>
+            </div>
+          </div>
+        ) : isFilteredEmpty ? (
+          <div className="flex flex-1 flex-col items-center justify-center p-10 text-center">
+            <p className="font-serif text-lg text-ink">{t('tracker.filter.emptyTitle')}</p>
+            <p className="mt-1 font-mono text-xs text-ink-soft">
+              {t('tracker.filter.emptyDescription')}
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-3">
+              <Button onClick={() => setManualAddOpen(true)}>
+                <Plus className="h-4 w-4" />
+                {t('tracker.addApplication')}
+              </Button>
+            </div>
           </div>
         ) : (
           <DndContext
@@ -301,11 +369,12 @@ export function KanbanBoard() {
                 >
                   <KanbanColumn
                     status={status}
-                    applications={columns[status]}
+                    applications={displayColumns[status]}
                     selectedIds={selectedIds}
                     sharedResumeIds={sharedResumeIds}
                     onToggleSelect={toggleSelect}
                     onOpen={setOpenCardId}
+                    dragDisabled={isFilterActive}
                   />
                 </div>
               ))}
@@ -316,7 +385,7 @@ export function KanbanBoard() {
 
       {/* Stage rail — an always-visible map of every stage (with counts) so
           off-screen sections are never lost; click a stage to jump to it. */}
-      {!isEmpty && (
+      {visibleCount > 0 && (
         <div className="flex shrink-0 items-center gap-3 overflow-x-auto border-t border-black bg-paper-tint px-6 py-2 md:px-8">
           {canScrollRight && (
             <span className="flex shrink-0 items-center gap-1 font-mono text-[11px] font-bold uppercase tracking-wide text-primary">
@@ -333,7 +402,7 @@ export function KanbanBoard() {
                 className="flex shrink-0 items-center gap-1.5 border border-black bg-background px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-ink-soft shadow-sw-xs transition-all hover:translate-x-[1px] hover:translate-y-[1px] hover:text-primary hover:shadow-none"
               >
                 {t(`tracker.columns.${status}`)}
-                <span className="text-steel-grey">{columns[status].length}</span>
+                <span className="text-steel-grey">{displayColumns[status].length}</span>
               </button>
             ))}
           </div>

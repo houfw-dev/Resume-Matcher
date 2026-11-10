@@ -52,6 +52,13 @@ Dashboard → Upload Master Resume → Tailor for Job → View/Edit → Download
 - System status (cached)
 - LLM configuration (6 providers)
 - Last fetched indicator + manual refresh
+- Sticky `RetroTabs` anchor nav spans the five sections (status, LLM, content
+  generation, language, danger zone): tab clicks write a whitelist-validated
+  hash (`#llm`, …) via `pushState` and scroll to the section; `popstate` and
+  deep links on load resolve through the same parser, and a capture-phase
+  scroll-spy keeps the active tab in sync. Pure logic lives in
+  `lib/utils/settings-sections.ts`, DOM wiring in
+  `components/settings/section-nav.tsx`.
 
 ## Pagination Rules
 

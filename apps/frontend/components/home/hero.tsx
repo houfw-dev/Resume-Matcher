@@ -12,7 +12,7 @@ export default function Hero() {
   // UP-LEFT (-1, -1) which was the inverse and looked broken next to the
   // rest of the design system.
   const buttonClass =
-    'group relative border border-black bg-transparent px-8 py-3 font-mono text-sm font-bold uppercase text-blue-700 transition-[transform,box-shadow,background-color,color] duration-150 ease-out hover:bg-blue-700 hover:text-background hover:translate-y-[1px] hover:translate-x-[1px] hover:shadow-sw-default active:translate-x-0 active:translate-y-0 active:shadow-none cursor-pointer';
+    'group relative border border-black bg-transparent px-8 py-3 font-mono text-sm font-bold uppercase text-primary transition-[transform,box-shadow,background-color,color] duration-150 ease-out hover:bg-primary hover:text-background hover:translate-y-[1px] hover:translate-x-[1px] hover:shadow-sw-default active:translate-x-0 active:translate-y-0 active:shadow-none cursor-pointer';
 
   return (
     <section
@@ -23,8 +23,8 @@ export default function Hero() {
         backgroundSize: '40px 40px',
       }}
     >
-      <div className="flex h-full w-full flex-col items-center justify-center border border-black text-blue-700 bg-background shadow-sw-xl">
-        <h1 className="mb-12 text-center font-mono text-6xl font-bold uppercase leading-none tracking-tighter md:text-8xl lg:text-9xl selection:bg-blue-700 selection:text-white">
+      <div className="flex h-full w-full flex-col items-center justify-center border border-black text-primary bg-background shadow-sw-xl">
+        <h1 className="mb-12 text-center font-mono text-6xl font-bold uppercase leading-none tracking-tighter md:text-8xl lg:text-9xl selection:bg-primary selection:text-white">
           {t('home.brandLine1')}
           <br />
           {t('home.brandLine2')}

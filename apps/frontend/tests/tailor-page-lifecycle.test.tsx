@@ -239,6 +239,46 @@ it('keeps missing-diff confirmation open while its durable request is pending', 
   expect(api.push).toHaveBeenLastCalledWith('/resumes/tailored');
 });
 
+it('cancels an in-flight generation and returns to the form without an error', async () => {
+  // Never settles on its own: only the AbortSignal can end this call.
+  api.upload.mockImplementation(
+    (_descriptions: string[], _resumeId: string, signal?: AbortSignal) =>
+      new Promise<never>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      })
+  );
+  render(<TailorPage />);
+  await act(async () => {});
+  await generate();
+
+  const cancelButton = screen.getByRole('button', { name: 'common.cancel' });
+  const signal = api.upload.mock.calls[0][2] as AbortSignal;
+  expect(signal).toBeInstanceOf(AbortSignal);
+  expect(signal.aborted).toBe(false);
+
+  await act(async () => cancelButton.click());
+
+  expect(signal.aborted).toBe(true);
+  expect(screen.getByRole('button', { name: 'tailor.generateTailored' })).toBeEnabled();
+  expect(screen.queryByRole('button', { name: 'common.cancel' })).toBeNull();
+  // Let the aborted continuation flush: it must not render an error banner.
+  await act(async () => {});
+  expect(document.body.textContent).not.toMatch(/tailor\.errors/);
+
+  // A fresh run is possible and gets its own, unaborted signal.
+  api.upload.mockResolvedValue('job-2');
+  await generate();
+  expect(api.upload).toHaveBeenCalledTimes(2);
+  const nextSignal = api.upload.mock.calls[1][2] as AbortSignal;
+  expect(nextSignal).not.toBe(signal);
+  expect(nextSignal.aborted).toBe(false);
+  expect(screen.getByRole('button', { name: 'Confirm preview' })).toBeVisible();
+});
+
 it.each(['expired locally', 'rejected by server'])(
   'offers a fresh preview when confirmation is %s',
   async (mode) => {

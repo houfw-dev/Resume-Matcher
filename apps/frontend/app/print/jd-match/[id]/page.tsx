@@ -7,7 +7,7 @@
  */
 
 import type { CSSProperties, ReactNode } from 'react';
-import { API_BASE } from '@/lib/api/client';
+import { fetchPrintResource } from '@/lib/print/fetch';
 import { translate } from '@/lib/i18n/server';
 import { resolveLocale } from '@/lib/i18n/locale';
 import {
@@ -72,12 +72,8 @@ interface JdMatchData {
 
 async function fetchJdMatchData(resumeId: string): Promise<JdMatchData> {
   const [resumeRes, jdRes] = await Promise.all([
-    fetch(`${API_BASE}/resumes?resume_id=${encodeURIComponent(resumeId)}`, {
-      cache: 'no-store',
-    }),
-    fetch(`${API_BASE}/resumes/${encodeURIComponent(resumeId)}/job-description`, {
-      cache: 'no-store',
-    }),
+    fetchPrintResource(`/resumes?resume_id=${encodeURIComponent(resumeId)}`),
+    fetchPrintResource(`/resumes/${encodeURIComponent(resumeId)}/job-description`),
   ]);
 
   if (!resumeRes.ok) {

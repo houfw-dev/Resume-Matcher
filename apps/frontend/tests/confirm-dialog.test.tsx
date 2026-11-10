@@ -31,4 +31,23 @@ describe('ConfirmDialog', () => {
     );
     expect(descriptionElement.parentElement).toHaveClass('min-w-0', 'flex-1');
   });
+
+  it('renders optional children between the header and the footer', () => {
+    render(
+      <ConfirmDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Regenerate"
+        description="Existing content will be replaced."
+        onConfirm={vi.fn()}
+      >
+        <textarea aria-label="dialog-job-description" defaultValue="Need FastAPI" />
+      </ConfirmDialog>
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const child = screen.getByLabelText('dialog-job-description');
+    expect(dialog).toContainElement(child);
+    expect(child).toHaveValue('Need FastAPI');
+  });
 });

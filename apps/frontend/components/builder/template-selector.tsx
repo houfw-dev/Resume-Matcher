@@ -56,7 +56,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({ value, onCha
           onClick={() => onChange(template.id)}
           className={`group flex flex-col items-center p-3 border-2 transition-all ${
             value === template.id
-              ? 'border-blue-700 bg-white shadow-[3px_3px_0px_0px_#1D4ED8]'
+              ? 'border-primary bg-white shadow-[3px_3px_0px_0px_#1D4ED8]'
               : 'border-black bg-white hover:bg-background hover:shadow-sw-sm'
           }`}
           title={templateLabels[template.id].description}
@@ -69,7 +69,7 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({ value, onCha
           {/* Template Name */}
           <span
             className={`font-mono text-[10px] uppercase tracking-wider font-bold ${
-              value === template.id ? 'text-blue-700' : 'text-ink-soft'
+              value === template.id ? 'text-primary' : 'text-ink-soft'
             }`}
           >
             {templateLabels[template.id].name}
@@ -92,8 +92,8 @@ interface TemplateThumbnailProps {
 }
 
 export const TemplateThumbnail: React.FC<TemplateThumbnailProps> = ({ type, isActive }) => {
-  const lineColor = isActive ? 'bg-blue-700' : 'bg-steel-grey';
-  const borderColor = isActive ? 'border-blue-700' : 'border-steel-grey';
+  const lineColor = isActive ? 'bg-primary' : 'bg-steel-grey';
+  const borderColor = isActive ? 'border-primary' : 'border-steel-grey';
   const accentColor = isActive ? 'bg-blue-600' : 'bg-blue-400';
 
   if (type === 'swiss-single') {

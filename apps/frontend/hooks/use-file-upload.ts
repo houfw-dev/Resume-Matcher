@@ -11,6 +11,7 @@ import {
   type InputHTMLAttributes,
 } from 'react';
 import { apiFetch } from '@/lib/api/client';
+import { useTranslations } from '@/lib/i18n';
 
 type UploadOperation = { controller: AbortController };
 
@@ -111,6 +112,7 @@ export const useFileUpload = (
     onUploadError,
     uploadUrl,
   } = options;
+  const { t } = useTranslations();
 
   const [state, setReactState] = useState<FileUploadState>({
     files: initialFiles.map((fileMeta) => ({
@@ -218,7 +220,10 @@ export const useFileUpload = (
     (file: File): string | null => {
       // Simplified: always validates a File object
       if (file.size > maxSize) {
-        return `File "${file.name}" exceeds the maximum size of ${formatBytes(maxSize)}.`;
+        return t('dashboard.errors.uploadErrors.fileTooLarge', {
+          name: file.name,
+          limit: formatBytes(maxSize),
+        });
       }
 
       if (accept !== '*/*' && accept !== '*') {
@@ -241,12 +246,15 @@ export const useFileUpload = (
         });
 
         if (!isAccepted) {
-          return `File "${file.name}" type not accepted. Accepted types: ${accept}`;
+          return t('dashboard.errors.uploadErrors.fileTypeNotAccepted', {
+            name: file.name,
+            accept,
+          });
         }
       }
       return null;
     },
-    [accept, maxSize]
+    [accept, maxSize, t]
   );
 
   const createPreview = useCallback((file: File): string | undefined => {
@@ -287,8 +295,8 @@ export const useFileUpload = (
       }
 
       if (!uploadUrl) {
-        const errorMsg = 'Upload URL is not configured.';
-        console.warn(errorMsg, 'File not uploaded:', fileToUpload.file.name);
+        const errorMsg = t('dashboard.errors.uploadErrors.uploadUrlNotConfigured');
+        console.warn('uploadUrl not provided. File not uploaded:', fileToUpload.file.name);
         // Update file metadata to reflect it wasn't uploaded due to config
         const fileWithConfigError: FileWithPreview = {
           ...fileToUpload,
@@ -333,6 +341,8 @@ export const useFileUpload = (
         const contentType = response.headers.get('content-type');
 
         if (!response.ok) {
+          // Detailed diagnostics stay in the console; the UI gets a generic
+          // localized message rather than raw status text or server bodies.
           let errorDetail = `Upload failed for ${fileToUpload.file.name}. Status: ${response.status} ${response.statusText}`;
           try {
             const errorText = await response.text();
@@ -348,7 +358,10 @@ export const useFileUpload = (
           } catch (textError: unknown) {
             console.warn('Could not read error response text:', textError);
           }
-          throw new Error(errorDetail);
+          console.warn(errorDetail);
+          throw new Error(
+            t('dashboard.errors.uploadErrors.uploadFailed', { name: fileToUpload.file.name })
+          );
         }
 
         if (contentType && contentType.includes('application/json')) {
@@ -400,7 +413,9 @@ export const useFileUpload = (
         const errorMessage =
           error instanceof Error
             ? error.message
-            : `Error uploading ${(fileToUpload.file as File).name}.`;
+            : t('dashboard.errors.uploadErrors.uploadErrorFallback', {
+                name: (fileToUpload.file as File).name,
+              });
         const fileWithError: FileWithPreview = {
           ...fileToUpload,
           file: {
@@ -430,7 +445,7 @@ export const useFileUpload = (
         markUploadFinished(fileToUpload.id, operation);
       }
     },
-    [isUploadCurrent, markUploadFinished, markUploadStarted, uploadUrl, setState]
+    [isUploadCurrent, markUploadFinished, markUploadStarted, uploadUrl, setState, t]
   );
 
   const addFilesAndUpload = useCallback(
@@ -455,7 +470,7 @@ export const useFileUpload = (
       }
 
       if (!multiple && newFilesArray.length > 1) {
-        currentValidationErrors.push('Please select only one file.');
+        currentValidationErrors.push(t('dashboard.errors.uploadErrors.onlyOneFile'));
         setState((prev) => ({ ...prev, errors: currentValidationErrors }));
         if (inputRef.current) inputRef.current.value = '';
         return;
@@ -466,7 +481,9 @@ export const useFileUpload = (
         maxFiles !== Infinity &&
         stateRef.current.files.length + newFilesArray.length > maxFiles
       ) {
-        currentValidationErrors.push(`You can only upload a maximum of ${maxFiles} files.`);
+        currentValidationErrors.push(
+          t('dashboard.errors.uploadErrors.maxFiles', { count: maxFiles })
+        );
         setState((prev) => ({ ...prev, errors: [...prev.errors, ...currentValidationErrors] }));
         if (inputRef.current) inputRef.current.value = '';
         return;
@@ -534,7 +551,7 @@ export const useFileUpload = (
               id: fwp.id,
               url: fwp.preview || '', // Use preview as URL if no upload
               uploaded: false, // Not uploaded
-              uploadError: 'Upload URL not configured',
+              uploadError: t('dashboard.errors.uploadErrors.uploadUrlNotConfigured'),
             } as FileMetadata,
           }));
 
@@ -563,6 +580,7 @@ export const useFileUpload = (
       createPreview, // Other useCallback deps
       uploadFileInternal,
       setState,
+      t,
     ]
   );
 

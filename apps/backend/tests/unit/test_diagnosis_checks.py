@@ -973,6 +973,142 @@ def test_projects_missing_module_is_na() -> None:
     assert _check_projects(_resume())[0] == RATING_NA
 
 
+def test_split_label_tech_stack_with_big_data_terms_is_detected() -> None:
+    # Regression: a split "技术栈：" label row whose terms (Hadoop/Hive/...)
+    # were absent from the old vocabulary regex falsely reported a missing
+    # tech stack (the RATAN EOD diagnosis false-negative).
+    resume = _resume(
+        personalProjects=[
+            {
+                "id": 1,
+                "name": "RATAN EOD",
+                "role": "开发",
+                "description": [
+                    "技术栈：",
+                    "Hadoop、Hive、ControlM、Spring Boot、PostgreSQL",
+                    "项目背景：金融衍生品交易数据分散，报表时效难保障。",
+                    "承担数据平台日常运维与变更上线保障",
+                    "作业失败率控制在 1% 以内，异常回滚可在 30 分钟内完成。",
+                ],
+            },
+            {
+                "id": 2,
+                "name": "营销系统",
+                "role": "开发",
+                "description": [
+                    "业务背景：营销活动配置困难",
+                    "技术栈：Spring Boot、MySQL、Redis",
+                    "承担活动引擎开发",
+                    "活动配置耗时降低 60%",
+                ],
+            },
+        ]
+    )
+    rating, evidence, _suggestion = _check_projects(resume)
+    assert rating == RATING_CONFORM, evidence
+    assert "技术栈" not in evidence
+
+
+def test_empty_tech_stack_label_followed_by_another_label_still_missing() -> None:
+    # A label row with no content of its own, immediately followed by another
+    # label, means the tech stack field is genuinely empty.
+    resume = _resume(
+        personalProjects=[
+            {
+                "id": 1,
+                "name": "数据平台",
+                "role": "开发",
+                "description": [
+                    "技术栈：",
+                    "项目背景：多系统数据分散，报表产出困难。",
+                    "承担数据平台日常运维",
+                    "报表产出时效提升 40%",
+                ],
+            },
+            {
+                "id": 2,
+                "name": "营销系统",
+                "role": "开发",
+                "description": [
+                    "业务背景：营销活动配置困难",
+                    "技术栈：Spring Boot、MySQL、Redis",
+                    "承担活动引擎开发",
+                    "活动配置耗时降低 60%",
+                ],
+            },
+        ]
+    )
+    _rating, evidence, suggestion = _check_projects(resume)
+    assert "「技术栈」" in evidence
+    assert "「技术栈」" in suggestion
+
+
+def test_glued_tech_stack_alias_label_is_detected() -> None:
+    # Older stored documents may keep an alias label (技术架构) glued to its
+    # content row instead of the canonical split 技术栈 form.
+    resume = _resume(
+        personalProjects=[
+            {
+                "id": 1,
+                "name": "实时数仓",
+                "role": "核心开发",
+                "description": [
+                    "项目背景：离线链路时延高，无法支撑实时运营。",
+                    "技术架构：Hadoop、Hive、HBase",
+                    "主导数仓底座重构，承担核心模块开发",
+                    "链路时延缩短 50%",
+                ],
+            },
+            {
+                "id": 2,
+                "name": "营销系统",
+                "role": "开发",
+                "description": [
+                    "业务背景：营销活动配置困难",
+                    "技术栈：Spring Boot、MySQL、Redis",
+                    "承担活动引擎开发",
+                    "活动配置耗时降低 60%",
+                ],
+            },
+        ]
+    )
+    rating, evidence, _suggestion = _check_projects(resume)
+    assert rating == RATING_CONFORM, evidence
+
+
+def test_big_data_vocab_fallback_detects_unlabeled_stack() -> None:
+    # Without any label, two distinct expanded-vocabulary mentions in prose
+    # still count as a tech stack.
+    resume = _resume(
+        personalProjects=[
+            {
+                "id": 1,
+                "name": "实时数仓",
+                "role": "核心开发",
+                "description": [
+                    "项目背景：离线链路时延高，无法支撑实时运营。",
+                    "基于 Hadoop 与 Hive 构建数仓底座，支撑每日 ETL 作业",
+                    "承担数据链路开发与稳定性保障",
+                    "链路时延缩短 50%",
+                ],
+            },
+            {
+                "id": 2,
+                "name": "营销系统",
+                "role": "开发",
+                "description": [
+                    "业务背景：营销活动配置困难",
+                    "技术栈：Spring Boot、MySQL、Redis",
+                    "承担活动引擎开发",
+                    "活动配置耗时降低 60%",
+                ],
+            },
+        ]
+    )
+    rating, evidence, _suggestion = _check_projects(resume)
+    assert rating == RATING_CONFORM, evidence
+
+
 # --- item 10: self evaluation ------------------------------------------------
 
 

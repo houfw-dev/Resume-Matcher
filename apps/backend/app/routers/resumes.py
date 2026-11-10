@@ -13,7 +13,7 @@ from urllib.parse import quote
 from typing import Any, NoReturn
 from uuid import uuid4
 
-from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import ValidationError
 
@@ -40,7 +40,7 @@ from app.schemas import (
     ATSScore,
     ATSSubScores,
     GenerateContentResponse,
-    GenerateCoverLetterRequest,
+    GenerateFromJobRequest,
     GenerateInterviewPrepResponse,
     ImproveResumeConfirmRequest,
     ImproveResumeRequest,
@@ -104,7 +104,11 @@ from app.services.cover_letter import (
     generate_outreach_message,
 )
 from app.schemas.diagnosis import DiagnosisReport, DiagnosisRequest
-from app.services.diagnosis import diagnose_resume
+from app.services.diagnosis import DiagnosisModeConflictError, diagnose_resume
+from app.routers.request_bodies import (
+    MAX_JSON_REQUEST_BYTES,
+    read_limited_json_model,
+)
 from app.services.diagnosis_docx import (
     DOCX_MEDIA_TYPE,
     build_diagnosis_docx,
@@ -302,6 +306,41 @@ async def _resolve_generation_job_context(
             detail="The associated job description was not found.",
         )
     return job["content"], job
+
+
+async def _resolve_requested_job_context(
+    resume_id: str, resume: dict[str, Any], ad_hoc_job_description: str
+) -> tuple[str, dict[str, Any] | None]:
+    """Resolve the JD input for on-demand cover-letter/outreach/interview-prep.
+
+    A JD pasted ad hoc in the request (the standalone-resume "target this job"
+    option) takes precedence and is size-checked directly, with no job record
+    to validate. With no ad-hoc JD, fall back to the tailored resume's stored
+    job — or an empty string for standalone resumes via the no-JD prompts.
+
+    Returns ``(job_description, job_record)``; the record is ``None`` when the
+    JD comes from the request body so callers skip the stored-job source check.
+    """
+    if ad_hoc_job_description:
+        require_source_size(ad_hoc_job_description, MAX_JOB_CHARACTERS)
+        return ad_hoc_job_description, None
+    return await _resolve_generation_job_context(resume_id, resume)
+
+
+async def _update_resume_or_404(
+    resume_id: str, updates: dict[str, Any]
+) -> dict[str, Any]:
+    """Persist a resume write, mapping a concurrent delete to HTTP 404.
+
+    The upfront ``get_resume`` check in each endpoint cannot make the
+    check-then-write sequence atomic: when the row disappears in between,
+    ``update_resume`` raises ``ResumeNotFoundError`` (a ``ValueError``),
+    which would otherwise surface as an opaque 500.
+    """
+    try:
+        return await db.update_resume(resume_id, updates)
+    except ResumeNotFoundError as e:
+        raise HTTPException(status_code=404, detail="Resume not found") from e
 
 
 def _get_original_resume_data(resume: dict[str, Any]) -> dict[str, Any] | None:
@@ -2089,9 +2128,15 @@ async def improve_resume_endpoint(
 
 @router.patch("/{resume_id}", response_model=ResumeFetchResponse)
 async def update_resume_endpoint(
-    resume_id: str, resume_data: ResumeData
+    resume_id: str, http_request: Request
 ) -> ResumeFetchResponse:
     """Update a resume with new structured data."""
+    resume_data = await read_limited_json_model(
+        http_request,
+        ResumeData,
+        MAX_JSON_REQUEST_BYTES,
+        detail="Resume data is too large. Please try again.",
+    )
     existing = await db.get_resume(resume_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Resume not found")
@@ -2101,7 +2146,9 @@ async def update_resume_endpoint(
     updated_data = normalize_resume_data(copy.deepcopy(resume_data.model_dump()))
     updated_content = json.dumps(updated_data, indent=2)
 
-    updated = await db.update_resume(
+    # update_resume() always returns the refreshed row or raises
+    # ResumeNotFoundError (mapped to 404); there is no falsy-return branch.
+    updated = await _update_resume_or_404(
         resume_id,
         {
             "content": updated_content,
@@ -2110,9 +2157,6 @@ async def update_resume_endpoint(
             "processing_status": "ready",
         },
     )
-
-    if not updated:
-        raise HTTPException(status_code=500, detail="Failed to update resume")
 
     raw_resume = RawResume(
         id=None,
@@ -2182,7 +2226,11 @@ async def download_resume_docx(
         )
 
     try:
-        docx_bytes = build_resume_docx(data, language=lang)
+        # python-docx generation is synchronous CPU work; keep it off the
+        # event loop so other requests are not blocked while it runs.
+        docx_bytes = await asyncio.to_thread(
+            build_resume_docx, data, language=lang
+        )
     except Exception as e:
         logger.exception("Resume DOCX build failed for %s: %s", resume_id, e)
         raise HTTPException(
@@ -2411,14 +2459,20 @@ async def retry_processing(resume_id: str) -> ResumeUploadResponse:
 
 @router.patch("/{resume_id}/cover-letter")
 async def update_cover_letter(
-    resume_id: str, request: UpdateCoverLetterRequest
+    resume_id: str, http_request: Request
 ) -> dict:
     """Update the cover letter for a resume."""
+    request = await read_limited_json_model(
+        http_request,
+        UpdateCoverLetterRequest,
+        MAX_JSON_REQUEST_BYTES,
+        detail="Cover letter is too large. Please try again.",
+    )
     resume = await db.get_resume(resume_id)
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
-    await db.update_resume(resume_id, {"cover_letter": request.content})
+    await _update_resume_or_404(resume_id, {"cover_letter": request.content})
     return {"message": "Cover letter updated successfully"}
 
 
@@ -2426,7 +2480,7 @@ async def update_cover_letter(
     "/{resume_id}/cover-letter/generate", response_model=GenerateContentResponse
 )
 async def generate_cover_letter_from_resume(
-    resume_id: str, request: GenerateCoverLetterRequest
+    resume_id: str, request: GenerateFromJobRequest
 ) -> GenerateContentResponse:
     """Generate a cover letter from any resume, optionally tailored to a JD.
 
@@ -2465,7 +2519,7 @@ async def generate_cover_letter_from_resume(
             detail="Failed to generate cover letter. Please try again.",
         )
 
-    await db.update_resume(resume_id, {"cover_letter": cover_letter_content})
+    await _update_resume_or_404(resume_id, {"cover_letter": cover_letter_content})
 
     return GenerateContentResponse(
         content=cover_letter_content,
@@ -2475,38 +2529,54 @@ async def generate_cover_letter_from_resume(
 
 @router.patch("/{resume_id}/outreach-message")
 async def update_outreach_message(
-    resume_id: str, request: UpdateOutreachMessageRequest
+    resume_id: str, http_request: Request
 ) -> dict:
     """Update the outreach message for a resume."""
+    request = await read_limited_json_model(
+        http_request,
+        UpdateOutreachMessageRequest,
+        MAX_JSON_REQUEST_BYTES,
+        detail="Outreach message is too large. Please try again.",
+    )
     resume = await db.get_resume(resume_id)
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
-    await db.update_resume(resume_id, {"outreach_message": request.content})
+    await _update_resume_or_404(resume_id, {"outreach_message": request.content})
     return {"message": "Outreach message updated successfully"}
 
 
 @router.patch("/{resume_id}/title")
-async def update_title(resume_id: str, request: UpdateTitleRequest) -> dict:
+async def update_title(resume_id: str, http_request: Request) -> dict:
     """Update the title for a resume."""
+    request = await read_limited_json_model(
+        http_request,
+        UpdateTitleRequest,
+        MAX_JSON_REQUEST_BYTES,
+        detail="Request body is too large. Please try again.",
+    )
     resume = await db.get_resume(resume_id)
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
     title = request.title.strip()[:80]
-    await db.update_resume(resume_id, {"title": title})
+    await _update_resume_or_404(resume_id, {"title": title})
     return {"message": "Title updated successfully"}
 
 
 @router.post(
     "/{resume_id}/generate-cover-letter", response_model=GenerateContentResponse
 )
-async def generate_cover_letter_endpoint(resume_id: str) -> GenerateContentResponse:
+async def generate_cover_letter_endpoint(
+    resume_id: str,
+    request: GenerateFromJobRequest | None = Body(default=None),
+) -> GenerateContentResponse:
     """Generate a cover letter on-demand for an existing resume.
 
-    Tailored resumes use the job stored via their improvement record;
-    standalone resumes generate a resume-only cover letter through the
-    service's no-JD prompt, so no tailoring is required.
+    A JD pasted in the request body lets standalone (non-tailored) resumes
+    produce a role-targeted letter without tailoring. With no body JD,
+    tailored resumes use the job stored via their improvement record and
+    standalone resumes generate a resume-only letter through the no-JD prompt.
     """
     # Get the resume
     resume = await db.get_resume(resume_id)
@@ -2521,8 +2591,14 @@ async def generate_cover_letter_endpoint(resume_id: str) -> GenerateContentRespo
             detail="Resume has no processed data. Please re-upload the resume.",
         )
 
-    # Tailored resumes resolve their stored job; standalone resumes get "".
-    job_description, job = await _resolve_generation_job_context(resume_id, resume)
+    # An ad-hoc JD wins; otherwise tailored resumes resolve their stored job
+    # and standalone resumes get "".
+    ad_hoc_job_description = (
+        request.job_description.strip() if request and request.job_description else ""
+    )
+    job_description, job = await _resolve_requested_job_context(
+        resume_id, resume, ad_hoc_job_description
+    )
 
     # Get language setting
     _validate_ai_sources(resume, job)
@@ -2543,7 +2619,7 @@ async def generate_cover_letter_endpoint(resume_id: str) -> GenerateContentRespo
         )
 
     # Save to resume record
-    await db.update_resume(resume_id, {"cover_letter": cover_letter_content})
+    await _update_resume_or_404(resume_id, {"cover_letter": cover_letter_content})
 
     return GenerateContentResponse(
         content=cover_letter_content,
@@ -2552,10 +2628,15 @@ async def generate_cover_letter_endpoint(resume_id: str) -> GenerateContentRespo
 
 
 @router.post("/{resume_id}/generate-outreach", response_model=GenerateContentResponse)
-async def generate_outreach_endpoint(resume_id: str) -> GenerateContentResponse:
+async def generate_outreach_endpoint(
+    resume_id: str,
+    request: GenerateFromJobRequest | None = Body(default=None),
+) -> GenerateContentResponse:
     """Generate an outreach (in-platform private) message for an existing resume.
 
-    Tailored resumes use the job stored via their improvement record;
+    A JD pasted in the request body lets standalone (non-tailored) resumes
+    produce a role-targeted message without tailoring. With no body JD,
+    tailored resumes use the job stored via their improvement record and
     standalone resumes generate a resume-only general-purpose message through
     the service's no-JD prompt, so no tailoring is required.
     """
@@ -2572,8 +2653,14 @@ async def generate_outreach_endpoint(resume_id: str) -> GenerateContentResponse:
             detail="Resume has no processed data. Please re-upload the resume.",
         )
 
-    # Tailored resumes resolve their stored job; standalone resumes get "".
-    job_description, job = await _resolve_generation_job_context(resume_id, resume)
+    # An ad-hoc JD wins; otherwise tailored resumes resolve their stored job
+    # and standalone resumes get "".
+    ad_hoc_job_description = (
+        request.job_description.strip() if request and request.job_description else ""
+    )
+    job_description, job = await _resolve_requested_job_context(
+        resume_id, resume, ad_hoc_job_description
+    )
 
     # Get language setting
     _validate_ai_sources(resume, job)
@@ -2594,7 +2681,9 @@ async def generate_outreach_endpoint(resume_id: str) -> GenerateContentResponse:
         )
 
     # Save to resume record
-    await db.update_resume(resume_id, {"outreach_message": outreach_content})
+    await _update_resume_or_404(
+        resume_id, {"outreach_message": outreach_content}
+    )
 
     return GenerateContentResponse(
         content=outreach_content,
@@ -2604,7 +2693,8 @@ async def generate_outreach_endpoint(resume_id: str) -> GenerateContentResponse:
 
 # Diagnose bodies stay small; the only sizable part is the client-measured
 # rendered-layout snapshot (frontend caps its JSON at ~48 KB). Reject anything
-# beyond 128 KB before FastAPI parses it.
+# beyond 128 KB while streaming the real body — a Content-Length check alone
+# is bypassable with chunked transfer or a lying header.
 _DIAGNOSIS_MAX_BODY_BYTES = 128 * 1024
 
 
@@ -2612,21 +2702,14 @@ _DIAGNOSIS_MAX_BODY_BYTES = 128 * 1024
 async def diagnose_resume_endpoint(
     resume_id: str,
     request: Request,
-    body: DiagnosisRequest,
 ) -> DiagnosisReport:
     """Run the V4 rubric diagnosis: deterministic checks + LLM semantic judge."""
-    raw_length = request.headers.get("content-length") or ""
-    if raw_length.isdigit() and int(raw_length) > _DIAGNOSIS_MAX_BODY_BYTES:
-        logger.warning(
-            "Rejected diagnosis request for %s: body %s bytes exceeds %s",
-            resume_id,
-            raw_length,
-            _DIAGNOSIS_MAX_BODY_BYTES,
-        )
-        raise HTTPException(
-            status_code=413,
-            detail="Diagnosis request is too large. Please try again.",
-        )
+    body = await read_limited_json_model(
+        request,
+        DiagnosisRequest,
+        _DIAGNOSIS_MAX_BODY_BYTES,
+        detail="Diagnosis request is too large. Please try again.",
+    )
 
     resume = await db.get_resume(resume_id)
     if not resume:
@@ -2671,6 +2754,15 @@ async def diagnose_resume_endpoint(
         )
     except (DatabaseBusyError, AIOperationDeadlineExceeded, PromptSizeError):
         raise
+    except DiagnosisModeConflictError as e:
+        logger.warning("Resume diagnosis for %s rejected a mode conflict: %s", resume_id, e)
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Competency-model diagnosis and job-description diagnosis cannot "
+                "run together. Please choose one diagnosis mode."
+            ),
+        )
     except KeyError as e:
         logger.warning(
             "Resume diagnosis for %s requested unknown competency model %s",
@@ -2712,10 +2804,15 @@ async def download_diagnosis_document_endpoint(
                 candidate_name = raw_name.strip()
 
     try:
-        docx_bytes = build_diagnosis_docx(
+        # Synchronous python-docx work runs in a worker thread to avoid
+        # blocking the event loop for the whole document build.
+        docx_bytes = await asyncio.to_thread(
+            build_diagnosis_docx,
             report,
             candidate_name=candidate_name,
-            resume_title=resume.get("title") if isinstance(resume.get("title"), str) else None,
+            resume_title=resume.get("title")
+            if isinstance(resume.get("title"), str)
+            else None,
         )
     except Exception as e:
         logger.error(f"Diagnosis document build failed for {resume_id}: {e}")
@@ -2735,10 +2832,13 @@ async def download_diagnosis_document_endpoint(
 )
 async def generate_interview_prep_endpoint(
     resume_id: str,
+    request: GenerateFromJobRequest | None = Body(default=None),
 ) -> GenerateInterviewPrepResponse:
     """Generate interview preparation on-demand for an existing resume.
 
-    Tailored resumes prepare against the stored job; standalone resumes get
+    A JD pasted in the request body lets standalone (non-tailored) resumes
+    prepare against a target role without tailoring. With no body JD,
+    tailored resumes prepare against the stored job; standalone resumes get
     resume-only preparation through the service's no-JD prompt, so no
     tailoring is required.
     """
@@ -2753,8 +2853,14 @@ async def generate_interview_prep_endpoint(
             detail="Resume has no processed data. Please re-upload the resume.",
         )
 
-    # Tailored resumes resolve their stored job; standalone resumes get "".
-    job_description, job = await _resolve_generation_job_context(resume_id, resume)
+    # An ad-hoc JD wins; otherwise tailored resumes resolve their stored job
+    # and standalone resumes get "".
+    ad_hoc_job_description = (
+        request.job_description.strip() if request and request.job_description else ""
+    )
+    job_description, job = await _resolve_requested_job_context(
+        resume_id, resume, ad_hoc_job_description
+    )
 
     _validate_ai_sources(resume, job)
     language = get_content_language()
@@ -2774,7 +2880,7 @@ async def generate_interview_prep_endpoint(
             detail="Failed to generate interview preparation. Please try again.",
         )
 
-    await db.update_resume(
+    await _update_resume_or_404(
         resume_id,
         {"interview_prep": _serialize_interview_prep(interview_prep)},
     )
@@ -2865,6 +2971,47 @@ async def download_cover_letter_pdf(
 
     headers = {
         "Content-Disposition": f'attachment; filename="cover_letter_{resume_id}.pdf"'
+    }
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
+
+
+@router.get("/{resume_id}/outreach/pdf")
+async def download_outreach_pdf(
+    resume_id: str,
+    pageSize: str = Query("A4", pattern="^(A4|LETTER)$"),
+    lang: str | None = Query(None, pattern="^[a-z]{2}(-[A-Z]{2})?$"),
+) -> Response:
+    """Generate a PDF for a stored outreach message via headless Chromium.
+
+    Args:
+        resume_id: The ID of the resume containing the outreach message
+        pageSize: A4 or LETTER
+        lang: locale used for print page translations
+    """
+    resume = await db.get_resume(resume_id)
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    outreach_message = resume.get("outreach_message")
+    if not outreach_message:
+        raise HTTPException(
+            status_code=404, detail="No outreach message found for this resume"
+        )
+
+    url = (
+        f"{settings.frontend_base_url}/print/outreach/{resume_id}"
+        f"?pageSize={pageSize}"
+    )
+    if lang:
+        url = f"{url}&lang={lang}"
+
+    try:
+        pdf_bytes = await render_resume_pdf(url, pageSize, selector=".outreach-print")
+    except PDFRenderError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="outreach_{resume_id}.pdf"'
     }
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 

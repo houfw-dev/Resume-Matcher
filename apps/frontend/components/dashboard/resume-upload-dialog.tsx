@@ -305,7 +305,7 @@ export function ResumeUploadDialog({
           <div
             className={`
                             relative border-2 border-dashed p-8 text-center transition-all duration-200
-                            ${isDragging ? 'border-blue-700 bg-blue-50' : 'border-steel-grey hover:border-black hover:bg-white'}
+                            ${isDragging ? 'border-primary bg-blue-50' : 'border-steel-grey hover:border-black hover:bg-white'}
                             ${currentFile ? 'bg-white border-solid border-black' : ''}
                             ${!currentFile && !isRecovering ? 'cursor-pointer' : 'cursor-default'}
                             ${isRecovering ? 'opacity-70' : ''}
@@ -320,8 +320,8 @@ export function ResumeUploadDialog({
 
             {isUploadingGlobal ? (
               <div className="flex flex-col items-center py-4">
-                <Loader2Icon className="w-10 h-10 animate-spin text-blue-700 mb-4" />
-                <p className="font-mono text-sm font-bold uppercase text-blue-700">
+                <Loader2Icon className="w-10 h-10 animate-spin text-primary mb-4" />
+                <p className="font-mono text-sm font-bold uppercase text-primary">
                   {t('common.uploading')}
                 </p>
               </div>
@@ -348,7 +348,7 @@ export function ResumeUploadDialog({
                     e.stopPropagation();
                     removeFile(currentFile.id);
                   }}
-                  className="hover:bg-red-100 text-red-600 rounded-none"
+                  className="hover:bg-red-100 text-destructive rounded-none"
                   aria-label={t('a11y.removeFile')}
                   title={t('a11y.removeFile')}
                 >
@@ -389,7 +389,7 @@ export function ResumeUploadDialog({
           )}
 
           {uploadFeedback?.type === 'success' && (
-            <div className="mt-4 p-3 bg-green-50 border border-green-200 flex items-center gap-2 text-green-700 text-sm font-bold">
+            <div className="mt-4 p-3 bg-green-50 border border-green-200 flex items-center gap-2 text-success text-sm font-bold">
               <CheckCircle2Icon className="w-5 h-5 shrink-0" />
               <p>{uploadFeedback.message}</p>
             </div>

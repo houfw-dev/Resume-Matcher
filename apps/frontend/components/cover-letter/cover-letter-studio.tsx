@@ -160,8 +160,8 @@ export function CoverLetterStudio({ resumeId }: CoverLetterStudioProps) {
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-blue-700 mb-4" />
-        <p className="font-mono text-sm font-bold uppercase text-blue-700">{t('common.loading')}</p>
+        <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+        <p className="font-mono text-sm font-bold uppercase text-primary">{t('common.loading')}</p>
       </div>
     );
   }
@@ -186,9 +186,9 @@ export function CoverLetterStudio({ resumeId }: CoverLetterStudioProps) {
         {error && (
           <div
             role="alert"
-            className="mb-6 border-2 border-red-600 bg-red-50 p-4 flex items-start gap-3 shadow-sw-default"
+            className="mb-6 border-2 border-destructive bg-red-50 p-4 flex items-start gap-3 shadow-sw-default"
           >
-            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
             <p className="font-mono text-sm text-red-700">{error}</p>
           </div>
         )}
@@ -286,7 +286,7 @@ export function CoverLetterStudio({ resumeId }: CoverLetterStudioProps) {
                   {copied ? t('coverLetter.copied') : t('coverLetter.copyToClipboard')}
                 </Button>
                 {saved && !isDirty && (
-                  <span className="font-mono text-xs text-green-700">
+                  <span className="font-mono text-xs text-success">
                     {t('coverLetter.studio.saved')}
                   </span>
                 )}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ResumeData,
   PersonalInfo,
@@ -31,9 +31,12 @@ import {
   DEFAULT_SECTION_KEYS,
   getCanonicalSections,
   isAcceptedDefaultTitle,
+  sectionAnchorId,
   validateSectionName,
+  type DefaultSectionKey,
 } from '@/lib/utils/section-order';
 import { customSectionToken } from '@/lib/utils/fine-tune-scope';
+import { cn } from '@/lib/utils';
 import { useTranslations } from '@/lib/i18n';
 
 interface ResumeFormProps {
@@ -41,7 +44,16 @@ interface ResumeFormProps {
   onUpdate: (data: ResumeData) => void;
   /** Open the fine-tune wizard scoped to one section (or all custom blocks). */
   onFineTuneSection?: (sectionId: string) => void;
+  /**
+   * Canonical section key from the `?section=` deep link (diagnosis "fix in
+   * builder"). When set, the block scrolls into view and is briefly
+   * highlighted. Null/absent renders the form normally.
+   */
+  focusSectionKey?: DefaultSectionKey | null;
 }
+
+/** How long the deep-link focus ring stays on the target section. */
+const FOCUS_HIGHLIGHT_MS = 2400;
 
 const isDefaultSectionKey = (key: string): boolean =>
   (DEFAULT_SECTION_KEYS as readonly string[]).includes(key);
@@ -50,6 +62,7 @@ export const ResumeForm: React.FC<ResumeFormProps> = ({
   resumeData,
   onUpdate,
   onFineTuneSection,
+  focusSectionKey = null,
 }) => {
   const { t } = useTranslations();
 
@@ -73,6 +86,24 @@ export const ResumeForm: React.FC<ResumeFormProps> = ({
   );
   // Fixed canonical order (degree-branch aware), hidden sections included.
   const sortedAllSections = getCanonicalSections(localizedData, { includeHidden: true });
+
+  // Deep-link focus for the diagnosis "fix in builder" flow (?section=<key>).
+  // Sections can still be loading on first render, so the effect re-runs once
+  // the section list changes; the ink ring fades after a fixed short window.
+  const [highlightKey, setHighlightKey] = useState<string | null>(null);
+  const sectionSignature = sortedAllSections.map((section) => section.key).join('|');
+  useEffect(() => {
+    if (!focusSectionKey) {
+      setHighlightKey(null);
+      return;
+    }
+    const anchor = document.getElementById(sectionAnchorId(focusSectionKey));
+    if (!anchor) return; // data not loaded yet — re-run when sections arrive
+    anchor.scrollIntoView?.({ block: 'start' });
+    setHighlightKey(focusSectionKey);
+    const timer = window.setTimeout(() => setHighlightKey(null), FOCUS_HIGHLIGHT_MS);
+    return () => window.clearTimeout(timer);
+  }, [focusSectionKey, sectionSignature]);
 
   // The six default titles in the active locale are reserved custom names.
   const reservedDefaultNames = useMemo(
@@ -412,9 +443,18 @@ export const ResumeForm: React.FC<ResumeFormProps> = ({
       </div>
 
       {sortedAllSections.map((section) => (
-        <React.Fragment key={section.id}>
+        <div
+          key={section.id}
+          id={sectionAnchorId(section.key)}
+          data-section-key={section.key}
+          data-focus={highlightKey === section.key ? 'true' : undefined}
+          className={cn(
+            'scroll-mt-6',
+            highlightKey === section.key && 'ring-2 ring-inset ring-black'
+          )}
+        >
           {section.isDefault ? renderDefaultSection(section) : renderCustomSection(section)}
-        </React.Fragment>
+        </div>
       ))}
 
       {/* Add Section Button */}

@@ -21,6 +21,7 @@
     "finish": "Finalizar",
     "optional": "Opcional",
     "close": "Fechar",
+    "notifications": "Notificações",
     "ok": "OK",
     "search": "Buscar",
     "filter": "Filtrar",
@@ -103,7 +104,16 @@
     },
     "errors": {
       "loadFailed": "Não foi possível carregar os currículos. Tente novamente.",
-      "deleteFailed": "Não foi possível excluir o currículo. Seu currículo atual continua disponível."
+      "deleteFailed": "Não foi possível excluir o currículo. Seu currículo atual continua disponível.",
+      "uploadErrors": {
+        "fileTooLarge": "O arquivo \"{name}\" excede o tamanho máximo de {limit}.",
+        "fileTypeNotAccepted": "O tipo do arquivo \"{name}\" não é aceito. Tipos aceitos: {accept}",
+        "uploadUrlNotConfigured": "A URL de upload não está configurada.",
+        "uploadFailed": "Falha no envio de {name}. Tente novamente.",
+        "uploadErrorFallback": "Erro ao enviar {name}.",
+        "onlyOneFile": "Selecione apenas um arquivo.",
+        "maxFiles": "Você só pode enviar no máximo {count} arquivos."
+      }
     }
   },
   "builder": {
@@ -227,7 +237,14 @@
       "coverLetterFooter": "Dica: personalize primeiro para melhores resultados.",
       "outreachFooter": "Dica: mantenha curta e personalizada.",
       "interviewPrepDescription": "Gere preparação para entrevista a partir do seu currículo; em currículos adaptados, a descrição da vaga também é incorporada.",
-      "interviewPrepFooter": "Dica: prepare respostas verdadeiras e baseadas em evidências do seu currículo."
+      "interviewPrepFooter": "Dica: prepare respostas verdadeiras e baseadas em evidências do seu currículo.",
+      "jobDescriptionLabel": "Descrição da vaga",
+      "jobDescriptionHint": "Opcional. Deixe vazio para gerar conteúdo baseado apenas no currículo; cole a descrição da vaga para direcionar o conteúdo ao cargo.",
+      "jobDescriptionPlaceholder": "Cole aqui a descrição da vaga desejada (opcional)...",
+      "generateWithJd": "Gerar com a descrição da vaga",
+      "generateWithoutJd": "Gerar sem a descrição da vaga",
+      "statusPending": "Pendente",
+      "tailoredJdNote": "O conteúdo será gerado usando a descrição da vaga já vinculada a este currículo."
     },
     "regenerateDialog": {
       "title": "Regenerar {title}?",
@@ -293,7 +310,7 @@
       "atSeparator": " na ",
       "roleSeparator": "-",
       "aboutTitle": "Sobre a Análise de Vaga",
-      "aboutDescription": "Esta visualização mostra o quanto seu currículo corresponde à descrição da vaga. Palavras-chave do JD são destacadas em amarelo no seu currículo, ajudando você a ver quais habilidades e termos já estão cobertos.",
+      "aboutDescription": "Esta visualização mostra o quanto seu currículo corresponde à descrição da vaga. Palavras-chave da descrição da vaga são destacadas em amarelo no seu currículo, ajudando você a ver quais habilidades e termos já estão cobertos.",
       "highlightedKeywordsTitle": "Palavras-Chave Destacadas",
       "highlightedKeywordsDescriptionTemplate": "Palavras destacadas em __COLOR__ aparecem tanto na descrição da vaga quanto no seu currículo. Uma taxa de correspondência maior sugere melhor alinhamento com os requisitos da vaga.",
       "highlightedKeywordsDescriptionPrefix": "Palavras destacadas em",
@@ -303,7 +320,7 @@
       "tips": {
         "items": {
           "addMissingKeywords": "Use a aba Currículo para adicionar palavras-chave ausentes",
-          "focusTechnicalSkills": "Foque em habilidades técnicas e ferramentas mencionadas na vaga",
+          "focusTechnicalSkills": "Foque em habilidades técnicas e ferramentas mencionadas na descrição da vaga",
           "matchActionVerbs": "Combine verbos de ação dos requisitos da vaga"
         }
       },
@@ -509,6 +526,9 @@
       "outreachSaveFailed": "Falha ao salvar mensagem de contato. Por favor, tente novamente.",
       "coverLetterGenerateFailed": "Falha ao gerar carta de apresentação: {error}",
       "outreachGenerateFailed": "Falha ao gerar mensagem de contato: {error}",
+      "outreachDownloadRequiresResume": "Salve o currículo primeiro para baixar a mensagem de contato.",
+      "outreachMissing": "Nenhuma mensagem de contato disponível. Gere uma primeiro.",
+      "outreachDownloadFailed": "Falha ao baixar mensagem de contato: {error}",
       "interviewPrepGenerateFailed": "Falha ao gerar preparação para entrevista: {error}",
       "interviewPrepDownloadRequiresContent": "Gere a preparação para a entrevista antes de fazer o download.",
       "interviewPrepDownloadFailed": "Falha ao baixar a preparação para entrevista: {error}",
@@ -656,6 +676,10 @@
   "settings": {
     "title": "Configurações",
     "subtitle": "Configure suas preferências",
+    "nav": {
+      "language": "Idioma",
+      "label": "Seções de configurações"
+    },
     "aiProvider": "Provedor de IA",
     "aiProviderDescription": "Selecione seu provedor de IA preferido para análise de currículo",
     "apiKey": "Chave de API",
@@ -839,7 +863,8 @@
     "downloadFailedTitle": "Falha no download",
     "renameFailedTitle": "Falha ao renomear",
     "diagnoseResume": "Diagnosticar currículo",
-    "tailorFromThis": "Personalizar a partir deste currículo"
+    "tailorFromThis": "Personalizar a partir deste currículo",
+    "trackApplications": "Painel de candidaturas"
   },
   "preview": {
     "margins": "Margens",
@@ -956,6 +981,9 @@
       },
       "emptyTitle": "Nenhuma mensagem de contato ainda.",
       "emptyDescription": "Habilite a geração de mensagem de contato em Configurações, depois personalize um currículo."
+    },
+    "print": {
+      "emptyContent": "Nenhum conteúdo de mensagem de contato disponível."
     }
   },
   "errors": {
@@ -1016,6 +1044,7 @@
       "keepAdding": "Continuar adicionando",
       "backToDashboard": "Voltar ao painel",
       "openCreated": "Abrir currículo criado",
+      "tailorCreated": "Personalizar este currículo",
       "retryDraftBackup": "Tentar backup local novamente",
       "stay": "Permanecer aqui",
       "leaveWithoutSaving": "Sair sem salvar"
@@ -1094,14 +1123,22 @@
     },
     "empty": {
       "title": "Nenhuma candidatura ainda",
-      "description": "Personalize um currículo para uma vaga ou adicione manualmente para começar."
+      "description": "Personalize um currículo para uma vaga ou adicione manualmente para começar.",
+      "goDashboard": "Ir para o painel"
+    },
+    "filter": {
+      "banner": "Mostrando candidaturas vinculadas a este currículo",
+      "clear": "Limpar filtro",
+      "emptyTitle": "Ainda não há candidaturas para este currículo",
+      "emptyDescription": "Adicione uma manualmente ou adapte este currículo a uma vaga para começar o acompanhamento."
     },
     "card": {
       "companyUnknown": "Empresa desconhecida",
       "roleUnknown": "Cargo sem título",
       "sharedResume": "Currículo compartilhado",
       "selectAria": "Selecionar candidatura",
-      "dragAria": "Arraste para reordenar"
+      "dragAria": "Arraste para reordenar",
+      "viewResume": "Ver currículo"
     },
     "modal": {
       "jobDescription": "Descrição da vaga",
@@ -1180,10 +1217,18 @@
     "measuringLayout": "Medindo a paginação com o modelo selecionado…",
     "layoutSkipped": "A medição do layout não está disponível — o número de páginas e a densidade dos parágrafos são estimados a partir do texto.",
     "error": "Falha no diagnóstico. Tente novamente.",
-    "intro": "O relatório combina verificações determinísticas com uma revisão estruturada da IA. Cole opcionalmente a descrição da vaga-alvo para também avaliar os itens de aderência à vaga.",
-    "jobDescriptionLabel": "Descrição da vaga-alvo (opcional)",
+    "intro": "O relatório combina verificações determinísticas com uma revisão estruturada da IA. Escolha o modo de diagnóstico adequado ao seu objetivo.",
+    "modeLabel": "Modo de diagnóstico",
+    "modeExclusiveHint": "Escolha um modo — o diagnóstico com modelo de competências e o diagnóstico com descrição da vaga não podem ser combinados.",
+    "modeBasicTitle": "Diagnóstico básico",
+    "modeBasicDesc": "Checklist de 22 itens e resultado de linha vermelha, sem mirar uma vaga específica.",
+    "modeModelTitle": "Diagnóstico com modelo de competências",
+    "modeModelDesc": "Diagnóstico básico mais 5 itens de competência do cargo avaliados com um modelo de nível P3–P8.",
+    "modeJdTitle": "Diagnóstico com descrição da vaga",
+    "modeJdDesc": "Diagnóstico básico mais verificações de aderência à descrição da vaga colada.",
+    "jobDescriptionLabel": "Descrição da vaga-alvo",
     "jobDescriptionPlaceholder": "Cole a descrição da vaga para ativar as verificações de aderência…",
-    "jdHint": "Sem descrição da vaga, a verificação de aderência à vaga é marcada como não aplicável. Os 5 itens de competência do cargo não precisam do JD, mas exigem uma intenção profissional clara que corresponda a um modelo de nível (ou selecionado explicitamente); caso contrário, são marcados como não aplicáveis.",
+    "jdHint": "A verificação de aderência à vaga é avaliada com base nesta descrição. O diagnóstico com JD e o diagnóstico com modelo de competências são mutuamente exclusivos.",
     "run": "Iniciar diagnóstico",
     "rerun": "Repetir",
     "specVersion": "Rubrica {version}",
@@ -1196,6 +1241,7 @@
     "allConform": "Todos os itens estão em conformidade ou não se aplicam.",
     "evidenceLabel": "Problema",
     "suggestionLabel": "Ação de melhoria",
+    "fixInBuilder": "Corrigir no editor",
     "rating": {
       "conform": "Conforme",
       "partial": "Parcial",
@@ -1221,10 +1267,12 @@
     "countsSummary": "{effective} aplicáveis — em conformidade {conform}, parcial {partial}, em não conformidade {nonconform}; N/A {na}.",
     "modelLabel": "Modelo de competências",
     "modelLoading": "Carregando modelos de competências…",
-    "modelLoadError": "Não foi possível carregar os modelos de competências; você ainda pode executar o checklist básico.",
-    "modelMatchedHint": "Correspondência automática com o cargo-alvo: {name}. Troque de nível ou execute sem modelo.",
-    "modelNoMatchHint": "Nenhum modelo de competências corresponde ao cargo-alvo. Escolha um para confirmar ou execute sem modelo.",
-    "modelNone": "Executar sem modelo de competências"
+    "modelLoadError": "Não foi possível carregar os modelos de competências. Tente novamente ou escolha outro modo de diagnóstico.",
+    "modelMatchedHint": "Correspondência automática com o cargo-alvo: {name}. Troque de nível ou escolha outro modo de diagnóstico.",
+    "modelNoMatchHint": "Nenhum modelo de competências corresponde ao cargo-alvo. Escolha um para confirmar ou outro modo de diagnóstico.",
+    "basicModeHint": "Executa apenas o checklist V4 e as linhas vermelhas. O relatório não mira uma vaga: os itens de competência e de aderência à vaga ficam como não aplicáveis.",
+    "jdRequiredHint": "Cole uma descrição da vaga para iniciar — o diagnóstico com JD não pode ser combinado com um modelo de competências.",
+    "modelRetry": "Repetir"
   },
   "fineTune": {
     "buttonLabel": "Ajuste fino com IA",

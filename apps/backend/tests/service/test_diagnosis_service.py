@@ -9,6 +9,14 @@ Pins the V4-optimized contract:
   when no target intention resolves to a level model (a JD is NOT required —
   a no-JD run with a matching intention still judges 18–22); item 15 is
   objectively na below 5 effective dev years;
+* three mutually exclusive modes: base only / base + competency model /
+  base + JD. A JD suppresses title auto-matching and a real model key plus a
+  JD raises DiagnosisModeConflictError (the router maps it to HTTP 400);
+* the LLM judge is skipped entirely when no subjective item remains (every
+  item objective or gated na), and a total content-quality failure (empty /
+  unusable output on every retry) degrades to partial + manual-review
+  warnings instead of surfacing HTTP 500. PromptSizeError and transport
+  errors still propagate;
 * the rubric standards (criteria, QC-level guidance, level behavioral
   standards) are sent to the LLM server-side but never appear in the returned
   report — clients only see topic + evidence + suggestion. The V4 workbook
@@ -23,7 +31,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.services.diagnosis import diagnose_resume
+from app.services.diagnosis import DiagnosisModeConflictError, diagnose_resume
 from app.services.diagnosis_rules import DiagnosisRules, get_rules
 
 SAMPLE_RESUME: dict = {
@@ -445,7 +453,11 @@ async def test_optional_module_entries_ride_the_facts_packet() -> None:
 
 
 @pytest.mark.asyncio
-async def test_matched_title_with_jd_judges_competence_18_to_22_in_place() -> None:
+async def test_jd_suppresses_title_auto_match_so_competence_stays_na() -> None:
+    # Mode contract: JD mode (base + JD) and competency-model mode
+    # (base + model) are mutually exclusive. A JD present without an explicit
+    # model key suppresses title auto-matching, so even a title that would
+    # match a level model leaves 18–22 na while item 17 is judged.
     with _patched_llm() as mock_complete:
         mock_complete.return_value = _all_conform_payload()
         report = await diagnose_resume(
@@ -455,27 +467,19 @@ async def test_matched_title_with_jd_judges_competence_18_to_22_in_place() -> No
             language="zh",
         )
 
-    assert report.competency_model is not None
-    assert report.competency_model.key == DEFAULT_MODEL_KEY
+    assert report.competency_model is None
     by_id = {item.id: item for item in report.items}
-    for item_id, topic in zip(
-        COMPETENCE_IDS, ("系统架构", "业务架构", "开发技能", "应用技能", "项目管理"), strict=True
-    ):
-        item = by_id[item_id]
-        assert item.dimension == "competence"
-        assert item.dimension_name == "专业能力"
-        assert item.topic == topic
-        assert item.judgment_method == "subjective"
-        assert item.rating == "conform"
-    # Item 17 (JD fit) is judged too once a JD is present.
+    # Item 17 (JD fit) is judged once a JD is present.
     assert by_id[17].rating == "conform"
     assert by_id[17].judgment_method == "subjective"
+    for item_id in COMPETENCE_IDS:
+        assert by_id[item_id].rating == "na"
     # No synthetic model items anywhere.
     assert all(item.id < 1000 for item in report.items)
 
     requested = _requested_ids(mock_complete.await_args.kwargs["prompt"])
     assert JD_GATED_IDS <= requested
-    assert COMPETENCE_IDS <= requested
+    assert COMPETENCE_IDS.isdisjoint(requested)
 
 
 @pytest.mark.asyncio
@@ -657,6 +661,23 @@ async def test_unknown_competency_model_key_raises_key_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_real_model_key_combined_with_jd_raises_mode_conflict() -> None:
+    # The triple overlap (base + competency model + JD) is not a supported
+    # mode; the service refuses before any LLM call. The router maps it to 400.
+    with _patched_llm() as mock_complete:
+        mock_complete.return_value = _all_conform_payload()
+        with pytest.raises(DiagnosisModeConflictError):
+            await diagnose_resume(
+                SAMPLE_RESUME,
+                resume_id="r1",
+                job_description=SAMPLE_JD,
+                competency_model_key="java-p7",
+                language="zh",
+            )
+    mock_complete.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_diagnose_with_jd_sends_fit_items_to_llm() -> None:
     with _patched_llm() as mock_complete:
         mock_complete.return_value = _all_conform_payload()
@@ -669,10 +690,13 @@ async def test_diagnose_with_jd_sends_fit_items_to_llm() -> None:
 
     by_id = {item.id: item for item in report.items}
     assert by_id[17].rating == "conform"
+    # JD mode suppresses the title-matched level model: 18–22 stay na and
+    # never reach the judge prompt.
     for item_id in COMPETENCE_IDS:
-        assert by_id[item_id].rating == "conform"
+        assert by_id[item_id].rating == "na"
     requested = _requested_ids(mock_complete.await_args.kwargs["prompt"])
-    assert JD_GATED_IDS | COMPETENCE_IDS <= requested
+    assert JD_GATED_IDS <= requested
+    assert COMPETENCE_IDS.isdisjoint(requested)
 
 
 @pytest.mark.asyncio
@@ -703,10 +727,10 @@ async def test_custom_model_fills_base_competence_items_in_place() -> None:
         "app.services.diagnosis.get_rules", return_value=rules_with_model
     ):
         mock_complete.return_value = _all_conform_payload()
+        # Model mode: no JD — the two enhanced modes are mutually exclusive.
         report = await diagnose_resume(
             SAMPLE_RESUME,
             resume_id="r1",
-            job_description=SAMPLE_JD,
             language="zh",
         )
 
@@ -749,6 +773,77 @@ async def test_missing_llm_item_defaults_partial_with_warning() -> None:
     assert "人工复核" in item.evidence
     assert item.suggestion == ""
     assert any("11" in warning for warning in report.warnings)
+
+
+@pytest.mark.asyncio
+async def test_no_subjective_items_skips_the_llm_call_entirely() -> None:
+    """Regression for the production 500: basic mode with empty optional
+    modules, no JD and no matching model leaves every item objective or
+    gated na. The judge must never be called — an honest model answers an
+    empty assignment with {"items": []}, which the validator rejects, so
+    asking would only burn retries and fail the whole diagnosis."""
+    resume = copy.deepcopy(SAMPLE_RESUME)
+    resume["personalInfo"] = {**resume["personalInfo"], "title": "大数据开发工程师"}
+    resume["additional"] = {"technicalSkills": ["Java", "Spring Boot", "MySQL"]}
+
+    with _patched_llm() as mock_complete:
+        mock_complete.side_effect = AssertionError(
+            "complete_json must not be called without subjective items"
+        )
+        report = await diagnose_resume(resume, resume_id="r1", language="zh")
+
+    mock_complete.assert_not_awaited()
+    assert len(report.items) == 22
+    by_id = {item.id: item for item in report.items}
+    assert by_id[17].rating == "na"
+    for item_id in COMPETENCE_IDS:
+        assert by_id[item_id].rating == "na"
+    assert report.warnings == []
+
+
+@pytest.mark.asyncio
+async def test_total_llm_content_failure_degrades_to_partial_warnings() -> None:
+    """When every retry comes back unusable (a model honestly returning
+    {"items": []} for real assignments is the observed DeepSeek case), the
+    report still completes and the subjective items default to partial with
+    visible manual-review warnings — the documented no-HTTP-500 contract."""
+    with _patched_llm() as mock_complete:
+        mock_complete.side_effect = ValueError("Failed after 3 attempts")
+        report = await diagnose_resume(SAMPLE_RESUME, resume_id="r1", language="zh")
+
+    assert len(report.items) == 22
+    by_id = {item.id: item for item in report.items}
+    # SAMPLE_RESUME's subjective set is 11/12 plus the auto-matched 18–22.
+    for item_id in SEMANTIC_BASE_IDS | COMPETENCE_IDS:
+        assert by_id[item_id].rating == "partial"
+        assert "人工复核" in by_id[item_id].evidence
+        assert by_id[item_id].suggestion == ""
+    assert len(report.warnings) == len(SEMANTIC_BASE_IDS | COMPETENCE_IDS)
+    # Objective verdicts are produced locally and stay untouched.
+    assert by_id[16].judgment_method == "objective"
+    assert by_id[4].judgment_method == "objective"
+
+
+@pytest.mark.asyncio
+async def test_prompt_size_error_propagates_instead_of_degrading() -> None:
+    """Oversized-prompt failures keep their dedicated router-level mapping;
+    the content-quality catch must not swallow PromptSizeError."""
+    from app.ai_limits import PromptSizeError
+
+    with _patched_llm() as mock_complete:
+        mock_complete.side_effect = PromptSizeError("prompt too large")
+        with pytest.raises(PromptSizeError):
+            await diagnose_resume(SAMPLE_RESUME, resume_id="r1", language="zh")
+
+
+@pytest.mark.asyncio
+async def test_transport_error_propagates_instead_of_degrading() -> None:
+    """Only content-quality ValueErrors degrade; transport failures (router
+    retries already exhausted) must still surface as a real failure."""
+    with _patched_llm() as mock_complete:
+        mock_complete.side_effect = RuntimeError("connection reset by peer")
+        with pytest.raises(RuntimeError, match="connection reset"):
+            await diagnose_resume(SAMPLE_RESUME, resume_id="r1", language="zh")
 
 
 @pytest.mark.asyncio
@@ -817,25 +912,22 @@ async def test_validator_drops_bad_rating_but_keeps_usable_items() -> None:
         assert verdicts[good_id] == "partial"
 
 
-@pytest.mark.asyncio
-async def test_validator_rejects_response_with_no_usable_items() -> None:
-    """A payload whose every entry is unusable still triggers the retry budget."""
-    with _patched_llm() as mock_complete:
-        mock_complete.return_value = _all_conform_payload()
-        report = await diagnose_resume(SAMPLE_RESUME, resume_id="r1", language="zh")
-        requested = _requested_ids(mock_complete.await_args.kwargs["prompt"])
-        bad_id = sorted(requested)[0]
+def test_validator_rejects_response_with_no_usable_items() -> None:
+    """The validator still rejects zero-usable-item payloads so complete_json
+    burns its retry budget. (What happens after the budget is exhausted is
+    pinned separately by test_total_llm_content_failure_degrades_*: the service
+    degrades to partial+warning instead of surfacing a 500.)"""
+    from app.services.diagnosis import _build_validator
 
-    async def fake_complete(**kwargs: object) -> dict:
-        validator = kwargs["response_validator"]  # type: ignore[assignment]
-        return validator(  # type: ignore[operator]
-            {"items": [{"id": bad_id, "rating": "weird", "evidence": "", "suggestion": ""}]}
+    validate = _build_validator(frozenset({11}))
+    with pytest.raises(ValueError, match="no usable items"):
+        validate(
+            {"items": [{"id": 11, "rating": "weird", "evidence": "", "suggestion": ""}]}
         )
-
-    with _patched_llm() as mock_complete:
-        mock_complete.side_effect = fake_complete
-        with pytest.raises(ValueError, match="no usable items"):
-            await diagnose_resume(SAMPLE_RESUME, resume_id="r1", language="zh")
+    with pytest.raises(ValueError, match="no items list"):
+        validate({})
+    with pytest.raises(ValueError, match="no items list"):
+        validate({"items": []})
 
 
 @pytest.mark.asyncio
@@ -843,10 +935,11 @@ async def test_report_never_leaks_rubric_standards() -> None:
     """Criteria, QC guidance and level standards reach the prompt only."""
     with _patched_llm() as mock_complete:
         mock_complete.return_value = _all_conform_payload()
+        # Model mode (no JD) so the title-matched level standards reach the
+        # prompt and their absence from the report can be asserted.
         report = await diagnose_resume(
             SAMPLE_RESUME,
             resume_id="r1",
-            job_description=SAMPLE_JD,
             language="zh",
         )
         prompt = mock_complete.await_args.kwargs["prompt"]

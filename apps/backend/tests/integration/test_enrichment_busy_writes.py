@@ -8,7 +8,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
-from app.database import Database
+from app.database import Database, ResumeNotFoundError
 from app.main import app
 from app.routers import enrichment
 from tests.integration.test_storage_busy_writes import fast_busy_database  # noqa: F401
@@ -126,6 +126,34 @@ async def test_other_enrichment_write_failure_remains_generic_500(
     )}
     stored = await isolated_db.get_resume(source["resume_id"])
     assert stored is not None and stored["processed_data"] == sample_resume
+
+
+@pytest.mark.parametrize("operation", ["apply", "apply-regenerated"])
+async def test_concurrent_delete_during_enrichment_write_returns_404(
+    isolated_db: Database,
+    sample_resume: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    source = await isolated_db.create_resume(
+        content="Synthetic original",
+        processed_data=sample_resume,
+        processing_status="ready",
+    )
+    # The row vanishes between the endpoint's upfront 404 check and the write.
+    monkeypatch.setattr(
+        isolated_db,
+        "update_resume",
+        AsyncMock(side_effect=ResumeNotFoundError(source["resume_id"])),
+    )
+    url, payload = _apply_request(source["resume_id"], sample_resume, operation)
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(url, json=payload)
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Resume not found"}
 
 
 async def test_enhance_preview_does_not_write_under_sqlite_contention(

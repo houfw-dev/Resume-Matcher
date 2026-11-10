@@ -21,6 +21,7 @@
     "finish": "完了",
     "optional": "任意",
     "close": "閉じる",
+    "notifications": "通知",
     "ok": "OK",
     "search": "検索",
     "filter": "フィルター",
@@ -103,7 +104,16 @@
     },
     "errors": {
       "loadFailed": "履歴書を読み込めませんでした。もう一度お試しください。",
-      "deleteFailed": "履歴書を削除できませんでした。現在の履歴書は引き続き利用できます。"
+      "deleteFailed": "履歴書を削除できませんでした。現在の履歴書は引き続き利用できます。",
+      "uploadErrors": {
+        "fileTooLarge": "ファイル「{name}」は最大サイズ（{limit}）を超えています。",
+        "fileTypeNotAccepted": "ファイル「{name}」の形式は許可されていません。許可される形式: {accept}",
+        "uploadUrlNotConfigured": "アップロードURLが設定されていません。",
+        "uploadFailed": "{name} のアップロードに失敗しました。もう一度お試しください。",
+        "uploadErrorFallback": "{name} のアップロード中にエラーが発生しました。",
+        "onlyOneFile": "選択できるファイルは1つだけです。",
+        "maxFiles": "アップロードできるファイルは最大{count}個までです。"
+      }
     }
   },
   "builder": {
@@ -227,7 +237,14 @@
       "coverLetterFooter": "ヒント：先にカスタマイズすると精度が上がります。",
       "outreachFooter": "ヒント：短く、個別性を入れましょう。",
       "interviewPrepDescription": "履歴書から面接準備を生成します。カスタマイズ済み履歴書では求人内容も反映されます。",
-      "interviewPrepFooter": "ヒント：履歴書の根拠に基づく、真実の回答を準備しましょう。"
+      "interviewPrepFooter": "ヒント：履歴書の根拠に基づく、真実の回答を準備しましょう。",
+      "jobDescriptionLabel": "職務記述書（JD）",
+      "jobDescriptionHint": "任意。空欄の場合は履歴書のみから生成します。職務記述書を貼り付けると、その職種に合わせた内容を生成します。",
+      "jobDescriptionPlaceholder": "応募先の職務記述書をここに貼り付け（任意）...",
+      "generateWithJd": "職務記述書を使って生成",
+      "generateWithoutJd": "職務記述書を使わず生成",
+      "statusPending": "生成待ち",
+      "tailoredJdNote": "この履歴書に紐づく職務記述書をもとに内容を生成します。"
     },
     "regenerateDialog": {
       "title": "{title}を再生成しますか？",
@@ -293,7 +310,7 @@
       "atSeparator": " @ ",
       "roleSeparator": "—",
       "aboutTitle": "JD一致について",
-      "aboutDescription": "このビューでは、履歴書が求人内容（JD）にどれだけ一致しているかを確認できます。JDのキーワードが履歴書内で黄色にハイライトされ、すでに含まれているスキルや用語が分かります。",
+      "aboutDescription": "このビューでは、履歴書が求人内容（JD）にどれだけ一致しているかを確認できます。求人内容のキーワードが履歴書内で黄色にハイライトされ、すでに含まれているスキルや用語が分かります。",
       "highlightedKeywordsTitle": "ハイライトされたキーワード",
       "highlightedKeywordsDescriptionTemplate": "__COLOR__でハイライトされた単語は、求人内容と履歴書の両方に含まれます。一致率が高いほど、要件への適合度が高いことを示します。",
       "highlightedKeywordsDescriptionPrefix": "次の色でハイライトされた単語",
@@ -303,7 +320,7 @@
       "tips": {
         "items": {
           "addMissingKeywords": "「履歴書」タブで不足しているキーワードを追加する",
-          "focusTechnicalSkills": "JDに記載された技術スキルやツールに注目する",
+          "focusTechnicalSkills": "求人内容に記載された技術スキルやツールに注目する",
           "matchActionVerbs": "要件にある行動動詞に合わせる"
         }
       },
@@ -509,6 +526,9 @@
       "outreachSaveFailed": "連絡メールの保存に失敗しました。もう一度お試しください。",
       "coverLetterGenerateFailed": "カバーレターの生成に失敗しました: {error}",
       "outreachGenerateFailed": "連絡メールの生成に失敗しました: {error}",
+      "outreachDownloadRequiresResume": "外連絡メッセージをダウンロードする前に履歴書を保存してください。",
+      "outreachMissing": "外連絡メッセージがありません。先に生成してください。",
+      "outreachDownloadFailed": "外連絡メッセージのダウンロードに失敗しました: {error}",
       "interviewPrepGenerateFailed": "面接準備の生成に失敗しました: {error}",
       "interviewPrepDownloadRequiresContent": "ダウンロードするには、まず面接準備を生成してください。",
       "interviewPrepDownloadFailed": "面接準備のダウンロードに失敗しました: {error}",
@@ -583,7 +603,7 @@
     "pasteJobDescriptionBelow": "下に求人内容を貼り付け",
     "jobDescriptionPlaceholder": "求人内容をここに貼り付けてください...",
     "promptLabel": "調整の強さ",
-    "promptDescription": "求人情報にどの程度合わせるかを選択してください。",
+    "promptDescription": "求人内容にどの程度合わせるかを選択してください。",
     "promptOptions": {
       "nudge": {
         "label": "軽く調整",
@@ -595,7 +615,7 @@
       },
       "full": {
         "label": "完全に調整",
-        "description": "求人情報を使って全面的に調整。"
+        "description": "求人内容を使って全面的に調整。"
       }
     },
     "analyzeJob": "求人を分析",
@@ -656,6 +676,10 @@
   "settings": {
     "title": "設定",
     "subtitle": "設定をカスタマイズ",
+    "nav": {
+      "language": "言語",
+      "label": "設定セクション"
+    },
     "aiProvider": "AIプロバイダー",
     "aiProviderDescription": "履歴書分析に使用するAIプロバイダーを選択",
     "apiKey": "APIキー",
@@ -839,7 +863,8 @@
     "downloadFailedTitle": "ダウンロードに失敗しました",
     "renameFailedTitle": "名前の変更に失敗しました",
     "diagnoseResume": "履歴書を診断",
-    "tailorFromThis": "この履歴書からカスタマイズ"
+    "tailorFromThis": "この履歴書からカスタマイズ",
+    "trackApplications": "応募トラッカー"
   },
   "preview": {
     "margins": "余白",
@@ -916,7 +941,7 @@
     "studio": {
       "backToResume": "履歴書に戻る",
       "jobDescriptionLabel": "職務記述書（JD）",
-      "jobDescriptionHint": "任意。空欄の場合は履歴書のみからカバーレターを作成します。JDを入力すると求人に合わせてカスタマイズします。",
+      "jobDescriptionHint": "任意。空欄の場合は履歴書のみからカバーレターを作成します。求人内容を入力すると求人に合わせてカスタマイズします。",
       "jobDescriptionPlaceholder": "応募先の職務記述書をここに貼り付け（任意）...",
       "resultLabel": "カバーレター",
       "emptyResult": "生成されたカバーレターがここに表示されます。保存前に編集できます。",
@@ -956,6 +981,9 @@
       },
       "emptyTitle": "まだ外連絡メッセージがありません。",
       "emptyDescription": "設定で外連絡メッセージ生成を有効にしてから、履歴書をカスタマイズしてください。"
+    },
+    "print": {
+      "emptyContent": "外連絡メッセージの内容がありません。"
     }
   },
   "errors": {
@@ -1016,6 +1044,7 @@
       "keepAdding": "続けて追加",
       "backToDashboard": "ダッシュボードに戻る",
       "openCreated": "作成した履歴書を開く",
+      "tailorCreated": "この履歴書をカスタマイズ",
       "retryDraftBackup": "ローカル保存を再試行",
       "stay": "このページに留まる",
       "leaveWithoutSaving": "保存せずに移動"
@@ -1094,14 +1123,22 @@
     },
     "empty": {
       "title": "応募はまだありません",
-      "description": "求人に合わせて履歴書を調整するか、手動で追加して追跡を開始しましょう。"
+      "description": "求人に合わせて履歴書を調整するか、手動で追加して追跡を開始しましょう。",
+      "goDashboard": "ダッシュボードへ"
+    },
+    "filter": {
+      "banner": "この履歴書に関連する応募を表示中",
+      "clear": "フィルターを解除",
+      "emptyTitle": "この履歴書の応募はまだありません",
+      "emptyDescription": "手動で追加するか、この履歴書を求人に合わせてカスタマイズしてから追跡を始めましょう。"
     },
     "card": {
       "companyUnknown": "会社名不明",
       "roleUnknown": "役職名なし",
       "sharedResume": "共有された履歴書",
       "selectAria": "応募を選択",
-      "dragAria": "ドラッグして並べ替え"
+      "dragAria": "ドラッグして並べ替え",
+      "viewResume": "履歴書を表示"
     },
     "modal": {
       "jobDescription": "求人内容",
@@ -1180,10 +1217,18 @@
     "measuringLayout": "選択したテンプレートでレイアウトを測定中…",
     "layoutSkipped": "レイアウト測定を利用できません。ページ数と段落密度はテキストから推定されます。",
     "error": "診断に失敗しました。もう一度お試しください。",
-    "intro": "このレポートは決定論的チェックと 1 回の構造化 AI レビューを組み合わせます。任意で応募先の職務記述を貼り付けると、適合度項目も評価します。",
-    "jobDescriptionLabel": "応募先の職務記述（任意）",
+    "intro": "このレポートは決定論的チェックと 1 回の構造化 AI レビューを組み合わせます。目的に合う診断モードを選択してください。",
+    "modeLabel": "診断モード",
+    "modeExclusiveHint": "いずれか 1 つを選択してください。能力モデル診断と職務記述（JD）診断は併用できません。",
+    "modeBasicTitle": "基本診断",
+    "modeBasicDesc": "22 項目のチェックリストとレッドライン判定。特定のポジションは対象にしません。",
+    "modeModelTitle": "能力モデル診断",
+    "modeModelDesc": "基本診断に加え、P3–P8 の職級モデルで役割コンピテンシー5項目を評価します。",
+    "modeJdTitle": "職務記述（JD）診断",
+    "modeJdDesc": "基本診断に加え、貼り付けた職務記述に対する適合度をチェックします。",
+    "jobDescriptionLabel": "応募先の職務記述",
     "jobDescriptionPlaceholder": "職務記述を貼り付けて適合度チェックを有効化……",
-    "jdHint": "職務記述（JD）がない場合、職務適合度の項目は非適用として扱われます。役割コンピテンシー5項目は JD 不要ですが、職級モデルに一致する（または明示的に選択した）明確な志望意向が必要で、それがない場合は非適用となります。",
+    "jdHint": "職務適合度はこの記述に基づいて評価されます。JD 診断と能力モデル診断は相互に排他的で、同時には実行できません。",
     "run": "診断を開始",
     "rerun": "再診断",
     "specVersion": "ルーブリック {version}",
@@ -1196,6 +1241,7 @@
     "allConform": "すべての項目が適合または非適用です。",
     "evidenceLabel": "問題点",
     "suggestionLabel": "改善アクション",
+    "fixInBuilder": "ビルダーで修正",
     "rating": {
       "conform": "適合",
       "partial": "部分的",
@@ -1221,10 +1267,12 @@
     "countsSummary": "適用 {effective} 項目 —— 適合 {conform}、部分的 {partial}、不適合 {nonconform}；非適用 {na}。",
     "modelLabel": "職務能力モデル",
     "modelLoading": "能力モデルを読み込み中……",
-    "modelLoadError": "能力モデルを読み込めませんでした。基本チェックリストで診断できます。",
-    "modelMatchedHint": "対象ポジションに自動一致：{name}。レベルを変更するか、モデルなしで実行できます。",
-    "modelNoMatchHint": "対象ポジションに一致する能力モデルがありません。手動で選択するか、モデルなしで実行してください。",
-    "modelNone": "能力モデルを使用しない"
+    "modelLoadError": "能力モデルを読み込めませんでした。再試行するか、別の診断モードを選択してください。",
+    "modelMatchedHint": "対象ポジションに自動一致：{name}。レベルを変更するか、別の診断モードを選択できます。",
+    "modelNoMatchHint": "対象ポジションに一致する能力モデルがありません。手動で選択するか、別の診断モードを選択してください。",
+    "basicModeHint": "V4 チェックリストとレッドラインのみを実行します。レポートは特定ポジションを対象とせず、役割コンピテンシーと職務適合度の項目は非適用になります。",
+    "jdRequiredHint": "開始するには職務記述を貼り付けてください。JD 診断は能力モデルと併用できません。",
+    "modelRetry": "再試行"
   },
   "fineTune": {
     "buttonLabel": "AI微調整",

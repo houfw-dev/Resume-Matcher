@@ -179,7 +179,7 @@ export function EnrichmentModal({ resumeId, isOpen, onClose, onComplete }: Enric
     switch (state.step) {
       case 'idle':
       case 'analyzing':
-        return <AnalyzingStep />;
+        return <AnalyzingStep onCancel={handleClose} />;
 
       case 'questions':
         if (!currentQuestion) {
@@ -202,7 +202,7 @@ export function EnrichmentModal({ resumeId, isOpen, onClose, onComplete }: Enric
         );
 
       case 'generating':
-        return <GeneratingStep />;
+        return <GeneratingStep onCancel={handleClose} />;
 
       case 'preview':
         return (

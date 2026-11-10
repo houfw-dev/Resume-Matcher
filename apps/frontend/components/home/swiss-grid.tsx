@@ -33,7 +33,7 @@ export const SwissGrid = ({
           <h1 className="font-serif text-5xl md:text-7xl text-black tracking-tight leading-[0.95] uppercase">
             {t('nav.dashboard')}
           </h1>
-          <p className="mt-6 text-sm font-mono text-blue-700 uppercase tracking-wide max-w-md font-bold">
+          <p className="mt-6 text-sm font-mono text-primary uppercase tracking-wide max-w-md font-bold">
             {'// '}
             {t('dashboard.selectModule')}
           </p>
@@ -52,7 +52,7 @@ export const SwissGrid = ({
         </div>
 
         {/* Footer - stays above hovered cards */}
-        <div className="p-4 bg-background flex justify-between items-center gap-3 flex-wrap font-mono text-xs text-blue-700 border-t border-black shrink-0 relative z-30">
+        <div className="p-4 bg-background flex justify-between items-center gap-3 flex-wrap font-mono text-xs text-primary border-t border-black shrink-0 relative z-30">
           <div className="flex items-center gap-2">
             <Image
               src="/logo.svg"

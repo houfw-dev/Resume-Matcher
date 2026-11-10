@@ -87,7 +87,7 @@ export function JDComparisonView({ jobDescription, resumeData }: JDComparisonVie
                 ? 'text-green-600'
                 : stats.matchPercentage >= 30
                   ? 'text-yellow-600'
-                  : 'text-red-600'
+                  : 'text-destructive'
             }`}
           >
             {stats.matchPercentage}%

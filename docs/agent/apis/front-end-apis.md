@@ -47,18 +47,23 @@ updateCoverLetter(resumeId: string, content: string) → void
 updateOutreachMessage(resumeId: string, content: string) → void
 
 // On-demand generated content (any resume with processed data)
-generateCoverLetter(resumeId: string) → string
-generateOutreachMessage(resumeId: string) → string
-generateInterviewPrep(resumeId: string) → InterviewPrepData
+generateCoverLetter(resumeId: string, jobDescription?: string) → string
+generateOutreachMessage(resumeId: string, jobDescription?: string) → string
+generateInterviewPrep(resumeId: string, jobDescription?: string) → InterviewPrepData
 generateCoverLetterFromResume(resumeId: string, jobDescription?: string) → string
 ```
 
 **On-demand generation works for every resume, not just tailored ones.** The three
 endpoints `POST /resumes/{id}/generate-cover-letter`, `POST /resumes/{id}/generate-outreach`
-and `POST /resumes/{id}/generate-interview-prep` share one resolution rule
-(`_resolve_generation_job_context`): a tailored resume (`parent_id` set) loads its stored
-job through the improvement record — 400 when the improvement is missing, 404 when the
-job is missing — while a standalone resume proceeds with an **empty job description**.
+and `POST /resumes/{id}/generate-interview-prep` accept an optional JSON body
+`{"job_description": string}` (default `""`, max 100,000 chars — oversized returns 422
+before the handler runs; a missing/empty body stays backwards compatible). Resolution
+follows `_resolve_requested_job_context`: a non-empty `job_description` pasted in the
+request (the standalone-resume "target this job" option) **takes precedence** and is
+size-checked directly with no job-record lookup; otherwise the endpoints fall back to
+`_resolve_generation_job_context` — a tailored resume (`parent_id` set) loads its stored
+job through the improvement record, 400 when the improvement is missing and 404 when the
+job is missing, while a standalone resume proceeds with an **empty job description**.
 The services branch on the empty/whitespace JD and use the built-in no-JD templates
 `COVER_LETTER_NO_JD_PROMPT`, `OUTREACH_NO_JD_PROMPT` and `INTERVIEW_PREP_NO_JD_PROMPT`
 (these take only `{resume_data}` + `{output_language}`, so custom feature-prompt
@@ -80,6 +85,9 @@ provider-free server components under `/print/*` via headless Chromium:
 
 - `GET /api/v1/resumes/{id}/cover-letter/pdf` — 404 when no cover letter is stored;
   print selector `.cover-letter-print`; filename `cover_letter_{id}.pdf`.
+- `GET /api/v1/resumes/{id}/outreach/pdf` — 404 when no outreach message is stored;
+  renders the `/print/outreach/[id]` server component; selector `.outreach-print`;
+  filename `outreach_{id}.pdf`.
 - `GET /api/v1/resumes/{id}/interview-prep/pdf` — 404 when no interview prep is stored;
   print selector `.interview-prep-print`; filename `interview_prep_{id}.pdf`.
 - `GET /api/v1/resumes/{id}/jd-match/pdf` — **tailored-only**: a standalone resume gets
@@ -89,12 +97,20 @@ provider-free server components under `/print/*` via headless Chromium:
   comparison, so PDF and tab show identical percentages and highlights; selector
   `.jd-match-print`; filename `jd_match_{id}.pdf`.
 
-All three accept `pageSize` (`A4`|`LETTER`, default `A4`) and optional `lang`
+All four accept `pageSize` (`A4`|`LETTER`, default `A4`) and optional `lang`
 (`^[a-z]{2}(-[A-Z]{2})?$`) for the print-page chrome, return `application/pdf`, and
 surface Chromium failures as **503** (`PDFRenderError`, details logged). The frontend
 saves blobs through `buildResumeFilename(name, company, id, kind)` with kinds
-`cover-letter` / `interview-prep` / `jd-match`, and falls back to opening the
-`get*PdfUrl` URL in a new tab when the blob fetch hits a network `TypeError`.
+`cover-letter` / `outreach` / `interview-prep` / `jd-match`, and falls back to opening
+the `get*PdfUrl` URL in a new tab when the blob fetch hits a network `TypeError`.
+
+> **Print-CSS contract.** The global `@media print` block hides `body *` and reveals
+> only an allow-list of print roots (`.resume-print`, `.cover-letter-print`,
+> `.outreach-print`, `.interview-prep-print`, `.jd-match-print`). A new `/print/*`
+> route whose root class is missing from that allow-list renders a valid but
+> **completely blank PDF** — add the class (and its `*` descendants) to both the
+> visibility and layout rules in `app/(default)/css/globals.css`, and pass the same
+> selector as `render_resume_pdf(..., selector=...)`.
 
 **Resume PDF / DOCX readiness gates.** `GET /api/v1/resumes/{id}/pdf` (renders the
 `/print/resumes/[id]` server component via Chromium) and `GET /api/v1/resumes/{id}/docx`
@@ -136,7 +152,7 @@ Backend endpoints:
   - `warnings` for items the LLM omitted (defaulted to `partial`, empty suggestion).
   404 when the resume is missing, 400 when it has no processed data or `competency_model_key` is neither a catalog key nor `"none"` (generic message: model unavailable, choose another), **413** when the request body exceeds **128 KiB** (`Content-Length` guard; generic message, details logged — also caps an over-long JD), **422** when an optional layout field violates its bounds. The call is long (LLM) and uses the 240s default client timeout.
 - **Rendered-layout snapshot (optional)** — `template_settings` mirrors the builder's `TemplateSettings` (`template` one of the seven template ids, `pageSize` `A4`|`LETTER`, four 5–25 mm integer margins, 1–5 spacing/font levels, booleans, enum-validated font/accent; all fields optional) and `rendered_layout` is a client-produced, browser-measured snapshot of that template's real offscreen render: `{schema_version, measured_at, template, page_size, margins, content_width_px, content_height_px, page_count (1–12), total_height_px, two_column, header{height_px, cell_count, rows[]}, sections[≤40]{key,title,visible,index,height_px,pages[]}, points[≤300]{locator, location, text(≤120), chars, visual_lines, height_px, page}, page_mirror[≤12]{page, text(≤6000)}, warnings[≤20]}` with a total JSON payload cap of **48 KB**; `locator` is one of `{kind:"summary", point_index}` / `{kind:"entry", section:"workExperience"|"personalProjects", entry_index, point_index}` / `{kind:"custom_text", key, point_index}` / `{kind:"custom_item", key, entry_index, point_index}` (point enumeration mirrors the backend traversal exactly; `stringList` custom sections are excluded from points). Both schemas use `extra="ignore"`. The backend accepts the snapshot only when its `template` **and** `page_size` match `template_settings` (a mismatch logs and is discarded wholesale — #1/#2 then fall back to the 46-chars-per-line / 950-chars-per-page text estimates, exactly as legacy clients behave; an empty body `{}` remains valid). When accepted, deterministic items **#1** (per-point measured visual lines, >6 fails; unmatched points still fall back to the char estimate) and **#2** (measured `page_count`, >3 fails) judge the real render — evidence says “按所选模板…实际渲染”, never “估算” — and the LLM prompt gains a “所选模板的实际渲染结果” block (facts JSON + per-page text mirror, ≤12,000 chars) with a hard rule: items 1/2 are already decided, so the LLM must not re-assert paragraph/page-length problems anywhere or infer appearance from character counts; text facts remain grounded solely in the original resume and structured JSON. Snapshots are never persisted. Full rationale: [docs/agent/features/resume-diagnosis.md](../features/resume-diagnosis.md) §“所选模板的实际渲染结果（前端测量快照）”.
-- `GET /api/v1/resumes/{resume_id}/docx?lang=zh-CN` — builds a **single canonical editable Word file** from structured `processed_data` (JSON `content` fallback when `processed_data` is missing; no LLM, no Chromium, pure CPU). DOCX deliberately does **not** follow the seven visual templates: one normative layout mirroring the on-screen swiss-single semantics — canonical section order/title healing via `canonicalize_section_meta`, header fact grid (性别/年龄/学历/工作年限/求职意向/期望城市/电话/邮箱/外语水平；语言只进事实网格), four-column entry headers (work 时间｜公司｜部门｜岗位 with the job title **not** bold; education with school bold; projects with name/role bold), `label` bold standalone rows that restart bullet numbering, `plain` unnumbered body, ordered skills at the early `additional` slot, and **independent 培训与证书 / 荣誉奖项 sections projected to the back of the resume** (after the custom-section cluster; anchor: legacy honors row → other-branch education → self-evaluation → document end; render-only slots, data stays under `additional`). Markdown emphasis stripping and rendered-list de-duplication (e.g. a doubled 英语四级 fact) are replayed on a private deepcopy. The optional `lang` (`^[a-z]{2}(-[A-Z]{2})?$`) selects only the static chrome; when omitted the chrome follows the **content language** (Han-character detection). Returns the docx media type with an ASCII fallback + RFC 5987 `filename*=UTF-8''…` header; the download is named `姓名-年龄-工作年限-学历-求职意向` (e.g. `王浩-28岁-5年-硕士-Java开发工程师.docx`) — facts from `personalInfo` (学历 falls back to the first `education[].degree`), empty facts skipped, illegal filename characters replaced; with no facts at all the UTF-8 stem falls back to `简历-<id8>` and the ASCII filename is always `resume-<id8>.docx`. The `GET …/pdf` endpoint uses the same five-fact naming (helper `_resume_download_stem` / `_resume_download_headers`), and the frontend blob saves mirror it via `buildResumeFactFilename` (viewer PDF + Word, builder PDF). 404 when the resume is missing, **409 when it is not yet `ready`** (see the readiness-gates paragraph above), 400 when a `ready` record has no structured data available, 500 generic (details logged server-side) on build failure.
+- `GET /api/v1/resumes/{resume_id}/docx?lang=zh-CN` — builds a **single canonical editable Word file** from structured `processed_data` (JSON `content` fallback when `processed_data` is missing; no LLM, no Chromium, pure CPU). DOCX deliberately does **not** follow the seven visual templates: one normative layout mirroring the on-screen swiss-single semantics — canonical section order/title healing via `canonicalize_section_meta`, header fact grid (a borderless three-column Word table: 性别/年龄/学历/工作年限/求职意向/期望城市/电话/邮箱/外语水平， one `label：value` pair per cell so a label can never split from its value across wrapped lines; 语言只进事实网格) followed by a labeled personal-link row (个人网站/领英/GitHub， protocol-stripped, muted gray), four-column entry headers (work 时间｜公司｜部门｜岗位 with the job title **not** bold; education with school bold; projects with name/role bold), `label` bold standalone rows that restart bullet numbering, `plain` unnumbered body, ordered skills at the early `additional` slot, and **independent 培训与证书 / 荣誉奖项 sections projected to the back of the resume** (after the custom-section cluster; anchor: legacy honors row → other-branch education → self-evaluation → document end; render-only slots, data stays under `additional`). Markdown emphasis stripping and rendered-list de-duplication (e.g. a doubled 英语四级 fact) are replayed on a private deepcopy. The optional `lang` (`^[a-z]{2}(-[A-Z]{2})?$`) selects only the static chrome; when omitted the chrome follows the **content language** (Han-character detection). Returns the docx media type with an ASCII fallback + RFC 5987 `filename*=UTF-8''…` header; the download is named `姓名-年龄-工作年限-学历-求职意向` (e.g. `王浩-28岁-5年-硕士-Java开发工程师.docx`) — facts from `personalInfo` (学历 falls back to the first `education[].degree`), empty facts skipped, illegal filename characters replaced; with no facts at all the UTF-8 stem falls back to `简历-<id8>` and the ASCII filename is always `resume-<id8>.docx`. The `GET …/pdf` endpoint uses the same five-fact naming (helper `_resume_download_stem` / `_resume_download_headers`), and the frontend blob saves mirror it via `buildResumeFactFilename` (viewer PDF + Word, builder PDF). 404 when the resume is missing, **409 when it is not yet `ready`** (see the readiness-gates paragraph above), 400 when a `ready` record has no structured data available, 500 generic (details logged server-side) on build failure.
 - `POST /api/v1/resumes/{resume_id}/diagnose/document` — body is the **`DiagnosisReport` already shown on screen** (re-posted by the client; no second LLM call). Renders it with python-docx into a bilingual Word report (CJK fonts: 黑体 headings / 宋体 body) and returns `application/vnd.openxmlformats-officedocument.wordprocessingml.document` with `Content-Disposition: attachment` (ASCII fallback + RFC 5987 `filename*=UTF-8''…`, stem `简历诊断报告-<姓名>-<YYYYMMDD-HHMM>` local time — e.g. `简历诊断报告-王浩-20261030-2156.docx`; name resolved from `processed_data.personalInfo.name`, illegal filename characters replaced; a missing name falls back to `resume-<id8>` — frontend blob saves mirror it via `buildDiagnosisReportFilename`). Document sections: ① overall counts (`适用 N 项 —— 符合/部分符合/不符合；不适用 M 项`), target title, a `能力模型匹配：<model>：…` line driven by the competence dimension counts when a model was used, red-line verdict, ② failed red lines with topic + `检查位置` + problem + fix (omitted entirely when the red line passes), ③ per-dimension counts table with 6 columns (`维度 / 适用 / 符合 / 部分符合 / 不符合 / 不适用`, one row per report dimension), ④ 问题描述与优化方案 for every partial/nonconform item (sorted red-line first, grouped by dimension; each heading shows `#id` + public topic and label-value rows 检查位置 / 问题描述 / 优化方案 grounded in the posted report), ⑤ appendix table of all 22 checks with columns `序号 / 维度 / 检查位置 / 评级` — the confidential standards (criteria, QC guidance, level standards) are never rendered. Subtitle counts are dynamic (`N 维度 / M 检查项 / K 红线`). 404 when the resume is missing, 500 (generic message, details logged server-side) on render failure.
 
 Resume upload accepts matching PDF, DOC or DOCX filename/MIME pairs. The backend

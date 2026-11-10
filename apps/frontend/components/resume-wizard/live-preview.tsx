@@ -45,7 +45,7 @@ export function LivePreview({ resumeData, inferredSkills }: LivePreviewProps) {
       aria-label={t('resumeWizard.preview.label')}
       className="border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_#000000]"
     >
-      <p className="font-mono text-xs font-bold uppercase tracking-wider text-blue-700">
+      <p className="font-mono text-xs font-bold uppercase tracking-wider text-primary">
         {t('resumeWizard.preview.label')}
       </p>
 
@@ -126,7 +126,7 @@ export function LivePreview({ resumeData, inferredSkills }: LivePreviewProps) {
                       key={skill}
                       className={
                         isNew
-                          ? 'border border-green-700 bg-background px-2 py-1 font-mono text-xs text-green-700'
+                          ? 'border border-success bg-background px-2 py-1 font-mono text-xs text-success'
                           : 'border border-black bg-background px-2 py-1 font-mono text-xs'
                       }
                     >

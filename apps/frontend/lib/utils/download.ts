@@ -30,11 +30,12 @@ export function openUrlInNewTab(url: string): boolean {
  * - Truncates to reasonable length
  * - Provides fallback if title is empty
  */
-export type DownloadKind = 'resume' | 'cover-letter' | 'interview-prep' | 'jd-match';
+export type DownloadKind = 'resume' | 'cover-letter' | 'outreach' | 'interview-prep' | 'jd-match';
 
 const FALLBACK_PREFIXES: Record<DownloadKind, string> = {
   resume: 'resume',
   'cover-letter': 'cover_letter',
+  outreach: 'outreach',
   'interview-prep': 'interview_prep',
   'jd-match': 'jd_match',
 };
@@ -127,6 +128,7 @@ export function buildDiagnosisReportFilename(
 const KIND_LABELS: Record<DownloadKind, string> = {
   resume: 'Resume',
   'cover-letter': 'Cover Letter',
+  outreach: 'Outreach Message',
   'interview-prep': 'Interview Prep',
   'jd-match': 'JD Match',
 };

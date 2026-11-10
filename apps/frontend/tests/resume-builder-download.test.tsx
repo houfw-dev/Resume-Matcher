@@ -9,6 +9,7 @@ const downloadResumePdf = vi.fn();
 const downloadResumeDocx = vi.fn();
 const downloadInterviewPrepPdf = vi.fn();
 const downloadJdMatchPdf = vi.fn();
+const downloadOutreachPdf = vi.fn();
 const fetchJobDescription = vi.fn<(resumeId: string) => Promise<{ content: string } | null>>(() =>
   Promise.resolve(null)
 );
@@ -30,10 +31,12 @@ vi.mock('@/lib/api/resume', () => ({
   downloadResumeDocx: (...args: unknown[]) => downloadResumeDocx(...args),
   downloadInterviewPrepPdf: (...args: unknown[]) => downloadInterviewPrepPdf(...args),
   downloadJdMatchPdf: (...args: unknown[]) => downloadJdMatchPdf(...args),
+  downloadOutreachPdf: (...args: unknown[]) => downloadOutreachPdf(...args),
   downloadCoverLetterPdf: vi.fn(),
   getResumePdfUrl: vi.fn(() => ''),
   getResumeDocxUrl: vi.fn(() => ''),
   getCoverLetterPdfUrl: vi.fn(() => ''),
+  getOutreachPdfUrl: vi.fn(() => ''),
   getInterviewPrepPdfUrl: vi.fn(() => ''),
   getJdMatchPdfUrl: vi.fn(() => ''),
   updateCoverLetter: vi.fn(),
@@ -99,8 +102,24 @@ const RESUME: ResumeData = {
   additional: {},
 } as ResumeData;
 
-const importBuilder = async () =>
-  (await import('@/components/builder/resume-builder')).ResumeBuilder;
+const importBuilder = async () => {
+  // Mirror the real (default) layout, which wraps the app in ToastProvider.
+  // Both modules must come from the SAME registry instance: afterEach calls
+  // vi.resetModules(), so a statically imported ToastProvider would hold a
+  // different React context object than the useToast() inside the
+  // dynamically re-imported builder.
+  const [{ ResumeBuilder }, { ToastProvider }] = await Promise.all([
+    import('@/components/builder/resume-builder'),
+    import('@/components/ui/toast'),
+  ]);
+  return function BuilderWithToast() {
+    return (
+      <ToastProvider>
+        <ResumeBuilder />
+      </ToastProvider>
+    );
+  };
+};
 
 beforeEach(() => {
   localStorage.clear();
@@ -115,6 +134,7 @@ beforeEach(() => {
   downloadResumeDocx.mockResolvedValue(new Blob(['docx']));
   downloadInterviewPrepPdf.mockResolvedValue(new Blob(['interview-pdf']));
   downloadJdMatchPdf.mockResolvedValue(new Blob(['jd-pdf']));
+  downloadOutreachPdf.mockResolvedValue(new Blob(['outreach-pdf']));
 });
 
 afterEach(() => {
@@ -267,5 +287,28 @@ describe('builder interview prep / JD match PDF downloads', () => {
     await waitFor(() => expect(downloadJdMatchPdf).toHaveBeenCalledTimes(1));
     expect(downloadJdMatchPdf).toHaveBeenCalledWith('res-1', 'A4', 'en');
     expect(saveBlobMock).toHaveBeenCalledWith(expect.any(Blob), '王浩 - JD Match.pdf');
+  });
+
+  it('downloads the stored outreach message as a named PDF', async () => {
+    fetchResume.mockResolvedValue({
+      processed_resume: RESUME,
+      raw_resume: { processing_status: 'ready' },
+      title: '王浩的简历',
+      outreach_message: 'Hello recruiter, ...',
+    });
+    const Builder = await importBuilder();
+    render(<Builder />);
+
+    const outreachTab = await screen.findByRole('button', {
+      name: 'builder.previewTabs.outreach',
+    });
+    await act(async () => outreachTab.click());
+
+    const downloadButton = await screen.findByRole('button', { name: 'common.download' });
+    await act(async () => downloadButton.click());
+
+    await waitFor(() => expect(downloadOutreachPdf).toHaveBeenCalledTimes(1));
+    expect(downloadOutreachPdf).toHaveBeenCalledWith('res-1', 'A4', 'en');
+    expect(saveBlobMock).toHaveBeenCalledWith(expect.any(Blob), '王浩 - Outreach Message.pdf');
   });
 });

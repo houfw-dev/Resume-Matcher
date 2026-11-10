@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.ai_budget import AIOperationDeadlineExceeded, AIOperationRoute
 from app.ai_limits import PromptSizeError
-from app.database import db
+from app.database import DatabaseBusyError, db
 from app.schemas.models import ResumeData, normalize_resume_data
 from app.schemas.resume_wizard import (
     ResumeWizardFinalizeRequest,
@@ -162,6 +162,10 @@ async def finalize_resume_wizard(
             )
         return _finalize_response(resume)
     except HTTPException:
+        raise
+    except DatabaseBusyError:
+        # Storage contention keeps its retryable 503 + Retry-After contract
+        # (global handler); the broad 500 below must not mask it.
         raise
     except Exception as e:
         logger.error("Resume wizard finalize failed: %s", e)

@@ -103,6 +103,22 @@ describe('dashboard resume import entry card', () => {
     expect(await screen.findByTestId('resume-import-workspace')).toBeInTheDocument();
   });
 
+  it('localizes processing status on tailored cards instead of the raw enum', async () => {
+    list.mockResolvedValue([
+      row('master', true),
+      { ...row('tailored-failed'), processing_status: 'failed' },
+      { ...row('tailored-ready'), processing_status: 'ready' },
+    ]);
+    render(<Dashboard />);
+    await screen.findByText('dashboard.masterResume');
+
+    expect(screen.getByText('dashboard.status.failed')).toBeInTheDocument();
+    expect(screen.getByText('dashboard.status.ready')).toBeInTheDocument();
+    // Raw backend enum strings must never reach the localized UI.
+    expect(screen.queryByText('failed')).not.toBeInTheDocument();
+    expect(screen.queryByText('ready')).not.toBeInTheDocument();
+  });
+
   it('groups import and create actions in the footer bar with the tracker link', async () => {
     list.mockResolvedValue([]);
     render(<Dashboard />);

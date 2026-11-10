@@ -217,6 +217,45 @@ describe('DescriptionList', () => {
     });
   });
 
+  it('aligns peer-module prose (项目成效) flush with its label and keeps numbered markers', () => {
+    const { container } = render(
+      <DescriptionList
+        items={[
+          '项目亮点：',
+          '用 Spark SQL 构建两层校验规则。',
+          '责任描述：',
+          '参与异步任务链路重构，基于 RabbitMQ 实现任务异步处理。',
+          '参与流程引擎底层设计，支持可插拔的流程扩展。',
+          '项目成效：',
+          '错报率下降约 70%，客服核查工作量明显下降。',
+        ]}
+        styles={['label', 'bullet', 'label', 'bullet', 'plain', 'label', 'plain']}
+        canonicalizeLabels
+        flushLabels
+      />
+    );
+
+    const lists = Array.from(container.querySelectorAll('ol'));
+    // Three list blocks: 项目亮点 (1 numbered row), the mixed peer module (1
+    // numbered + 1 plain row), 项目成效 (1 plain prose row).
+    expect(lists).toHaveLength(3);
+
+    // Highlight module keeps its 3ch number marker.
+    expect(lists[0].querySelectorAll('span[aria-hidden="true"]')).toHaveLength(1);
+
+    // Mixed peer module: the bullet keeps its marker span, the plain row
+    // renders NO gutter span so its text starts at the label edge.
+    const mixedItems = lists[1].querySelectorAll('li');
+    expect(mixedItems[0].querySelectorAll('span[aria-hidden="true"]')).toHaveLength(1);
+    expect(mixedItems[1].querySelectorAll('span[aria-hidden="true"]')).toHaveLength(0);
+
+    // 项目成效 prose: zero gutter spans — exactly aligned with its bold label.
+    const outcomeItems = lists[2].querySelectorAll('li');
+    expect(outcomeItems).toHaveLength(1);
+    expect(outcomeItems[0].querySelectorAll('span[aria-hidden="true"]')).toHaveLength(0);
+    expect(outcomeItems[0].textContent).toContain('错报率下降约 70%');
+  });
+
   it('keeps the 3ch label gutter and indented/3ch body layout without flushLabels (work sites)', () => {
     const { container } = render(
       <DescriptionList
