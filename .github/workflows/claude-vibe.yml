@@ -1,0 +1,43 @@
+name: Claude Vibe Coding Issue to PR
+# 触发规则：issue评论 @claude 触发；也支持issue正文里写@claude
+on:
+  issue_comment:
+    types: [created]
+  issues:
+    types: [opened, labeled]
+# 权限声明
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+  actions: read
+
+jobs:
+  claude-vibe:
+    runs-on: ubuntu-latest
+    # 触发条件：评论里@claude / issue正文@claude / 打上 vibe-coding 标签
+    if: >
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude'))
+      || (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.labels.*.name, 'vibe-coding')))
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Claude Code Action
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ARK_API_KEY }}
+          # 火山方舟 Claude Code 专用coding endpoint，不要写 /api/v1
+          endpoint: https://ark.cn-beijing.volces.com/api/coding
+          # 固定prompt，告诉Agent目标：读取issue，最小改动，生成草稿PR
+          prompt: |
+            你是Vibe Coding开发Agent。读取当前issue全部需求，阅读仓库代码，实现需求。
+            约束：
+            1. 新建独立分支，分支名关联issue编号，例如 issue-123-feature
+            2. 只修改和需求相关的代码，最小改动，不要随意重构无关逻辑
+            3. 增加必要注释，优先补充测试代码
+            4. 完成后创建 Draft 草稿PR，PR描述引用issue编号，写清楚实现思路、验证方式
+            5. 不要直接合并，交给人工Review
