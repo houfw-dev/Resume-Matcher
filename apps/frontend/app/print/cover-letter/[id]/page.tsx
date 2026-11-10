@@ -5,7 +5,7 @@
  * Uses the same API fetch pattern as the resume print page.
  */
 
-import { API_BASE } from '@/lib/api/client';
+import { fetchPrintResource } from '@/lib/print/fetch';
 import { translate } from '@/lib/i18n/server';
 import { resolveLocale } from '@/lib/i18n/locale';
 
@@ -38,9 +38,7 @@ interface CoverLetterData {
 }
 
 async function fetchCoverLetterData(resumeId: string): Promise<CoverLetterData> {
-  const res = await fetch(`${API_BASE}/resumes?resume_id=${encodeURIComponent(resumeId)}`, {
-    cache: 'no-store',
-  });
+  const res = await fetchPrintResource(`/resumes?resume_id=${encodeURIComponent(resumeId)}`);
   if (!res.ok) {
     throw new Error(`Failed to load resume (status ${res.status}).`);
   }

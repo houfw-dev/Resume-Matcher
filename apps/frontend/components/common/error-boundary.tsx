@@ -69,7 +69,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="min-h-[400px] flex flex-col items-center justify-center p-8 bg-background">
           <div className="max-w-md w-full bg-white border border-black shadow-sw-default p-8">
             <div className="flex items-center gap-3 mb-4">
-              <AlertTriangle className="w-8 h-8 text-red-600" />
+              <AlertTriangle className="w-8 h-8 text-destructive" />
               <h2 className="font-serif text-2xl font-bold uppercase">{strings.title}</h2>
             </div>
 
@@ -93,7 +93,7 @@ export class ErrorBoundary extends Component<Props, State> {
               </Button>
               <Button
                 onClick={this.handleReload}
-                className="flex-1 bg-blue-700 hover:bg-blue-800 text-white rounded-none border border-black shadow-sw-sm hover:translate-y-[1px] hover:translate-x-[1px] hover:shadow-none transition-all"
+                className="flex-1 bg-primary hover:bg-blue-800 text-white rounded-none border border-black shadow-sw-sm hover:translate-y-[1px] hover:translate-x-[1px] hover:shadow-none transition-all"
               >
                 <RefreshCw className="w-4 h-4 mr-2" />
                 {strings.reloadPage}

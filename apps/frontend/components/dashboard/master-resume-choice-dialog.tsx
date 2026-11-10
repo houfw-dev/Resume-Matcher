@@ -31,7 +31,7 @@ export function MasterResumeChoiceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl bg-background border-2 border-black shadow-[4px_4px_0px_0px_#000000] p-0 gap-0 rounded-none">
         <DialogHeader className="border-b-2 border-black bg-white p-6 text-left">
-          <p className="font-mono text-xs font-bold uppercase tracking-wider text-blue-700">
+          <p className="font-mono text-xs font-bold uppercase tracking-wider text-primary">
             {t('resumeWizard.entry.kicker')}
           </p>
           <DialogTitle className="font-serif text-3xl font-bold uppercase tracking-normal">
@@ -62,10 +62,10 @@ export function MasterResumeChoiceDialog({
           </section>
 
           <section className="flex min-h-64 flex-col border-2 border-black bg-white p-5 shadow-[4px_4px_0px_0px_#000000]">
-            <div className="mb-6 flex h-12 w-12 items-center justify-center border-2 border-black bg-blue-700 text-white">
+            <div className="mb-6 flex h-12 w-12 items-center justify-center border-2 border-black bg-primary text-white">
               <Bot className="h-6 w-6" aria-hidden="true" />
             </div>
-            <p className="font-mono text-xs font-bold uppercase tracking-wider text-blue-700">
+            <p className="font-mono text-xs font-bold uppercase tracking-wider text-primary">
               {t('resumeWizard.entry.wizard.kicker')}
             </p>
             <h3 className="mt-2 font-serif text-2xl font-bold leading-tight">

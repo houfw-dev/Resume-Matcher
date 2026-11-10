@@ -4,6 +4,7 @@ import {
   bulkDeleteApplications,
   createApplication,
   deleteApplication,
+  listApplications,
   updateApplication,
 } from '@/lib/api/tracker';
 import { llmProviderToKeyProvider } from '@/lib/api/config';
@@ -96,6 +97,22 @@ describe('tracker API client', () => {
     expect(url).toContain('/applications/bulk-delete');
     expect(options.method).toBe('POST');
     expect(JSON.parse(String(options.body))).toEqual({ application_ids: ['a', 'b'] });
+  });
+
+  it('listApplications GETs /applications without a query string by default', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ columns: {} }), { status: 200 }));
+    await listApplications();
+    const { url, options } = lastCall();
+    expect(url.endsWith('/applications')).toBe(true);
+    expect(url).not.toContain('?');
+    expect(options.method).toBeUndefined(); // default GET
+  });
+
+  it('listApplications encodes the resumeId filter as resume_id query param', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ columns: {} }), { status: 200 }));
+    await listApplications({ resumeId: 'res/1 2' });
+    const { url } = lastCall();
+    expect(url).toContain('/applications?resume_id=res%2F1%202');
   });
 
   it('surfaces the backend detail message on failure', async () => {

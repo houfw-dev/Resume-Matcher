@@ -32,17 +32,30 @@ export const FINE_TUNE_SECTION_TOKENS = [
 export type FineTuneSectionToken = (typeof FINE_TUNE_SECTION_TOKENS)[number];
 
 const SECTION_TOKEN_SET: ReadonlySet<string> = new Set(FINE_TUNE_SECTION_TOKENS);
-// \p{L}/\p{N} stay permissive of non-ASCII keys from non-compliant parsers;
-// the shape check passing does not mean the key exists on the resume (that is
-// an ignored out-of-range target at runtime, mirroring work_N semantics).
+// The build targets ES2017, where unicode property escapes (\p{L}/\p{N}) are
+// not downleveled by TypeScript and throw at runtime. Enumerate the scripts
+// used by the seven supported locales (Latin/CJK/kana/Hangul plus Greek and
+// Cyrillic) instead. This stays permissive of non-ASCII keys from
+// non-compliant parsers; the shape check passing still does not mean the key
+// exists on the resume (that is an ignored out-of-range target at runtime,
+// mirroring work_N semantics and the backend's custom_[\w.-]+ gate).
+const CUSTOM_KEY_CHARS =
+  'A-Za-z0-9_.\\-' + // ASCII word chars plus dot/dash
+  'À-ɏ' + // Latin-1 + Latin Extended (es/fr/pt accents)
+  'Α-Ͽ' + // Greek
+  'Ѐ-ӿ' + // Cyrillic
+  '㐀-䶿' + // CJK Ext A
+  '一-鿿' + // CJK Unified Ideographs
+  '぀-ゟ' + // Hiragana
+  '゠-ヿ' + // Katakana
+  'ᄀ-ᇿ㄰-㆏가-힣'; // Hangul jamo, compat jamo, syllables
 const REGION_ALTERNATION = REGION_IDS.join('|');
 const TOKEN_PATTERN = new RegExp(
-  `^(?:summary|education|additional|customSections|workExperience|personalProjects|work_\\d+|project_\\d+|(?:work|project)_\\d+:(?:${REGION_ALTERNATION})|custom_[\\p{L}\\p{N}_.-]+)$`,
-  'u'
+  `^(?:summary|education|additional|customSections|workExperience|personalProjects|work_\\d+|project_\\d+|(?:work|project)_\\d+:(?:${REGION_ALTERNATION})|custom_[${CUSTOM_KEY_CHARS}]+)$`
 );
 const ITEM_TOKEN_PATTERN = /^(work|project)_(\d+)$/;
 const REGION_TOKEN_PATTERN = new RegExp(`^(work|project)_(\\d+):(${REGION_ALTERNATION})$`);
-const CUSTOM_TOKEN_PATTERN = /^custom_([\p{L}\p{N}_.-]+)$/u;
+const CUSTOM_TOKEN_PATTERN = new RegExp(`^custom_([${CUSTOM_KEY_CHARS}]+)$`);
 
 export const MAX_FINE_TUNE_TARGETS = 30;
 

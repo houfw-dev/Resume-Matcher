@@ -32,6 +32,9 @@ const headingProps = {
     phone: '电话',
     email: '邮箱',
     foreignLanguage: '外语',
+    website: '个人网站',
+    linkedin: '领英',
+    github: 'GitHub',
   },
   additionalSectionLabels: {
     technicalSkills: '专业技能',

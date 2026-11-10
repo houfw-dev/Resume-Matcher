@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.ai_limits import validate_source_size
+from app.ai_limits import MAX_JOB_CHARACTERS, validate_source_size
 from app.schemas.refinement import RefinementStats
 
 
@@ -918,6 +918,22 @@ class UpdateCoverLetterRequest(BaseModel):
     """Request to update cover letter content."""
 
     content: str
+
+
+class GenerateFromJobRequest(BaseModel):
+    """Request body for on-demand content generation with an optional JD.
+
+    An empty job description is valid: standalone (non-tailored) resumes then
+    generate resume-only content through the service's no-JD prompt. A pasted
+    JD lets a standalone resume produce role-targeted cover letters, outreach
+    messages, and interview preparation without going through tailoring.
+    """
+
+    job_description: str = Field(default="", max_length=MAX_JOB_CHARACTERS)
+
+
+# Backwards-compatible name from the cover-letter endpoint that introduced it.
+GenerateCoverLetterRequest = GenerateFromJobRequest
 
 
 class UpdateOutreachMessageRequest(BaseModel):

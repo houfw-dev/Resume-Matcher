@@ -42,10 +42,16 @@ def _group_by_status(applications: list[dict[str, Any]]) -> dict[str, list[Appli
 
 
 @router.get("", response_model=ApplicationListResponse)
-async def list_applications() -> ApplicationListResponse:
-    """List all applications grouped by status column."""
+async def list_applications(
+    resume_id: str | None = None,
+) -> ApplicationListResponse:
+    """List all applications grouped by status column.
+
+    Optional ``resume_id`` narrows the board to cards that applied the resume
+    directly or descend from it as the master/base resume.
+    """
     try:
-        applications = await db.list_applications()
+        applications = await db.list_applications(resume_id=resume_id)
     except DatabaseBusyError:
         raise
     except Exception as e:

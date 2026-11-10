@@ -9,7 +9,7 @@ import {
   type AccentColor,
   DEFAULT_TEMPLATE_SETTINGS,
 } from '@/lib/types/template-settings';
-import { API_BASE } from '@/lib/api/client';
+import { fetchPrintResource } from '@/lib/print/fetch';
 import { translate } from '@/lib/i18n/server';
 import { resolveLocale } from '@/lib/i18n/locale';
 import { withLocalizedDefaultSections } from '@/lib/utils/section-helpers';
@@ -77,9 +77,7 @@ function parseBoolean(value: string | undefined, defaultValue: boolean): boolean
 }
 
 async function fetchResumeData(id: string): Promise<ResumeData> {
-  const res = await fetch(`${API_BASE}/resumes?resume_id=${encodeURIComponent(id)}`, {
-    cache: 'no-store',
-  });
+  const res = await fetchPrintResource(`/resumes?resume_id=${encodeURIComponent(id)}`);
   if (!res.ok) {
     throw new Error(`Failed to load resume (status ${res.status}).`);
   }
@@ -103,7 +101,11 @@ async function fetchResumeData(id: string): Promise<ResumeData> {
       throw new Error('Failed to parse resume data. The resume content may be corrupted.');
     }
   }
-  return {} as ResumeData;
+  // Never return an empty shell: a hidden zero-size .resume-print makes
+  // Playwright's readiness wait time out, and a direct visit would print a
+  // blank page. Throwing surfaces a real error (the PDF endpoint's 409 gate
+  // makes this branch unreachable for not-ready records).
+  throw new Error('Resume content is empty or still being processed.');
 }
 
 /**
@@ -193,6 +195,9 @@ export default async function PrintResumePage({ params, searchParams }: PageProp
     phone: t('resume.personalInfo.phone'),
     email: t('resume.personalInfo.email'),
     foreignLanguage: t('resume.personalInfo.foreignLanguage'),
+    website: t('resume.personalInfo.website'),
+    linkedin: t('resume.personalInfo.linkedin'),
+    github: t('resume.personalInfo.github'),
   };
 
   // Parse template settings from query params

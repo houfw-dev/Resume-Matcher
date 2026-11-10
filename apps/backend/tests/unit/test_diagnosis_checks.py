@@ -33,6 +33,7 @@ from app.services.diagnosis_checks import (
     _check_work_elements,
     _check_work_overlap,
     _join_findings,
+    _timeline_facts,
     _union_tenure_months,
     build_mainstream_stack_finding,
     count_points,
@@ -972,6 +973,142 @@ def test_projects_missing_module_is_na() -> None:
     assert _check_projects(_resume())[0] == RATING_NA
 
 
+def test_split_label_tech_stack_with_big_data_terms_is_detected() -> None:
+    # Regression: a split "技术栈：" label row whose terms (Hadoop/Hive/...)
+    # were absent from the old vocabulary regex falsely reported a missing
+    # tech stack (the RATAN EOD diagnosis false-negative).
+    resume = _resume(
+        personalProjects=[
+            {
+                "id": 1,
+                "name": "RATAN EOD",
+                "role": "开发",
+                "description": [
+                    "技术栈：",
+                    "Hadoop、Hive、ControlM、Spring Boot、PostgreSQL",
+                    "项目背景：金融衍生品交易数据分散，报表时效难保障。",
+                    "承担数据平台日常运维与变更上线保障",
+                    "作业失败率控制在 1% 以内，异常回滚可在 30 分钟内完成。",
+                ],
+            },
+            {
+                "id": 2,
+                "name": "营销系统",
+                "role": "开发",
+                "description": [
+                    "业务背景：营销活动配置困难",
+                    "技术栈：Spring Boot、MySQL、Redis",
+                    "承担活动引擎开发",
+                    "活动配置耗时降低 60%",
+                ],
+            },
+        ]
+    )
+    rating, evidence, _suggestion = _check_projects(resume)
+    assert rating == RATING_CONFORM, evidence
+    assert "技术栈" not in evidence
+
+
+def test_empty_tech_stack_label_followed_by_another_label_still_missing() -> None:
+    # A label row with no content of its own, immediately followed by another
+    # label, means the tech stack field is genuinely empty.
+    resume = _resume(
+        personalProjects=[
+            {
+                "id": 1,
+                "name": "数据平台",
+                "role": "开发",
+                "description": [
+                    "技术栈：",
+                    "项目背景：多系统数据分散，报表产出困难。",
+                    "承担数据平台日常运维",
+                    "报表产出时效提升 40%",
+                ],
+            },
+            {
+                "id": 2,
+                "name": "营销系统",
+                "role": "开发",
+                "description": [
+                    "业务背景：营销活动配置困难",
+                    "技术栈：Spring Boot、MySQL、Redis",
+                    "承担活动引擎开发",
+                    "活动配置耗时降低 60%",
+                ],
+            },
+        ]
+    )
+    _rating, evidence, suggestion = _check_projects(resume)
+    assert "「技术栈」" in evidence
+    assert "「技术栈」" in suggestion
+
+
+def test_glued_tech_stack_alias_label_is_detected() -> None:
+    # Older stored documents may keep an alias label (技术架构) glued to its
+    # content row instead of the canonical split 技术栈 form.
+    resume = _resume(
+        personalProjects=[
+            {
+                "id": 1,
+                "name": "实时数仓",
+                "role": "核心开发",
+                "description": [
+                    "项目背景：离线链路时延高，无法支撑实时运营。",
+                    "技术架构：Hadoop、Hive、HBase",
+                    "主导数仓底座重构，承担核心模块开发",
+                    "链路时延缩短 50%",
+                ],
+            },
+            {
+                "id": 2,
+                "name": "营销系统",
+                "role": "开发",
+                "description": [
+                    "业务背景：营销活动配置困难",
+                    "技术栈：Spring Boot、MySQL、Redis",
+                    "承担活动引擎开发",
+                    "活动配置耗时降低 60%",
+                ],
+            },
+        ]
+    )
+    rating, evidence, _suggestion = _check_projects(resume)
+    assert rating == RATING_CONFORM, evidence
+
+
+def test_big_data_vocab_fallback_detects_unlabeled_stack() -> None:
+    # Without any label, two distinct expanded-vocabulary mentions in prose
+    # still count as a tech stack.
+    resume = _resume(
+        personalProjects=[
+            {
+                "id": 1,
+                "name": "实时数仓",
+                "role": "核心开发",
+                "description": [
+                    "项目背景：离线链路时延高，无法支撑实时运营。",
+                    "基于 Hadoop 与 Hive 构建数仓底座，支撑每日 ETL 作业",
+                    "承担数据链路开发与稳定性保障",
+                    "链路时延缩短 50%",
+                ],
+            },
+            {
+                "id": 2,
+                "name": "营销系统",
+                "role": "开发",
+                "description": [
+                    "业务背景：营销活动配置困难",
+                    "技术栈：Spring Boot、MySQL、Redis",
+                    "承担活动引擎开发",
+                    "活动配置耗时降低 60%",
+                ],
+            },
+        ]
+    )
+    rating, evidence, _suggestion = _check_projects(resume)
+    assert rating == RATING_CONFORM, evidence
+
+
 # --- item 10: self evaluation ------------------------------------------------
 
 
@@ -1269,6 +1406,7 @@ def test_current_gap_over_six_months_fails() -> None:
     facts = {
         "current_gap_months": 8,
         "historical_gap_months": 0,
+        "largest_gap_months": 8,
         "stints": [1],
         "short_stints": [],
         "companies_last_5_years": ["甲公司"],
@@ -1280,6 +1418,7 @@ def test_gap_between_three_and_six_is_partial() -> None:
     facts = {
         "current_gap_months": 4,
         "historical_gap_months": 0,
+        "largest_gap_months": 4,
         "stints": [1],
         "short_stints": [],
         "companies_last_5_years": [],
@@ -1291,10 +1430,96 @@ def test_exactly_six_month_gap_is_partial_threshold_is_strict() -> None:
     facts = {
         "current_gap_months": 6,
         "historical_gap_months": 0,
+        "largest_gap_months": 6,
         "stints": [1],
         "short_stints": [],
         "companies_last_5_years": [],
     }
+    assert _check_gaps(facts)[0] == RATING_PARTIAL
+
+
+def test_exactly_three_month_gap_conforms_threshold_is_strict() -> None:
+    # Rubric: only a single gap STRICTLY longer than 3 months is a warning;
+    # 3 months and below must stay silent (regression for the off-by-one).
+    facts = {
+        "current_gap_months": 3,
+        "historical_gap_months": 0,
+        "largest_gap_months": 3,
+        "stints": [1],
+        "short_stints": [],
+        "companies_last_5_years": [],
+    }
+    rating, evidence, suggestion = _check_gaps(facts)
+    assert rating == RATING_CONFORM
+    assert evidence == "" and suggestion == ""
+
+
+def test_short_gaps_do_not_combine_into_a_finding() -> None:
+    # Two separate 2-month gaps make the cumulative total 4 months, but each
+    # single segment is within the 3-month tolerance, so no finding is raised.
+    facts = {
+        "current_gap_months": 0,
+        "historical_gap_months": 4,
+        "largest_gap_months": 2,
+        "stints": [1, 2, 3],
+        "short_stints": [],
+        "companies_last_5_years": [],
+    }
+    rating, evidence, suggestion = _check_gaps(facts)
+    assert rating == RATING_CONFORM
+    assert evidence == "" and suggestion == ""
+
+
+def test_single_historical_gap_over_three_months_is_partial() -> None:
+    facts = {
+        "current_gap_months": 0,
+        "historical_gap_months": 4,
+        "largest_gap_months": 4,
+        "stints": [1, 2],
+        "short_stints": [],
+        "companies_last_5_years": [],
+    }
+    assert _check_gaps(facts)[0] == RATING_PARTIAL
+
+
+def test_timeline_two_short_gaps_stay_conform() -> None:
+    # End-to-end through _timeline_facts: two separate 2-month gaps make the
+    # cumulative total 4 months, but no single segment exceeds 3, so item 14's
+    # gap checker stays silent (the open-ended last job pins current_gap at 0).
+    intervals = [
+        ("甲公司", Interval((2018, 1), (2018, 12), "2018.01-2018.12", "")),
+        ("乙公司", Interval((2019, 3), (2019, 12), "2019.03-2019.12", "")),
+        ("丙公司", Interval((2020, 3), None, "2020.03 至今", "")),
+    ]
+    facts = _timeline_facts(intervals)
+    assert facts["current_gap_months"] == 0
+    assert facts["historical_gap_months"] == 4
+    assert facts["largest_gap_months"] == 2
+    rating, evidence, suggestion = _check_gaps(facts)
+    assert rating == RATING_CONFORM
+    assert evidence == "" and suggestion == ""
+
+
+def test_timeline_exactly_three_month_gap_conforms() -> None:
+    # A single segment of exactly 3 months must stay at conform (strict >3 rule).
+    intervals = [
+        ("甲公司", Interval((2018, 1), (2018, 12), "2018.01-2018.12", "")),
+        ("乙公司", Interval((2019, 4), None, "2019.04 至今", "")),
+    ]
+    facts = _timeline_facts(intervals)
+    assert facts["largest_gap_months"] == 3
+    assert _check_gaps(facts)[0] == RATING_CONFORM
+
+
+def test_timeline_four_month_segment_is_partial() -> None:
+    intervals = [
+        ("甲公司", Interval((2018, 1), (2018, 12), "2018.01-2018.12", "")),
+        ("乙公司", Interval((2019, 5), (2020, 12), "2019.05-2020.12", "")),
+        ("丙公司", Interval((2021, 1), None, "2021.01 至今", "")),
+    ]
+    facts = _timeline_facts(intervals)
+    assert facts["historical_gap_months"] == 4
+    assert facts["largest_gap_months"] == 4
     assert _check_gaps(facts)[0] == RATING_PARTIAL
 
 

@@ -59,21 +59,65 @@ vi.mock('@/hooks/use-regenerate-wizard', () => ({
   useRegenerateWizard: () => ({ step: 'idle', reset: vi.fn(), startRegenerate: vi.fn() }),
 }));
 vi.mock('@/components/builder/generate-prompt', () => ({
-  GeneratePrompt: ({ type, onGenerate }: { type: string; onGenerate: () => void }) => (
-    <button onClick={onGenerate}>generate-{type}</button>
+  GeneratePrompt: ({
+    type,
+    onGenerate,
+    showJobDescription,
+    jobDescription,
+    onJobDescriptionChange,
+    onGenerateWithJobDescription,
+  }: {
+    type: string;
+    onGenerate: () => void;
+    showJobDescription?: boolean;
+    jobDescription?: string;
+    onJobDescriptionChange?: (value: string) => void;
+    onGenerateWithJobDescription?: () => void;
+  }) => (
+    <div>
+      <button onClick={onGenerate}>generate-{type}</button>
+      {showJobDescription && (
+        <>
+          <textarea
+            aria-label={`${type}-job-description`}
+            value={jobDescription}
+            onChange={(event) => onJobDescriptionChange?.(event.target.value)}
+          />
+          <button onClick={onGenerateWithJobDescription}>generate-{type}-with-jd</button>
+        </>
+      )}
+    </div>
   ),
 }));
 vi.mock('@/components/builder/interview-prep-view', () => ({
   InterviewPrepView: ({
     interviewPrep,
     onGenerate,
+    showJobDescription,
+    jobDescription,
+    onJobDescriptionChange,
+    onGenerateWithJobDescription,
   }: {
     interviewPrep: unknown;
     onGenerate: () => void;
+    showJobDescription?: boolean;
+    jobDescription?: string;
+    onJobDescriptionChange?: (value: string) => void;
+    onGenerateWithJobDescription?: () => void;
   }) => (
     <div>
       <output data-testid="interview-prep">{interviewPrep ? 'present' : 'empty'}</output>
       <button onClick={onGenerate}>generate-interview-prep</button>
+      {showJobDescription && (
+        <>
+          <textarea
+            aria-label="interview-prep-job-description"
+            value={jobDescription}
+            onChange={(event) => onJobDescriptionChange?.(event.target.value)}
+          />
+          <button onClick={onGenerateWithJobDescription}>generate-interview-prep-with-jd</button>
+        </>
+      )}
     </div>
   ),
 }));
@@ -119,8 +163,24 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-const importBuilder = async () =>
-  (await import('@/components/builder/resume-builder')).ResumeBuilder;
+const importBuilder = async () => {
+  // Mirror the real (default) layout, which wraps the app in ToastProvider.
+  // Both modules must come from the SAME registry instance: afterEach calls
+  // vi.resetModules(), so a statically imported ToastProvider would hold a
+  // different React context object than the useToast() inside the
+  // dynamically re-imported builder.
+  const [{ ResumeBuilder }, { ToastProvider }] = await Promise.all([
+    import('@/components/builder/resume-builder'),
+    import('@/components/ui/toast'),
+  ]);
+  return function BuilderWithToast() {
+    return (
+      <ToastProvider>
+        <ResumeBuilder />
+      </ToastProvider>
+    );
+  };
+};
 
 beforeEach(() => {
   currentSearch = 'id=a&tab=cover-letter';
@@ -178,7 +238,7 @@ describe('builder attachment ownership', () => {
         await waitFor(() => expect(fetchJobDescription).toHaveBeenCalledWith('a'));
       }
       await act(async () => buttons.at(-1)?.click());
-      expect(generate).toHaveBeenCalledWith('a');
+      expect(generate).toHaveBeenCalledWith('a', '');
 
       currentSearch = `id=b&tab=${kind}`;
       view.rerender(<Builder />);
@@ -534,7 +594,7 @@ describe.each(['cover-letter', 'outreach'] as const)('%s save queued during gene
       await act(async () =>
         within(screen.getByRole('dialog')).getByRole('button', { name: regenerateLabel }).click()
       );
-      expect(generate).toHaveBeenCalledWith('a');
+      expect(generate).toHaveBeenCalledWith('a', '');
       expect(editor).toBeEnabled();
       expect(screen.getByRole('button', { name: 'common.save' })).toBeEnabled();
       if (editTiming === 'edit-before-save') {
@@ -583,4 +643,192 @@ it('retains a matching restored attachment backup when replacement storage write
   } finally {
     storage.mockRestore();
   }
+});
+
+describe('standalone resume generation entry points', () => {
+  it('keeps content tabs enabled without stored content and reaches outreach generation', async () => {
+    // Standalone resume: no parent_id and none of the AI attachments stored.
+    fetchResume.mockResolvedValue({
+      processed_resume: RESUME,
+      raw_resume: { processing_status: 'ready' },
+      title: 'Standalone resume',
+    });
+    currentSearch = 'id=a&tab=outreach';
+    const Builder = await importBuilder();
+    render(<Builder />);
+
+    const coverTab = await screen.findByRole('button', {
+      name: 'builder.previewTabs.coverLetter',
+    });
+    const outreachTab = screen.getByRole('button', {
+      name: 'builder.previewTabs.outreach',
+    });
+    expect(coverTab).not.toBeDisabled();
+    expect(outreachTab).not.toBeDisabled();
+    // JD matching fundamentally needs a stored job, so it stays locked.
+    expect(screen.getByRole('button', { name: 'builder.previewTabs.jdMatch' })).toBeDisabled();
+
+    // The empty state collapses the two-column split into one full-width
+    // generation card, so a single generate button exists.
+    const prompts = await screen.findAllByRole('button', { name: 'generate-outreach' });
+    expect(prompts).toHaveLength(1);
+    await act(async () => prompts[0].click());
+
+    await waitFor(() => expect(generateOutreachMessage).toHaveBeenCalledWith('a', ''));
+  });
+
+  it.each([
+    ['cover-letter', 'generate-cover-letter', 'builder.leftPanel.coverLetterEditor'],
+    ['outreach', 'generate-outreach', 'builder.leftPanel.outreachEditor'],
+    ['interview-prep', 'generate-interview-prep', 'builder.leftPanel.interviewPrep'],
+  ] as const)(
+    'collapses the split into a single full-width %s generation card',
+    async (tab, generateButton, leftPanelHeader) => {
+      fetchResume.mockResolvedValue({
+        processed_resume: RESUME,
+        raw_resume: { processing_status: 'ready' },
+        title: 'Standalone resume',
+      });
+      currentSearch = `id=a&tab=${tab}`;
+      const Builder = await importBuilder();
+      render(<Builder />);
+
+      // Exactly one generation entry, centered in the full-width panel.
+      const buttons = await screen.findAllByRole('button', { name: generateButton });
+      expect(buttons).toHaveLength(1);
+      // The two-column editor chrome is not rendered in the empty state.
+      expect(screen.queryByText(leftPanelHeader)).not.toBeInTheDocument();
+    }
+  );
+
+  it('shows generated interview prep as a single full-width read-only view', async () => {
+    fetchResume.mockResolvedValue(response({ interview_prep: { role_fit_analysis: ['Ready'] } }));
+    currentSearch = 'id=a&tab=interview-prep';
+    const Builder = await importBuilder();
+    render(<Builder />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('interview-prep')).toHaveLength(1);
+    });
+    expect(screen.getByTestId('interview-prep')).toHaveTextContent('present');
+    expect(screen.queryByText('builder.leftPanel.interviewPrep')).not.toBeInTheDocument();
+  });
+
+  it('hides the ad-hoc JD input on tailored resumes', async () => {
+    // The default fixture carries parent_id, so it is a tailored resume whose
+    // stored job already drives generation.
+    fetchResume.mockResolvedValue(response());
+    currentSearch = 'id=a&tab=outreach';
+    const Builder = await importBuilder();
+    render(<Builder />);
+
+    await screen.findAllByRole('button', { name: 'generate-outreach' });
+    expect(screen.queryByLabelText('outreach-job-description')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'generate-outreach-with-jd' })
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['cover-letter', 'cover-letter', generateCoverLetter],
+    ['outreach', 'outreach', generateOutreachMessage],
+  ] as const)(
+    'sends the pasted JD for role-targeted %s generation on a standalone resume',
+    async (tab, promptType, generate) => {
+      fetchResume.mockResolvedValue({
+        processed_resume: RESUME,
+        raw_resume: { processing_status: 'ready' },
+        title: 'Standalone resume',
+      });
+      currentSearch = `id=a&tab=${tab}`;
+      const Builder = await importBuilder();
+      render(<Builder />);
+
+      const textboxes = await screen.findAllByLabelText(`${promptType}-job-description`);
+      fireEvent.change(textboxes[0], { target: { value: '  Need Kubernetes and FastAPI  ' } });
+      const withJdButtons = await screen.findAllByRole('button', {
+        name: `generate-${promptType}-with-jd`,
+      });
+      await act(async () => withJdButtons[0].click());
+
+      await waitFor(() =>
+        expect(generate).toHaveBeenCalledWith('a', 'Need Kubernetes and FastAPI')
+      );
+    }
+  );
+
+  it('passes an empty JD when standalone generation runs without a pasted JD', async () => {
+    fetchResume.mockResolvedValue({
+      processed_resume: RESUME,
+      raw_resume: { processing_status: 'ready' },
+      title: 'Standalone resume',
+    });
+    currentSearch = 'id=a&tab=outreach';
+    const Builder = await importBuilder();
+    render(<Builder />);
+
+    const prompts = await screen.findAllByRole('button', { name: 'generate-outreach' });
+    await act(async () => prompts[0].click());
+
+    await waitFor(() => expect(generateOutreachMessage).toHaveBeenCalledWith('a', ''));
+    expect(fetchJobDescription).not.toHaveBeenCalled();
+  });
+
+  it('sends the pasted JD for role-targeted interview prep on a standalone resume', async () => {
+    fetchResume.mockResolvedValue({
+      processed_resume: RESUME,
+      raw_resume: { processing_status: 'ready' },
+      title: 'Standalone resume',
+    });
+    currentSearch = 'id=a&tab=interview-prep';
+    const Builder = await importBuilder();
+    render(<Builder />);
+
+    const textboxes = await screen.findAllByLabelText('interview-prep-job-description');
+    fireEvent.change(textboxes[0], { target: { value: 'Need Kubernetes' } });
+    const withJdButtons = await screen.findAllByRole('button', {
+      name: 'generate-interview-prep-with-jd',
+    });
+    await act(async () => withJdButtons[0].click());
+
+    await waitFor(() => expect(generateInterviewPrep).toHaveBeenCalledWith('a', 'Need Kubernetes'));
+  });
+
+  it('uses the JD edited in the regenerate dialog for standalone regeneration', async () => {
+    fetchResume.mockResolvedValue({
+      processed_resume: RESUME,
+      raw_resume: { processing_status: 'ready' },
+      title: 'Standalone resume',
+      cover_letter: 'EXISTING LETTER',
+    });
+    currentSearch = 'id=a&tab=cover-letter';
+    const Builder = await importBuilder();
+    render(<Builder />);
+    await screen.findByDisplayValue('EXISTING LETTER');
+
+    // With stored content the empty state is gone; the toolbar opens the dialog.
+    fireEvent.click(screen.getByRole('button', { name: 'coverLetter.regenerate' }));
+    const dialog = await screen.findByRole('dialog');
+    const jdTextarea = within(dialog).getByLabelText('builder.generatePrompt.jobDescriptionLabel');
+    fireEvent.change(jdTextarea, { target: { value: '  Need Kubernetes  ' } });
+    await act(async () =>
+      within(dialog).getByRole('button', { name: 'coverLetter.regenerate' }).click()
+    );
+
+    await waitFor(() => expect(generateCoverLetter).toHaveBeenCalledWith('a', 'Need Kubernetes'));
+  });
+
+  it('omits the JD textarea from the regenerate dialog on tailored resumes', async () => {
+    fetchResume.mockResolvedValue(response({ cover_letter: 'EXISTING LETTER' }));
+    currentSearch = 'id=a&tab=cover-letter';
+    const Builder = await importBuilder();
+    render(<Builder />);
+    await screen.findByDisplayValue('EXISTING LETTER');
+
+    fireEvent.click(screen.getByRole('button', { name: 'coverLetter.regenerate' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).queryByLabelText('builder.generatePrompt.jobDescriptionLabel')
+    ).not.toBeInTheDocument();
+  });
 });

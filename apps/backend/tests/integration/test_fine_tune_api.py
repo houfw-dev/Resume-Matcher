@@ -5,6 +5,7 @@ real; the only mocked boundary is ``app.services.fine_tune.complete_json``,
 so no LLM/network traffic happens.
 """
 
+import asyncio
 import copy
 import json
 from typing import Any
@@ -12,13 +13,17 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.main import app
 from app.models import FineTunePreview, Resume
+from app.database import Database
 from app.preview import hash_resume_data
+from app.routers.fine_tune import fine_tune_confirm
+from app.schemas.fine_tune import FineTuneConfirmRequest
 from app.schemas.models import ResumeData
 from app.services.fine_tune import _canonical_source
+from tests.integration.test_storage_busy_writes import fast_busy_database  # noqa: F401
 
 pytestmark = pytest.mark.asyncio
 
@@ -421,6 +426,47 @@ async def test_confirm_with_unknown_preview_returns_400(
     assert response.status_code == 400
 
 
+async def test_confirm_contention_returns_503_then_request_reaches_validation(
+    fast_busy_database: Database,
+    sample_resume: dict[str, Any],
+) -> None:
+    # The claim reservation is a write: real SQLite contention must reach the
+    # client as the retryable 503 contract, not the endpoint's generic 500.
+    database = fast_busy_database
+    source = _canonical(sample_resume)
+    resume_id = await _seed_resume(database, source)
+    body = {
+        "preview_id": "no-such-preview",
+        "improved_data": source,
+        "mode": "overwrite",
+    }
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False),
+        base_url="http://test",
+    ) as client:
+        async with database._session() as writer:
+            await writer.execute(text("BEGIN IMMEDIATE"))
+            blocked = await client.post(
+                f"/api/v1/resumes/{resume_id}/fine-tune/confirm", json=body
+            )
+        assert blocked.status_code == 503, blocked.text
+        assert blocked.headers["retry-after"] == "1"
+        assert blocked.json() == {
+            "detail": "Database is busy. Please retry shortly."
+        }
+        # No lease row could be created under the lock, so nothing is held.
+        assert len(await _fine_tune_rows(database)) == 0
+
+        # Lock released: the unchanged request now reaches normal preview
+        # validation (400 for the unknown preview), proving 503 was contention.
+        retried = await client.post(
+            f"/api/v1/resumes/{resume_id}/fine-tune/confirm", json=body
+        )
+
+    assert retried.status_code == 400, retried.text
+
+
 async def test_confirm_with_tampered_payload_returns_400(
     isolated_db: Any,
     sample_resume: dict[str, Any],
@@ -482,6 +528,113 @@ async def test_confirm_with_active_lease_returns_409_retry_after(
     assert response.headers.get("retry-after") == "1"
     stored = await isolated_db.get_resume(resume_id)
     assert stored is not None and stored["processed_data"]["summary"] == source["summary"]
+
+
+async def test_failed_claim_release_keeps_primary_error_and_logs(
+    isolated_db: Any,
+    sample_resume: dict[str, Any],
+    patch_complete_json: AsyncMock,
+) -> None:
+    """A failing lease release must not replace the endpoint's own error.
+
+    Without the try/except guard, the release exception escapes the ``finally``
+    and Starlette answers with a generic ``Internal Server Error`` instead of
+    the endpoint's intended generic detail.
+    """
+    source = _canonical(sample_resume)
+    resume_id = await _seed_resume(isolated_db, source)
+
+    async with _client() as client:
+        preview = await _preview(
+            client, resume_id, copy.deepcopy(source), patch_complete_json
+        )
+        body = {
+            "preview_id": preview["preview_id"],
+            "improved_data": preview["improved_data"],
+            "mode": "overwrite",
+        }
+        with (
+            patch.object(
+                isolated_db,
+                "complete_fine_tune_preview",
+                AsyncMock(side_effect=RuntimeError("synthetic commit failure")),
+            ),
+            patch.object(
+                isolated_db,
+                "release_fine_tune_preview_claim",
+                AsyncMock(side_effect=RuntimeError("synthetic release failure")),
+            ) as release_mock,
+            patch("app.routers.fine_tune.logger") as logger_mock,
+        ):
+            response = await client.post(
+                f"/api/v1/resumes/{resume_id}/fine-tune/confirm", json=body
+            )
+
+    assert response.status_code == 500
+    assert "Failed to apply fine-tuned resume. Please try again." in response.text
+    assert "Internal Server Error" not in response.text
+    release_mock.assert_awaited_once()
+    logger_mock.exception.assert_called_once()
+
+
+async def test_cancelled_confirm_still_releases_lease_under_shield(
+    isolated_db: Any,
+    sample_resume: dict[str, Any],
+    patch_complete_json: AsyncMock,
+) -> None:
+    """Cancelling the request task while the lease release is in flight must
+    not abort the release itself: ``asyncio.shield`` lets the inner DB write
+    finish, otherwise the lease stays locked until its TTL expires."""
+    source = _canonical(sample_resume)
+    resume_id = await _seed_resume(isolated_db, source)
+
+    async with _client() as client:
+        preview = await _preview(
+            client, resume_id, copy.deepcopy(source), patch_complete_json
+        )
+
+    request = FineTuneConfirmRequest(
+        preview_id=preview["preview_id"],
+        improved_data=preview["improved_data"],
+        mode="overwrite",
+    )
+
+    real_release = isolated_db.release_fine_tune_preview_claim
+    release_started = asyncio.Event()
+    release_gate = asyncio.Event()
+    release_completed = asyncio.Event()
+
+    async def gated_release(claim: Any) -> None:
+        release_started.set()
+        await release_gate.wait()
+        await real_release(claim)
+        release_completed.set()
+
+    with (
+        patch.object(
+            isolated_db,
+            "complete_fine_tune_preview",
+            AsyncMock(side_effect=RuntimeError("synthetic commit failure")),
+        ),
+        patch.object(
+            isolated_db,
+            "release_fine_tune_preview_claim",
+            AsyncMock(side_effect=gated_release),
+        ),
+    ):
+        task = asyncio.create_task(fine_tune_confirm(resume_id, request))
+        # Park the endpoint inside the finally-block release, then cancel it.
+        await asyncio.wait_for(release_started.wait(), timeout=2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        # Unblock the shielded inner release and wait for its real DB write.
+        release_gate.set()
+        await asyncio.wait_for(release_completed.wait(), timeout=2)
+
+    rows = await _fine_tune_rows(isolated_db)
+    assert len(rows) == 1
+    assert rows[0].claim_token is None
 
 
 async def test_completed_confirm_is_idempotent(

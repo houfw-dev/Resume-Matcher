@@ -124,13 +124,14 @@ export interface ResumeListItem {
 
 async function postImprove(
   endpoint: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  signal?: AbortSignal
 ): Promise<ImprovedResult> {
   let response: Response;
   try {
     // Use the configurable request timeout so NEXT_PUBLIC_REQUEST_TIMEOUT_MS
     // actually applies to the long-running improve/preview/confirm calls (#776).
-    response = await apiPost(endpoint, payload, DEFAULT_TIMEOUT_MS);
+    response = await apiPost(endpoint, payload, DEFAULT_TIMEOUT_MS, signal);
   } catch (networkError) {
     console.error(`Network error during ${endpoint}:`, networkError);
     throw networkError;
@@ -153,12 +154,18 @@ async function postImprove(
 /** Uploads job descriptions and returns a job_id */
 export async function uploadJobDescriptions(
   descriptions: string[],
-  resumeId: string
+  resumeId: string,
+  signal?: AbortSignal
 ): Promise<string> {
-  const res = await apiPost('/jobs/upload', {
-    job_descriptions: descriptions,
-    resume_id: resumeId,
-  });
+  const res = await apiPost(
+    '/jobs/upload',
+    {
+      job_descriptions: descriptions,
+      resume_id: resumeId,
+    },
+    undefined,
+    signal
+  );
   if (!res.ok) throw new Error(`Upload failed with status ${res.status}`);
   const data = await res.json();
   return data.job_id[0];
@@ -168,26 +175,36 @@ export async function uploadJobDescriptions(
 export async function improveResume(
   resumeId: string,
   jobId: string,
-  promptId?: string
+  promptId?: string,
+  signal?: AbortSignal
 ): Promise<ImprovedResult> {
-  return postImprove('/resumes/improve', {
-    resume_id: resumeId,
-    job_id: jobId,
-    prompt_id: promptId ?? null,
-  });
+  return postImprove(
+    '/resumes/improve',
+    {
+      resume_id: resumeId,
+      job_id: jobId,
+      prompt_id: promptId ?? null,
+    },
+    signal
+  );
 }
 
 /** Previews the resume improvement without saving */
 export async function previewImproveResume(
   resumeId: string,
   jobId: string,
-  promptId?: string
+  promptId?: string,
+  signal?: AbortSignal
 ): Promise<ImprovedResult> {
-  return postImprove('/resumes/improve/preview', {
-    resume_id: resumeId,
-    job_id: jobId,
-    prompt_id: promptId ?? null,
-  });
+  return postImprove(
+    '/resumes/improve/preview',
+    {
+      resume_id: resumeId,
+      job_id: jobId,
+      prompt_id: promptId ?? null,
+    },
+    signal
+  );
 }
 
 /** Confirms and saves a tailored resume */
@@ -370,9 +387,104 @@ export async function downloadCoverLetterPdf(
   return await res.blob();
 }
 
-/** Generates a cover letter on-demand for a tailored resume */
-export async function generateCoverLetter(resumeId: string): Promise<string> {
-  const res = await apiPost(`/resumes/${encodeURIComponent(resumeId)}/generate-cover-letter`, {});
+/** Builds the interview-prep PDF URL (used by the popup-blocked fallback). */
+export function getInterviewPrepPdfUrl(
+  resumeId: string,
+  pageSize: 'A4' | 'LETTER' = 'A4',
+  locale?: Locale
+): string {
+  const normalizedId = normalizeResumeId(resumeId);
+  const params = new URLSearchParams({ pageSize });
+  if (locale) {
+    params.set('lang', locale);
+  }
+  return `${API_BASE}/resumes/${encodeURIComponent(normalizedId)}/interview-prep/pdf?${params.toString()}`;
+}
+
+/** Downloads interview preparation as PDF. */
+export async function downloadInterviewPrepPdf(
+  resumeId: string,
+  pageSize: 'A4' | 'LETTER' = 'A4',
+  locale?: Locale
+): Promise<Blob> {
+  const url = getInterviewPrepPdfUrl(resumeId, pageSize, locale);
+  const res = await apiFetch(url);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to download interview preparation (status ${res.status}): ${text}`);
+  }
+  return await res.blob();
+}
+
+/** Builds the outreach PDF URL (used by the popup-blocked fallback). */
+export function getOutreachPdfUrl(
+  resumeId: string,
+  pageSize: 'A4' | 'LETTER' = 'A4',
+  locale?: Locale
+): string {
+  const normalizedId = normalizeResumeId(resumeId);
+  const params = new URLSearchParams({ pageSize });
+  if (locale) {
+    params.set('lang', locale);
+  }
+  return `${API_BASE}/resumes/${encodeURIComponent(normalizedId)}/outreach/pdf?${params.toString()}`;
+}
+
+/** Downloads the outreach message as PDF. */
+export async function downloadOutreachPdf(
+  resumeId: string,
+  pageSize: 'A4' | 'LETTER' = 'A4',
+  locale?: Locale
+): Promise<Blob> {
+  const url = getOutreachPdfUrl(resumeId, pageSize, locale);
+  const res = await apiFetch(url);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to download outreach message (status ${res.status}): ${text}`);
+  }
+  return await res.blob();
+}
+
+/** Builds the JD-match PDF URL (used by the popup-blocked fallback). */
+export function getJdMatchPdfUrl(
+  resumeId: string,
+  pageSize: 'A4' | 'LETTER' = 'A4',
+  locale?: Locale
+): string {
+  const normalizedId = normalizeResumeId(resumeId);
+  const params = new URLSearchParams({ pageSize });
+  if (locale) {
+    params.set('lang', locale);
+  }
+  return `${API_BASE}/resumes/${encodeURIComponent(normalizedId)}/jd-match/pdf?${params.toString()}`;
+}
+
+/** Downloads the JD-match comparison as PDF. */
+export async function downloadJdMatchPdf(
+  resumeId: string,
+  pageSize: 'A4' | 'LETTER' = 'A4',
+  locale?: Locale
+): Promise<Blob> {
+  const url = getJdMatchPdfUrl(resumeId, pageSize, locale);
+  const res = await apiFetch(url);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to download JD match (status ${res.status}): ${text}`);
+  }
+  return await res.blob();
+}
+
+/**
+ * Generates a cover letter on-demand for any resume.
+ *
+ * An optional job description targets the letter at a specific role; an empty
+ * string keeps the existing resume-only behavior (the only option for
+ * standalone resumes before the JD input was added).
+ */
+export async function generateCoverLetter(resumeId: string, jobDescription = ''): Promise<string> {
+  const res = await apiPost(`/resumes/${encodeURIComponent(resumeId)}/generate-cover-letter`, {
+    job_description: jobDescription,
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`Failed to generate cover letter (status ${res.status}): ${text}`);
@@ -381,9 +493,36 @@ export async function generateCoverLetter(resumeId: string): Promise<string> {
   return data.content;
 }
 
-/** Generates an outreach message on-demand for a tailored resume */
-export async function generateOutreachMessage(resumeId: string): Promise<string> {
-  const res = await apiPost(`/resumes/${encodeURIComponent(resumeId)}/generate-outreach`, {});
+/**
+ * Generates a cover letter from any resume, optionally tailored to a JD.
+ * An empty job description produces a resume-only cover letter.
+ */
+export async function generateCoverLetterFromResume(
+  resumeId: string,
+  jobDescription = ''
+): Promise<string> {
+  const res = await apiPost(`/resumes/${encodeURIComponent(resumeId)}/cover-letter/generate`, {
+    job_description: jobDescription,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to generate cover letter (status ${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return data.content;
+}
+
+/**
+ * Generates an outreach (in-platform) message on-demand for any resume.
+ * An optional job description targets the message at a specific role.
+ */
+export async function generateOutreachMessage(
+  resumeId: string,
+  jobDescription = ''
+): Promise<string> {
+  const res = await apiPost(`/resumes/${encodeURIComponent(resumeId)}/generate-outreach`, {
+    job_description: jobDescription,
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`Failed to generate outreach message (status ${res.status}): ${text}`);
@@ -392,9 +531,17 @@ export async function generateOutreachMessage(resumeId: string): Promise<string>
   return data.content;
 }
 
-/** Generates interview preparation on-demand for a tailored resume */
-export async function generateInterviewPrep(resumeId: string): Promise<InterviewPrepData> {
-  const res = await apiPost(`/resumes/${encodeURIComponent(resumeId)}/generate-interview-prep`, {});
+/**
+ * Generates interview preparation on-demand for any resume.
+ * An optional job description targets the preparation at a specific role.
+ */
+export async function generateInterviewPrep(
+  resumeId: string,
+  jobDescription = ''
+): Promise<InterviewPrepData> {
+  const res = await apiPost(`/resumes/${encodeURIComponent(resumeId)}/generate-interview-prep`, {
+    job_description: jobDescription,
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`Failed to generate interview preparation (status ${res.status}): ${text}`);

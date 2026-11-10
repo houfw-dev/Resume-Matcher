@@ -49,15 +49,22 @@ def _llm_payload(
     """Build a conform payload for exactly the ids the service will judge."""
     base = get_rules()
     title = _resolve_title(resume_data, target_title)
+    # Mirror the service's mode contract: JD mode suppresses title
+    # auto-matching unless an explicit (real) model key was supplied — that
+    # combination is rejected with 400 before the LLM is ever called.
+    effective_key = model_key
+    if with_jd and not model_key:
+        effective_key = "none"
     model = resolve_competency_model(
-        parse_competency_models(base.competency_models), title, model_key
+        parse_competency_models(base.competency_models), title, effective_key
     )
     rules = expand_rules(base, model)
     excluded = set(run_objective_checks(resume_data)[0])
     if not with_jd:
         excluded |= JD_GATED_IDS
     if model is None:
-        # The competence gate is independent of the JD gate.
+        # JD mode suppresses the model; model mode has no JD — the two
+        # enhanced gates never run inside one request.
         excluded |= COMPETENCE_IDS
     ids = sorted(item_id for item_id in rules.items if item_id not in excluded)
     return {
@@ -195,7 +202,10 @@ async def test_diagnose_endpoint_grounds_judgement_in_stored_original_markdown(
 
 
 @pytest.mark.asyncio
-async def test_diagnose_endpoint_judges_17_to_22_when_jd_provided(isolated_db: object) -> None:
+async def test_diagnose_endpoint_jd_suppresses_title_model_match(isolated_db: object) -> None:
+    # Mode contract: a JD activates JD mode and suppresses the title-based
+    # model match, so item 17 is judged while the competence rows 18–22 stay
+    # na even though the title would otherwise auto-match a Java level model.
     processed_data = {
         "personalInfo": {
             "name": "王浩",
@@ -226,9 +236,12 @@ async def test_diagnose_endpoint_judges_17_to_22_when_jd_provided(isolated_db: o
     assert response.status_code == 200
     body = response.json()
     report = body["data"] if "data" in body else body
+    assert report["competency_model"] is None
     by_id = {item["id"]: item for item in report["items"]}
     for item_id in JD_GATED_IDS:
         assert by_id[item_id]["rating"] == "conform"
+    for item_id in COMPETENCE_IDS:
+        assert by_id[item_id]["rating"] == "na"
 
 
 @pytest.mark.asyncio
@@ -286,7 +299,7 @@ async def test_diagnose_endpoint_honors_explicit_competency_model_key(
     )
     payload = _llm_payload(
         processed_data,
-        with_jd=True,
+        with_jd=False,
         target_title="大数据开发工程师",
         model_key="java-p7",
     )
@@ -299,7 +312,6 @@ async def test_diagnose_endpoint_honors_explicit_competency_model_key(
                 json={
                     "target_title": "大数据开发工程师",
                     "competency_model_key": "java-p7",
-                    "job_description": "Java 架构师岗位",
                 },
             )
 
@@ -311,6 +323,37 @@ async def test_diagnose_endpoint_honors_explicit_competency_model_key(
     assert len(report["items"]) == 22
     by_id = {item["id"]: item for item in report["items"]}
     assert all(by_id[item_id]["rating"] == "conform" for item_id in COMPETENCE_IDS)
+
+
+@pytest.mark.asyncio
+async def test_diagnose_endpoint_400_when_model_and_jd_combined(isolated_db: object) -> None:
+    # The triple overlap (base + competency model + JD) is not a supported
+    # mode: the request is rejected with 400 before any LLM call happens.
+    processed_data = {
+        "personalInfo": {"name": "王浩", "phone": "13812345678", "title": "大数据开发工程师"},
+        "workExperience": [],
+        "education": [],
+        "personalProjects": [],
+        "additional": {},
+    }
+    created = await isolated_db.create_resume(  # type: ignore[attr-defined]
+        content="{}", content_type="json", processed_data=processed_data
+    )
+
+    with patch(
+        "app.services.diagnosis.complete_json", new_callable=AsyncMock
+    ) as complete_json:
+        async with _client() as client:
+            response = await client.post(
+                f"/api/v1/resumes/{created['resume_id']}/diagnose",
+                json={
+                    "competency_model_key": "java-p7",
+                    "job_description": "Java 架构师岗位",
+                },
+            )
+
+    assert response.status_code == 400
+    complete_json.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -86,7 +86,7 @@ export function QuestionCard({
       </div>
 
       <div className="grid gap-6 p-5 md:p-8">
-        <p className="font-mono text-xs font-bold uppercase tracking-wider text-blue-700">
+        <p className="font-mono text-xs font-bold uppercase tracking-wider text-primary">
           {sectionLabel}
         </p>
         <h2 className="font-serif text-3xl font-bold leading-tight md:text-4xl">{question}</h2>
@@ -124,8 +124,8 @@ export function QuestionCard({
         )}
 
         {isQuestion && isComplete && (
-          <p className="flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-wider text-green-700">
-            <span aria-hidden="true" className="inline-block h-3 w-3 bg-green-700" />
+          <p className="flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-wider text-success">
+            <span aria-hidden="true" className="inline-block h-3 w-3 bg-success" />
             {t('resumeWizard.readyHint')}
           </p>
         )}

@@ -7,9 +7,11 @@ import { useTranslations } from '@/lib/i18n';
 interface LoadingStepProps {
   message: string;
   submessage?: string;
+  onCancel?: () => void;
 }
 
-function LoadingStep({ message, submessage }: LoadingStepProps) {
+function LoadingStep({ message, submessage, onCancel }: LoadingStepProps) {
+  const { t } = useTranslations();
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-6">
       <div className="relative">
@@ -19,26 +21,33 @@ function LoadingStep({ message, submessage }: LoadingStepProps) {
         <p className="text-xl font-mono font-bold">{message}</p>
         {submessage && <p className="text-sm text-steel-grey mt-2 font-mono">{submessage}</p>}
       </div>
+      {onCancel && (
+        <Button variant="outline" onClick={onCancel}>
+          {t('common.cancel')}
+        </Button>
+      )}
     </div>
   );
 }
 
-export function AnalyzingStep() {
+export function AnalyzingStep({ onCancel }: { onCancel?: () => void }) {
   const { t } = useTranslations();
   return (
     <LoadingStep
       message={t('enrichment.loading.analyzingTitle')}
       submessage={t('enrichment.loading.analyzingDescription')}
+      onCancel={onCancel}
     />
   );
 }
 
-export function GeneratingStep() {
+export function GeneratingStep({ onCancel }: { onCancel?: () => void }) {
   const { t } = useTranslations();
   return (
     <LoadingStep
       message={t('enrichment.loading.generatingTitle')}
       submessage={t('enrichment.loading.generatingDescription')}
+      onCancel={onCancel}
     />
   );
 }
@@ -148,7 +157,7 @@ export function ErrorStep({ error, onRetry, onClose }: ErrorStepProps) {
       </div>
       <div className="text-center max-w-md">
         <p className="text-xl font-mono font-bold">{t('enrichment.error.title')}</p>
-        <p className="text-sm text-red-600 mt-2 font-mono bg-red-50 p-3 border border-red-200">
+        <p className="text-sm text-destructive mt-2 font-mono bg-red-50 p-3 border border-red-200">
           {error}
         </p>
       </div>

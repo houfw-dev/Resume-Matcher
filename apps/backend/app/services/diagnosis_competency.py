@@ -28,6 +28,12 @@ With no resolved target intention or no matched/selected model the base rules
 are returned untouched (items 18–22 then carry their pointer criteria, are
 never sent to the LLM and are reported ``na``). The standards only ever travel
 server-side (rules JSON → LLM prompt); they are never returned to clients.
+
+Mode exclusivity (enforced in ``diagnosis.diagnose_resume``): competency-model
+diagnosis and JD diagnosis are mutually exclusive. When a job description is
+present the effective model key is forced to ``none`` — title auto-matching is
+suppressed even if the target title would match — and an explicit real model
+key combined with a JD raises ``DiagnosisModeConflictError`` (HTTP 400).
 """
 
 from __future__ import annotations

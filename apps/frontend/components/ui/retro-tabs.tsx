@@ -46,7 +46,7 @@ export const RetroTabs: React.FC<RetroTabsProps> = ({
             className={cn(
               'px-4 py-2 font-mono text-xs uppercase tracking-wider transition-all',
               'border border-b-0 border-black -mb-px',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-700 focus-visible:ring-offset-2',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
               isActive && [
                 'bg-white text-black font-bold',
                 'shadow-[2px_-2px_0px_0px_rgba(0,0,0,0.1)]',

@@ -16,6 +16,10 @@ the PDF, which renders that template), so screen and export never disagree:
 - work headers are four columns (time | company | department | role, role
   NOT bold); projects (name | time | scale | role); education
   (time | institution | major | degree);
+- the header renders as one borderless three-column grid (the DOCX mirror of
+  the on-screen info grid): every fact stays a single "label：value" cell so
+  Word can never split a label from its value across lines, and personal
+  links occupy their own labeled, muted-gray row (个人网站 / 领英 / GitHub);
 - technical skills render as an ordered list at the early ``additional``
   slot; certifications/awards each render as their own independent ordered
   list PROJECTED TO THE BACK of the resume (after the custom-section
@@ -87,6 +91,9 @@ DOCX_MEDIA_TYPE = (
 _CONTENT_WIDTH_CM = 17.0
 _META_COLOR = RGBColor(0x66, 0x66, 0x66)
 
+# Header fact/link grid: three equal tracks summing to the full content width.
+_HEADER_GRID_WIDTHS_CM: tuple[float, float, float] = (5.67, 5.67, 5.66)
+
 # ---------------------------------------------------------------------------
 # Static chrome — zh content gets Chinese chrome, everything else English.
 # Mirrors resume.sections.* / resume.personalInfo.* / resume.additionalLabels.*
@@ -105,6 +112,9 @@ _CHROME: dict[str, dict[str, str]] = {
         "phone": "电话",
         "email": "电子邮箱",
         "foreignLanguage": "外语水平",
+        "website": "个人网站",
+        "linkedin": "领英",
+        "github": "GitHub",
         # Section titles
         "summary": "个人优势",
         "workExperience": "工作经历",
@@ -129,6 +139,9 @@ _CHROME: dict[str, dict[str, str]] = {
         "phone": "Phone",
         "email": "Email",
         "foreignLanguage": "Foreign Languages",
+        "website": "Website",
+        "linkedin": "LinkedIn",
+        "github": "GitHub",
         "summary": "Summary",
         "workExperience": "Experience",
         "education_section": "Education",
@@ -208,6 +221,24 @@ _SUB_LABEL_CANDIDATES: frozenset[str] = frozenset(
         "项目业绩",
         "主要成果",
         "核心成果",
+        # Outcome/effectiveness modules — peers of 项目亮点， kept verbatim.
+        # Keep in sync with parser.py::_SUB_LABEL_CANDIDATES.
+        "项目成效",
+        "工作成效",
+        "实施成效",
+        "建设成效",
+        "应用成效",
+        "业务成效",
+        "落地成效",
+        "实际成效",
+        "量化成效",
+        "运营成效",
+        "项目效果",
+        "实施效果",
+        "应用效果",
+        "落地效果",
+        "运行效果",
+        "实际效果",
         "项目角色",
         "担任角色",
     }
@@ -249,6 +280,11 @@ _PROJECT_INLINE_PLAIN_LABELS: frozenset[str] = frozenset(
 _PROJECT_DESCRIPTIVE_LABELS: frozenset[str] = frozenset(
     {"项目背景", "技术栈", "项目描述", "系统架构", "架构说明"}
 )
+# Canonical bullet-region labels (mirror parser._PROJECT_REGION_BULLET_CORES and
+# the frontend CANONICAL_NUMBERED_MODULE_CORES): the only labels whose numbered
+# lists keep the hanging-indent gutter. Other peer modules (项目成效/…) render
+# their unnumbered rows flush with the label edge.
+_PROJECT_BULLET_LABELS: frozenset[str] = frozenset({"项目职责", "项目亮点"})
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +294,9 @@ _PROJECT_DESCRIPTIVE_LABELS: frozenset[str] = frozenset(
 
 # Block shapes:
 #   ("label", desc, descriptive)
-#   ("list", indented, rows[(desc, numbered, bold, level)])  # level 1: "1.", 2: "1.1"
+#   ("list", indented, flush, rows[(desc, numbered, bold, level)])
+#     level 1: "1.", 2: "1.1"; flush=True peer modules align unnumbered rows
+#     with the label edge (no left indent), numbered rows keep their marker
 #   ("body", rows[desc], inline)  # inline=True merges a tech stack into one line
 DescriptionBlock = tuple[str, Any, Any]
 
@@ -307,6 +345,16 @@ def _is_project_tech_stack_label(label_desc: str) -> bool:
         str(strip_source_point_marker(label_desc)).strip(),
     ).strip()
     return core == "技术栈"
+
+
+def _is_bullet_module_label(label_desc: str) -> bool:
+    """Mirror isCanonicalNumberedModule(): 项目职责/项目亮点 keep the gutter."""
+    core = re.sub(
+        r"[：:]\s*$",
+        "",
+        str(strip_source_point_marker(label_desc)).strip(),
+    ).strip()
+    return core in _PROJECT_BULLET_LABELS
 
 
 def _is_known_sub_label(point: str) -> bool:
@@ -514,6 +562,7 @@ def build_description_blocks(
     blocks: list[DescriptionBlock] = []
     next_block_kind = "list"
     next_list_indented = False
+    next_list_flush = False
     next_body_inline = False
     # Mirrors the frontend state: only after a recognized module label may an
     # unknown colon heading be treated as a nested numbered point head.
@@ -529,7 +578,7 @@ def build_description_blocks(
         if next_block_kind == "body":
             block: DescriptionBlock = ("body", [], next_body_inline)
         else:
-            block = ("list", next_list_indented, [])
+            block = ("list", next_list_indented, next_list_flush, [])
         blocks.append(block)
         return block
 
@@ -558,7 +607,7 @@ def build_description_blocks(
             if nested_numbered_head:
                 block = open_block()
                 nested_head_open = True
-                block[2].append((label_desc, True, True, 1))
+                block[3].append((label_desc, True, True, 1))
                 continue
 
             blocks.append(("label", label_desc, descriptive))
@@ -567,6 +616,13 @@ def build_description_blocks(
             next_block_kind = "body" if descriptive else "list"
             next_body_inline = descriptive and _is_project_tech_stack_label(label_desc)
             next_list_indented = True
+            # Peer modules outside the big four （项目成效/项目治理/…) keep their
+            # unnumbered rows flush with the label edge instead of indenting.
+            next_list_flush = (
+                canonicalize_labels
+                and not descriptive
+                and not _is_bullet_module_label(label_desc)
+            )
             continue
 
         if canonicalize_labels:
@@ -578,6 +634,7 @@ def build_description_blocks(
                 next_block_kind = "body"
                 next_body_inline = _is_project_tech_stack_label(glued[0])
                 next_list_indented = True
+                next_list_flush = False
                 block = open_block()
                 block[1].append(glued[1])
                 continue
@@ -595,11 +652,12 @@ def build_description_blocks(
         ):
             block = open_block()
             nested_head_open = True
-            block[2].append((desc, True, True, 1))
+            block[3].append((desc, True, True, 1))
             continue
 
         block = open_block()
         next_list_indented = False
+        next_list_flush = False
         if block[0] == "body":
             block[1].append(
                 _canonicalize_project_sub_label_prefix(desc)
@@ -621,7 +679,7 @@ def build_description_blocks(
         else:
             numbered = style != "plain"
             level = 1
-        block[2].append((row_desc, numbered, False, level))
+        block[3].append((row_desc, numbered, False, level))
 
     # Mirror the frontend tech-stack post-processing:
     # - A structured region with category rows ("后端：…", "数据库：…") renders
@@ -640,6 +698,7 @@ def build_description_blocks(
             blocks[index] = (
                 "list",
                 True,
+                False,
                 [(str(row), True, False, 1) for row in block[1]],
             )
         elif any(inline_disqualify.search(str(row)) for row in block[1]):
@@ -915,10 +974,13 @@ def _add_description_blocks(
         # restarts at 1, plain rows outside nested heads skip the counter but
         # keep the indent. Nested bold heads are level 1 (1. 2.); every detail
         # below them is level 2 and renders indented with composite markers
-        # (1.1, 1.2, …), restarting at every head.
+        # (1.1, 1.2, …), restarting at every head. Flush peer modules
+        # （项目成效/… outside the big four) align unnumbered level-1 rows with
+        # the label edge instead of the 0.6cm gutter.
+        block_flush = bool(block[2])
         number_l1 = 0
         number_l2 = 0
-        for desc, numbered, bold, level in block[2]:
+        for desc, numbered, bold, level in block[3]:
             marker = ""
             paragraph = document.add_paragraph()
             pf = paragraph.paragraph_format
@@ -929,6 +991,10 @@ def _add_description_blocks(
                     number_l2 += 1
                     pf.first_line_indent = Cm(-0.6)
                     marker = f"{number_l1}.{number_l2}"
+            elif block_flush and not numbered:
+                # Flush peer-module prose: no gutter, no marker — exactly the
+                # label's left edge.
+                pf.left_indent = Cm(0)
             else:
                 pf.left_indent = Cm(0.6)
                 if bold:
@@ -1015,40 +1081,46 @@ def _render_header(document: Document, data: dict[str, Any], chrome: dict[str, s
     if languages:
         facts.append((chrome["foreignLanguage"], "、".join(languages)))
 
-    if facts:
-        separator = "：" if chrome is _CHROME["zh"] else ": "
-        fact_separator = "　　" if chrome is _CHROME["zh"] else "    "
-        paragraph = document.add_paragraph()
-        pf = paragraph.paragraph_format
-        pf.space_after = Pt(2)
-        for index, (label, value) in enumerate(facts):
-            if index:
-                gap_run = paragraph.add_run(fact_separator)
-                _style_run(gap_run, size=10.5)
-            label_run = paragraph.add_run(f"{label}{separator}")
-            _style_run(label_run, size=10.5)
-            value_run = paragraph.add_run(value)
-            _style_run(value_run, size=10.5)
+    separator = "：" if chrome is _CHROME["zh"] else ": "
 
-    # Website / social links stay on their own row, display text only
-    # (strip protocol / www / trailing slash, mirroring the on-screen pills).
+    # Website / social links keep their own grid row, display text only
+    # (strip protocol / www / trailing slash, mirroring the on-screen pills),
+    # each prefixed with its localized label (个人网站 / 领英 / GitHub).
     link_texts = [
-        _display_link(info.get("website")),
-        _display_link(info.get("linkedin")),
-        _display_link(info.get("github")),
+        f"{chrome[key]}{separator}{display}"
+        for key in ("website", "linkedin", "github")
+        if (display := _display_link(info.get(key)))
     ]
-    link_texts = [text for text in link_texts if text]
+
+    # Render facts and links as ONE borderless three-column grid — the DOCX
+    # mirror of the on-screen info grid. A flowing space-separated paragraph
+    # wrapped at arbitrary Word page widths and split a label from its value
+    # across lines (e.g. 电话： and the number on separate lines); fixed table
+    # cells keep every "label：value" pair intact and columns aligned.
+    grid_rows: list[list[str]] = []
+    fact_texts = [f"{label}{separator}{value}" for label, value in facts]
+    for start in range(0, len(fact_texts), 3):
+        row = fact_texts[start : start + 3]
+        grid_rows.append(row + [""] * (3 - len(row)))
     if link_texts:
-        paragraph = document.add_paragraph()
-        pf = paragraph.paragraph_format
-        pf.space_after = Pt(2)
-        for index, text in enumerate(link_texts):
-            if index:
-                gap_run = paragraph.add_run("    ")
-                _style_run(gap_run, size=9.5)
-            run = paragraph.add_run(text)
-            _style_run(run, size=9.5)
-            run.font.color.rgb = _META_COLOR
+        grid_rows.append(link_texts + [""] * (3 - len(link_texts)))
+
+    if grid_rows:
+        table = document.add_table(rows=len(grid_rows), cols=3)
+        table.autofit = False
+        _remove_table_borders(table)
+        link_row_index = len(grid_rows) - 1 if link_texts else -1
+        for row_index, row in enumerate(grid_rows):
+            is_link_row = row_index == link_row_index
+            for column_index, text in enumerate(row):
+                cell = table.rows[row_index].cells[column_index]
+                cell.width = Cm(_HEADER_GRID_WIDTHS_CM[column_index])
+                _set_cell_text(
+                    cell,
+                    text,
+                    meta=is_link_row,
+                    size=9.5 if is_link_row else 10.5,
+                )
 
 
 def _display_link(value: Any) -> str:

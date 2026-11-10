@@ -40,6 +40,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Dropdown } from '@/components/ui/dropdown';
+import { SettingsSectionNav } from '@/components/settings/section-nav';
 import {
   Save,
   Key,
@@ -64,6 +65,7 @@ import { useLanguage } from '@/lib/context/language-context';
 import { useTranslations } from '@/lib/i18n';
 import { ATTACHMENT_DRAFT_STORAGE_PREFIX } from '@/lib/utils/attachment-draft-storage';
 import { RESUME_DRAFT_STORAGE_PREFIX, safeStorage } from '@/lib/utils/resume-draft-storage';
+import { SETTINGS_SECTION_IDS, sectionAnchorId } from '@/lib/utils/settings-sections';
 import type { SupportedLanguage } from '@/lib/api/config';
 import type { Locale } from '@/i18n/config';
 
@@ -83,7 +85,7 @@ const PROVIDERS: LLMProvider[] = [
 
 const SEGMENTED_BUTTON_BASE =
   'border border-black font-mono transition-all duration-150 ease-out shadow-sw-sm hover:translate-y-[1px] hover:translate-x-[1px] hover:shadow-none disabled:cursor-not-allowed disabled:opacity-50';
-const SEGMENTED_BUTTON_ACTIVE = 'bg-blue-700 text-white border-black hover:bg-blue-800';
+const SEGMENTED_BUTTON_ACTIVE = 'bg-primary text-white border-black hover:bg-blue-800';
 const SEGMENTED_BUTTON_INACTIVE = 'bg-white text-black hover:bg-secondary';
 
 const unwrapCodeBlock = (value?: string | null): string | null => {
@@ -706,6 +708,8 @@ export default function SettingsPage() {
           </Link>
         </div>
 
+        <SettingsSectionNav />
+
         <div className="p-8 space-y-10">
           {/* API Key Not Configured Warning */}
           {!statusLoading && systemStatus && !systemStatus.llm_configured && (
@@ -725,7 +729,7 @@ export default function SettingsPage() {
           )}
 
           {/* System Status Panel */}
-          <section className="space-y-4">
+          <section id={sectionAnchorId(SETTINGS_SECTION_IDS[0])} className="space-y-4 scroll-mt-24">
             <div className="flex items-center justify-between border-b border-black/10 pb-2">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
@@ -759,7 +763,7 @@ export default function SettingsPage() {
               </div>
             ) : !systemStatus ? (
               <div className="flex flex-col items-center justify-center p-8 gap-3 border border-dashed border-red-300 bg-red-50">
-                <p className="font-mono text-xs text-red-600 uppercase">
+                <p className="font-mono text-xs text-destructive uppercase">
                   {t('settings.systemStatus.unableToConnect')}
                 </p>
                 <p className="font-mono text-xs text-ink-soft">
@@ -892,7 +896,7 @@ export default function SettingsPage() {
           </section>
 
           {/* LLM Configuration */}
-          <section className="space-y-6">
+          <section id={sectionAnchorId(SETTINGS_SECTION_IDS[1])} className="space-y-6 scroll-mt-24">
             <div className="flex items-center gap-2 border-b border-black/10 pb-2">
               <Key className="w-4 h-4" />
               <h2 className="font-mono text-sm font-bold uppercase tracking-wider">
@@ -1093,7 +1097,7 @@ export default function SettingsPage() {
               {/* Error Message */}
               {error && (
                 <div className="border border-red-300 bg-red-50 p-3">
-                  <p className="text-xs text-red-600 font-mono break-words">
+                  <p className="text-xs text-destructive font-mono break-words">
                     {t('settings.llmConfiguration.errorPrefix', { error })}
                   </p>
                 </div>
@@ -1127,7 +1131,7 @@ export default function SettingsPage() {
                     })}
                   </p>
                   {healthCheckError && (
-                    <p className="font-mono text-xs text-red-600 mt-1 break-words">
+                    <p className="font-mono text-xs text-destructive mt-1 break-words">
                       {healthCheckError}
                     </p>
                   )}
@@ -1167,7 +1171,7 @@ export default function SettingsPage() {
           </section>
 
           {/* Content Generation Section */}
-          <section className="space-y-6">
+          <section id={sectionAnchorId(SETTINGS_SECTION_IDS[2])} className="space-y-6 scroll-mt-24">
             <div className="flex items-center gap-2 border-b border-black/10 pb-2">
               <Settings2 className="w-4 h-4" />
               <h2 className="font-mono text-sm font-bold uppercase tracking-wider">
@@ -1208,7 +1212,7 @@ export default function SettingsPage() {
                       {t('settings.contentGeneration.customPromptHelp')}
                     </p>
                     {featurePromptError?.field === 'cover_letter_prompt' && (
-                      <p className="text-xs text-red-600 font-mono break-words">
+                      <p className="text-xs text-destructive font-mono break-words">
                         {t('settings.contentGeneration.customPromptErrorMissing', {
                           missing: featurePromptError.missing.join(', '),
                         })}
@@ -1265,7 +1269,7 @@ export default function SettingsPage() {
                       {t('settings.contentGeneration.customPromptHelp')}
                     </p>
                     {featurePromptError?.field === 'outreach_message_prompt' && (
-                      <p className="text-xs text-red-600 font-mono break-words">
+                      <p className="text-xs text-destructive font-mono break-words">
                         {t('settings.contentGeneration.customPromptErrorMissing', {
                           missing: featurePromptError.missing.join(', '),
                         })}
@@ -1321,7 +1325,7 @@ export default function SettingsPage() {
           </section>
 
           {/* Language Settings Section */}
-          <section className="space-y-6">
+          <section id={sectionAnchorId(SETTINGS_SECTION_IDS[3])} className="space-y-6 scroll-mt-24">
             <div className="flex items-center gap-2 border-b border-black/10 pb-2">
               <Globe className="w-4 h-4" />
               <h2 className="font-mono text-sm font-bold uppercase tracking-wider">
@@ -1383,10 +1387,10 @@ export default function SettingsPage() {
           </section>
 
           {/* Danger Zone */}
-          <section className="space-y-6">
+          <section id={sectionAnchorId(SETTINGS_SECTION_IDS[4])} className="space-y-6 scroll-mt-24">
             <div className="flex items-center gap-2 border-b border-red-200 pb-2">
-              <AlertTriangle className="w-4 h-4 text-red-600" />
-              <h2 className="font-mono text-sm font-bold uppercase tracking-wider text-red-600">
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+              <h2 className="font-mono text-sm font-bold uppercase tracking-wider text-destructive">
                 {t('settings.dangerZone')}
               </h2>
             </div>
@@ -1458,10 +1462,10 @@ export default function SettingsPage() {
             ) : systemStatus ? (
               <>
                 <div
-                  className={`w-3 h-3 ${systemStatus.status === 'ready' ? 'bg-green-700' : 'bg-amber-500'}`}
+                  className={`w-3 h-3 ${systemStatus.status === 'ready' ? 'bg-success' : 'bg-amber-500'}`}
                 ></div>
                 <span
-                  className={`font-mono text-xs font-bold ${systemStatus.status === 'ready' ? 'text-green-700' : 'text-amber-600'}`}
+                  className={`font-mono text-xs font-bold ${systemStatus.status === 'ready' ? 'text-success' : 'text-amber-600'}`}
                 >
                   {systemStatus.status === 'ready'
                     ? t('settings.footer.status.ready')

@@ -13,8 +13,9 @@ Pipeline stages covered:
 
 The real LLM is NEVER called: parse_resume_to_json, extract_job_keywords,
 generate_skill_target_plan, generate_resume_diffs, refine_resume, and the
-auxiliary cover-letter/outreach/title generators are all replaced with
-Mock/AsyncMock returning canned data.
+auxiliary cover-letter/outreach generators are all replaced with
+Mock/AsyncMock returning canned data. The resume title is built
+deterministically (name + position), so it needs no mock.
 """
 
 from typing import Any
@@ -301,12 +302,6 @@ class TestTailoringPipeline:
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("refinement disabled for test"),
             ),
-            # Auxiliary generators are awaited in confirm; keep them cheap.
-            patch(
-                "app.routers.resumes.generate_resume_title",
-                new_callable=AsyncMock,
-                return_value="Senior Backend Engineer - TechCorp",
-            ),
         ):
             # --- Preview (no persistence; resume_id stays null) ---
             async with _new_client() as client:
@@ -418,11 +413,6 @@ class TestTailoringPipeline:
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("refinement disabled for test"),
             ),
-            patch(
-                "app.routers.resumes.generate_resume_title",
-                new_callable=AsyncMock,
-                return_value="Senior Backend Engineer",
-            ),
         ):
             async with _new_client() as client:
                 preview_resp = await client.post(
@@ -507,11 +497,6 @@ class TestTailoringPipeline:
                 "app.routers.resumes.refine_resume",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("refinement disabled for test"),
-            ),
-            patch(
-                "app.routers.resumes.generate_resume_title",
-                new_callable=AsyncMock,
-                return_value="Senior Backend Engineer",
             ),
         ):
             async with _new_client() as client:

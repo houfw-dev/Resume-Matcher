@@ -11,6 +11,12 @@ from typing import Any
 
 GROUNDING_REVIEW_CODE = "GROUNDING_REVIEW_REQUIRED"
 _GROUNDING_REVIEW_THRESHOLD = 0.45
+# A confirm-time re-derived approval covers genuinely inserted rows only. A
+# candidate whose best source-row match is at/above this bar is the same row
+# lightly edited (e.g. an em-dash rewritten as commas), not an insertion, so it
+# must stay on the ordinary pairing path. Mirrors the 0.8 same-row-edit bar in
+# _row_approval_matches; observed real inserted rows score 0.46 and below.
+_INSERT_ROW_NEAR_SOURCE_THRESHOLD = 0.8
 
 # Han range for detecting an elaboration boundary directly after a skill name
 # ("Redis缓存" elaborates "Redis") and for CJK-adjacent token matching.
@@ -1498,6 +1504,14 @@ def approved_preview_project_rows(
 
     Rows in duty/background regions and unlabeled rows are NOT approved here:
     ordinary append bullets keep going through the standard grounding gate.
+
+    A region row that closely matches a source row is a modification, not an
+    insertion: it stays out of the approval set so the pairing path consumes
+    its source counterpart. Exact matches are excluded above; the
+    ``_INSERT_ROW_NEAR_SOURCE_THRESHOLD`` bar catches punctuation/word-level
+    rewrites whose normalized text differs (e.g. an em-dash replaced by
+    commas), which would otherwise duplicate the source row when the preview
+    is confirmed.
     """
     approved: set[str] = set()
     source_entries_raw = source.get("personalProjects")
@@ -1553,6 +1567,18 @@ def approved_preview_project_rows(
                 continue
             row_norm = _normalized(row)
             if row_norm in source_row_norms or _ANY_DIGIT_RE.search(row):
+                continue
+            # A near-verbatim source row is a modification handled by the
+            # ordinary pairing path, not an inserted row. Approving it would
+            # bypass source-slot consumption at confirm and force-restore the
+            # original as a duplicate, making preview -> confirm non-idempotent.
+            best_source = _best_source_row(
+                row, source_rows, set(range(len(source_rows)))
+            )
+            if (
+                best_source is not None
+                and best_source[1] >= _INSERT_ROW_NEAR_SOURCE_THRESHOLD
+            ):
                 continue
             if active_region == "tech_stack" and (
                 len(row) <= 40 and not any(ch in row for ch in "：:、,，;；")

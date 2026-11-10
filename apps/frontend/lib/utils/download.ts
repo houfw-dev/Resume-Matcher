@@ -30,15 +30,25 @@ export function openUrlInNewTab(url: string): boolean {
  * - Truncates to reasonable length
  * - Provides fallback if title is empty
  */
+export type DownloadKind = 'resume' | 'cover-letter' | 'outreach' | 'interview-prep' | 'jd-match';
+
+const FALLBACK_PREFIXES: Record<DownloadKind, string> = {
+  resume: 'resume',
+  'cover-letter': 'cover_letter',
+  outreach: 'outreach',
+  'interview-prep': 'interview_prep',
+  'jd-match': 'jd_match',
+};
+
 export function sanitizeFilename(
   title: string | null | undefined,
   fallbackId: string,
-  type: 'resume' | 'cover-letter' = 'resume',
+  type: DownloadKind = 'resume',
   ext: 'pdf' | 'docx' = 'pdf'
 ): string {
   // Use fallback if no title
   if (!title?.trim()) {
-    return type === 'resume' ? `resume_${fallbackId}.${ext}` : `cover_letter_${fallbackId}.${ext}`;
+    return `${FALLBACK_PREFIXES[type]}_${fallbackId}.${ext}`;
   }
 
   // Normalize Unicode to NFC form to ensure consistent representation
@@ -115,17 +125,25 @@ export function buildDiagnosisReportFilename(
   return sanitizeFilename(raw, 'diagnosis', 'resume', 'docx');
 }
 
+const KIND_LABELS: Record<DownloadKind, string> = {
+  resume: 'Resume',
+  'cover-letter': 'Cover Letter',
+  outreach: 'Outreach Message',
+  'interview-prep': 'Interview Prep',
+  'jd-match': 'JD Match',
+};
+
 /**
- * Build a personalized download filename for resume or cover letter PDFs.
+ * Build a personalized download filename for resume/attachment PDFs.
  * Format: "{Name} - {Type} - {Company}.pdf" (falls back gracefully when data is missing)
  */
 export function buildResumeFilename(
   name: string | null | undefined,
   company: string | null | undefined,
   fallbackId: string,
-  type: 'resume' | 'cover-letter' = 'resume'
+  type: DownloadKind = 'resume'
 ): string {
-  const typeLabel = type === 'resume' ? 'Resume' : 'Cover Letter';
+  const typeLabel = KIND_LABELS[type];
   const cleanName = name?.trim() || null;
   const cleanCompany = company?.trim() || null;
 

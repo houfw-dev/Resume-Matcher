@@ -250,7 +250,7 @@ const ItemRow: React.FC<ItemRowProps> = ({ item, isSelected, onToggle }) => {
       {/* Checkbox */}
       <div
         className={`w-5 h-5 border-2 flex items-center justify-center transition-colors ${
-          isSelected ? 'border-blue-700 bg-blue-700' : 'border-black bg-white'
+          isSelected ? 'border-primary bg-primary' : 'border-black bg-white'
         }`}
       >
         {isSelected && (

@@ -25,11 +25,14 @@ import {
   AlertCircle,
   Sparkles,
   Pencil,
-  MessagesSquare,
   Stethoscope,
+  Target,
 } from 'lucide-react';
+import Kanban from 'lucide-react/dist/esm/icons/kanban';
 import { EnrichmentModal } from '@/components/enrichment/enrichment-modal';
 import { DiagnosisModal } from '@/components/diagnosis/diagnosis-modal';
+import { listApplications } from '@/lib/api/tracker';
+import { countApplications } from '@/lib/utils/tracker-resume-filter';
 import { useTranslations } from '@/lib/i18n';
 import { withLocalizedDefaultSections } from '@/lib/utils/section-helpers';
 import { buildResumeHeadingProps } from '@/lib/utils/resume-headings';
@@ -76,6 +79,9 @@ export default function ResumeViewerPage() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const [isTailoredResume, setIsTailoredResume] = useState(false);
+  // Null = count still loading (or the secondary fetch failed — the tracker
+  // entry stays usable, only the badge is omitted).
+  const [applicationCount, setApplicationCount] = useState<number | null>(null);
 
   const resumeId = params?.id as string;
   const {
@@ -163,6 +169,28 @@ export default function ResumeViewerPage() {
     setIsMasterResume(localStorage.getItem('master_resume_id') === resumeId);
   }, [resumeId, beginResumeLoad, isCurrentResumeLoad]);
 
+  // Tracker reverse-link count: how many cards apply this resume directly or
+  // descend from it (server-side resume_id OR master_resume_id match). A
+  // failure here must never block the viewer — log and leave the badge off.
+  useEffect(() => {
+    if (!resumeId) {
+      setApplicationCount(null);
+      return;
+    }
+    let cancelled = false;
+    listApplications({ resumeId })
+      .then((data) => {
+        if (!cancelled) setApplicationCount(countApplications(data.columns));
+      })
+      .catch((err) => {
+        console.error('Failed to load application count:', err);
+        if (!cancelled) setApplicationCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resumeId]);
+
   const handleRetryProcessing = async () => {
     if (!resumeId) return;
     const token = beginRetry();
@@ -205,10 +233,6 @@ export default function ResumeViewerPage() {
 
   const handleEdit = () => {
     router.push(`/builder?id=${resumeId}`);
-  };
-
-  const handleInterviewPrep = () => {
-    router.push(`/builder?id=${resumeId}&tab=interview-prep`);
   };
 
   const handleTitleSave = async () => {
@@ -415,8 +439,8 @@ export default function ResumeViewerPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background">
-        <Loader2 className="w-10 h-10 animate-spin text-blue-700 mb-4" />
-        <p className="font-mono text-sm font-bold uppercase text-blue-700">
+        <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+        <p className="font-mono text-sm font-bold uppercase text-primary">
           {t('resumeViewer.loading')}
         </p>
       </div>
@@ -441,16 +465,16 @@ export default function ResumeViewerPage() {
           >
             <div className="flex justify-center mb-4">
               {isProcessing ? (
-                <Loader2 className="w-8 h-8 animate-spin text-blue-700" />
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
               ) : isFailed ? (
                 <AlertCircle className="w-8 h-8 text-orange-600" />
               ) : (
-                <AlertCircle className="w-8 h-8 text-red-600" />
+                <AlertCircle className="w-8 h-8 text-destructive" />
               )}
             </div>
             <p
               className={`font-bold mb-4 ${
-                isProcessing ? 'text-blue-700' : isFailed ? 'text-orange-700' : 'text-red-700'
+                isProcessing ? 'text-primary' : isFailed ? 'text-orange-700' : 'text-red-700'
               }`}
             >
               {error || t('resumeViewer.resumeNotFound')}
@@ -509,12 +533,30 @@ export default function ResumeViewerPage() {
               <Edit className="w-4 h-4" />
               {t('dashboard.editResume')}
             </Button>
-            {isTailoredResume && (
-              <Button variant="outline" onClick={handleInterviewPrep}>
-                <MessagesSquare className="w-4 h-4" />
-                {t('interviewPrep.title')}
+            {!isTailoredResume && processingStatus === 'ready' && (
+              <Button
+                variant="outline"
+                onClick={() => router.push(`/tailor?source=${encodeURIComponent(resumeId)}`)}
+              >
+                <Target className="w-4 h-4" />
+                {t('resumeViewer.tailorFromThis')}
               </Button>
             )}
+            <Button
+              variant="outline"
+              onClick={() => router.push(`/tracker?resume=${encodeURIComponent(resumeId)}`)}
+            >
+              <Kanban className="w-4 h-4" />
+              {t('resumeViewer.trackApplications')}
+              {applicationCount !== null && applicationCount > 0 && (
+                <span
+                  data-testid="tracker-count"
+                  className="ml-1 border border-black bg-paper-tint px-1 font-mono text-[10px]"
+                >
+                  {applicationCount}
+                </span>
+              )}
+            </Button>
             <Button
               variant="success"
               onClick={() => handleDownload('pdf')}

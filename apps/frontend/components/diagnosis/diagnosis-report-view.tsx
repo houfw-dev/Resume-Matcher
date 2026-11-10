@@ -2,8 +2,11 @@
 
 import ShieldAlert from 'lucide-react/dist/esm/icons/shield-alert';
 import ShieldCheck from 'lucide-react/dist/esm/icons/shield-check';
+import Wrench from 'lucide-react/dist/esm/icons/wrench';
 import { stripPointMarker } from '@/components/resume/list-format';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { getDiagnosisFixSection } from '@/lib/utils/diagnosis-fix-link';
 import type {
   DiagnosisItem,
   DiagnosisRating,
@@ -22,9 +25,9 @@ const RATING_BADGE: Record<DiagnosisRating, string> = {
 };
 
 const RATING_BAR: Record<DiagnosisRating, string> = {
-  conform: 'bg-green-700',
-  partial: 'bg-orange-500',
-  nonconform: 'bg-red-600',
+  conform: 'bg-success',
+  partial: 'bg-warning',
+  nonconform: 'bg-destructive',
   na: 'bg-neutral-300',
 };
 
@@ -41,6 +44,12 @@ interface ReportViewProps {
   filter: FilterMode;
   onFilterChange: (mode: FilterMode) => void;
   ratingLabel: (rating: DiagnosisRating) => string;
+  /**
+   * When provided, problem items with a single owning builder section render
+   * a "fix in builder" deep-link button. Unmappable/non-problem items never
+   * show it. Omitted in contexts without a builder (e.g. static exports).
+   */
+  onFixInBuilder?: (itemId: number) => void;
   t: TFn;
 }
 
@@ -59,6 +68,7 @@ export function DiagnosisReportView({
   filter,
   onFilterChange,
   ratingLabel,
+  onFixInBuilder,
   t,
 }: ReportViewProps) {
   const itemsByDimension = new Map<string, DiagnosisItem[]>();
@@ -183,7 +193,13 @@ export function DiagnosisReportView({
             <section key={dim.key} className="flex flex-col gap-2">
               <h4 className="font-serif text-base font-bold">{dim.name}</h4>
               {items.map((item) => (
-                <ItemRow key={item.id} item={item} ratingLabel={ratingLabel} t={t} />
+                <ItemRow
+                  key={item.id}
+                  item={item}
+                  ratingLabel={ratingLabel}
+                  onFixInBuilder={onFixInBuilder}
+                  t={t}
+                />
               ))}
             </section>
           );
@@ -251,10 +267,17 @@ function FindingPoints({
 interface ItemRowProps {
   item: DiagnosisItem;
   ratingLabel: (rating: DiagnosisRating) => string;
+  onFixInBuilder?: (itemId: number) => void;
   t: TFn;
 }
 
-function ItemRow({ item, ratingLabel, t }: ItemRowProps) {
+function ItemRow({ item, ratingLabel, onFixInBuilder, t }: ItemRowProps) {
+  // The CTA exists only for problem ratings whose remedy has one canonical
+  // owning builder section; holistic/unmappable items render nothing.
+  const canFix =
+    typeof onFixInBuilder === 'function' &&
+    (item.rating === 'nonconform' || item.rating === 'partial') &&
+    getDiagnosisFixSection(item.id) !== null;
   return (
     <article className="border border-black bg-white p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -266,7 +289,7 @@ function ItemRow({ item, ratingLabel, t }: ItemRowProps) {
         )}
         <p className="min-w-[12rem] flex-1 text-sm font-bold">{item.topic}</p>
         {item.severity === 'redline' && (
-          <span className="border border-black bg-red-600 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase text-white">
+          <span className="border border-black bg-destructive px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase text-white">
             {t('diagnosis.severity.redline')}
           </span>
         )}
@@ -299,6 +322,19 @@ function ItemRow({ item, ratingLabel, t }: ItemRowProps) {
           borderClassName="border-orange-400"
           topClassName="mt-1"
         />
+      )}
+      {canFix && (
+        <div className="mt-2 flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onFixInBuilder?.(item.id)}
+          >
+            <Wrench className="h-4 w-4" />
+            {t('diagnosis.fixInBuilder')}
+          </Button>
+        </div>
       )}
       {item.rating !== 'na' && (
         <div className="mt-1 flex gap-1" aria-hidden>

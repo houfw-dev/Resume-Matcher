@@ -73,6 +73,26 @@ const SUB_LABEL_CANDIDATES = new Set<string>([
   '项目业绩',
   '主要成果',
   '核心成果',
+  // Outcome/effectiveness modules are peers of 项目亮点 (resumes often carry
+  // both: highlight bullets then a 项目成效 prose block). Kept verbatim — not
+  // in the canonical rename map — so they never nest under 项目亮点 as a
+  // numbered sub-head. Mirror of parser.py / resume_docx.py candidate sets.
+  '项目成效',
+  '工作成效',
+  '实施成效',
+  '建设成效',
+  '应用成效',
+  '业务成效',
+  '落地成效',
+  '实际成效',
+  '量化成效',
+  '运营成效',
+  '项目效果',
+  '实施效果',
+  '应用效果',
+  '落地效果',
+  '运行效果',
+  '实际效果',
   '项目角色',
   '担任角色',
 ]);
@@ -166,6 +186,25 @@ export function isProjectTechStackLabel(labelDesc: string): boolean {
     .replace(/[：:]\s*$/, '')
     .trim();
   return core === '技术栈';
+}
+
+// Canonical bullet-region module cores (mirror parser._PROJECT_REGION_BULLET_CORES
+// and resume_docx._PROJECT_BULLET_LABELS): the only labels whose numbered lists
+// keep the number gutter. Every OTHER peer module (项目成效/项目治理/难点/方案/…)
+// renders flush with the label edge — its unnumbered rows carry no empty gutter.
+const CANONICAL_NUMBERED_MODULE_CORES = new Set(['项目职责', '项目亮点']);
+
+/**
+ * Whether a (canonicalized) sub-label core is one of the two numbered duty/
+ * highlight modules. Peer modules outside the big four
+ * （项目背景/技术栈/项目职责/项目亮点） return false and render flush.
+ */
+export function isCanonicalNumberedModule(labelDesc: string): boolean {
+  const core = stripPointMarker(labelDesc)
+    .trim()
+    .replace(/[：:]\s*$/, '')
+    .trim();
+  return CANONICAL_NUMBERED_MODULE_CORES.has(core);
 }
 
 /**
@@ -496,6 +535,14 @@ export interface DescriptionListBlock {
    * sub-label above them) keep the outer alignment.
    */
   indented: boolean;
+  /**
+   * Peer-module flush (project sites only): the block is owned by a label
+   * OUTSIDE the big four （项目背景/技术栈/项目职责/项目亮点）, e.g. 项目成效.
+   * Numbered rows keep their markers at the label edge, while unnumbered
+   * (plain) rows drop the empty 3ch marker gutter and align exactly with the
+   * label text instead of indenting under it.
+   */
+  flush: boolean;
   rows: DescriptionListRow[];
 }
 
@@ -541,6 +588,9 @@ export function buildDescriptionBlocks(
   // True while the most recent heading was a label, i.e. the next opened list
   // belongs to a sub-label and must be indented.
   let nextListIndented = false;
+  // True when the next opened list belongs to a peer module outside the big
+  // four （项目成效/…): its unnumbered rows align flush with the label edge.
+  let nextListFlush = false;
   // Whether the next opened body block is a tech-stack enumeration (rows
   // merged into one inline-wrapped line) rather than stacked prose rows.
   let nextBodyInline = false;
@@ -560,7 +610,12 @@ export function buildDescriptionBlocks(
       blocks.push(block);
       return block;
     }
-    const block: DescriptionListBlock = { kind: 'list', indented: nextListIndented, rows: [] };
+    const block: DescriptionListBlock = {
+      kind: 'list',
+      indented: nextListIndented,
+      flush: nextListFlush,
+      rows: [],
+    };
     blocks.push(block);
     return block;
   };
@@ -603,6 +658,12 @@ export function buildDescriptionBlocks(
       nextBlockKind = descriptive ? 'body' : 'list';
       nextBodyInline = descriptive && isProjectTechStackLabel(labelDesc);
       nextListIndented = true;
+      // Peer modules outside the big four （项目成效/项目治理/…) keep their
+      // content flush with the label edge instead of reserving a number gutter.
+      nextListFlush =
+        Boolean(options?.canonicalizeLabels) &&
+        !descriptive &&
+        !isCanonicalNumberedModule(labelDesc);
       return;
     }
     // Legacy glued descriptive row ("项目简介：面向…" / "技术列表：SpringAI…"):
@@ -617,6 +678,7 @@ export function buildDescriptionBlocks(
         nextBlockKind = 'body';
         nextBodyInline = isProjectTechStackLabel(glued.label);
         nextListIndented = true;
+        nextListFlush = false;
         const body = openBlock();
         if (body.kind === 'body') body.rows.push(glued.content);
         return;
@@ -644,6 +706,7 @@ export function buildDescriptionBlocks(
     // label joins the label's indented list; later rows reuse that block.
     const block = openBlock();
     nextListIndented = false;
+    nextListFlush = false;
     if (block.kind === 'body') {
       // Content under 项目背景/技术栈 is always unnumbered, regardless of the
       // stored style. A glued legacy alias glued mid-body ("技术难点及亮点：…")
@@ -680,6 +743,7 @@ export function buildDescriptionBlocks(
       blocks[i] = {
         kind: 'list',
         indented: true,
+        flush: false,
         rows: block.rows.map((row) => ({ desc: row, numbered: true })),
       };
     } else if (block.rows.some((row) => INLINE_DISQUALIFY_RE.test(row))) {

@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Editor } from '@tiptap/react';
 import { Button } from './button';
 import { Input } from './input';
 import { Label } from './label';
+import { useBodyScrollLock, useFocusTrap } from './dialog';
 import { X } from 'lucide-react';
 
 interface LinkDialogProps {
@@ -23,6 +24,11 @@ interface LinkDialogProps {
 export const LinkDialog: React.FC<LinkDialogProps> = ({ editor, onClose }) => {
   const [url, setUrl] = useState('');
   const [text, setText] = useState('');
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Same modal contracts as Dialog: scroll lock, focus trap and focus restore.
+  useBodyScrollLock(true);
+  useFocusTrap(true, dialogRef);
 
   // Get currently selected text or existing link
   useEffect(() => {
@@ -110,14 +116,21 @@ export const LinkDialog: React.FC<LinkDialogProps> = ({ editor, onClose }) => {
   const hasExistingLink = editor.isActive('link');
 
   return (
-    <div className="fixed inset-0 z-50">
+    // Handler on the outermost layer so real outside clicks (which land on the
+    // full-viewport flex wrapper, not the visual overlay) actually close it.
+    <div className="fixed inset-0 z-50" onClick={onClose}>
       {/* Overlay */}
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/50" />
 
       {/* Dialog */}
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <div
-          className="relative w-full max-w-md border-2 border-black bg-white shadow-sw-default p-6"
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={hasExistingLink ? 'EDIT LINK' : 'ADD LINK'}
+          tabIndex={-1}
+          className="relative w-full max-w-md border-2 border-black bg-white shadow-sw-default p-6 outline-none"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Close button */}

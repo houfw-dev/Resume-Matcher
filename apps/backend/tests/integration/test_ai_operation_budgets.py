@@ -335,14 +335,10 @@ async def test_expired_completion_preserves_deadline_error(
 async def test_auxiliary_timeout_keeps_completed_output_and_returns_warning(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def title(*args: Any, **kwargs: Any) -> str:
-        return "Engineer"
-
     async def slow_cover(*args: Any, **kwargs: Any) -> str:
         await asyncio.sleep(1)
         return "late"
 
-    monkeypatch.setattr(resumes, "generate_resume_title", title)
     monkeypatch.setattr(resumes, "generate_cover_letter", slow_cover)
     monkeypatch.setattr(resumes, "remaining_timeout", lambda: 0.02)
 
@@ -352,7 +348,14 @@ async def test_auxiliary_timeout_keeps_completed_output_and_returns_warning(
         )
     )
 
-    assert (cover, outreach, title_value, interview) == (None, None, "Engineer", None)
+    # The title is deterministic and survives the cover-letter timeout; with no
+    # name/role facts it is the localized generic fallback.
+    assert (cover, outreach, title_value, interview) == (
+        None,
+        None,
+        "Tailored Resume",
+        None,
+    )
     assert warnings == ["Cover Letter generation failed"]
 
 
@@ -525,7 +528,18 @@ async def test_dedicated_ai_failures_reach_api_boundary(
     from app.ai_limits import PromptSizeError
 
     error = AIOperationDeadlineExceeded("expired") if failure == "deadline" else PromptSizeError("AI prompt exceeds the 512000-character limit")
-    monkeypatch.setattr(resumes.db, "get_resume", AsyncMock(return_value={"processed_data": sample_resume, "content": "Synthetic source", "parent_id": "master"}))
+    # Tailoring entry points require an eligible source (parent_id NULL, ready);
+    # on-demand cover-letter/outreach/interview-prep accept any resume, but use
+    # the tailored shape here so their stored-job code path is exercised.
+    base_resume: dict[str, Any] = {
+        "processed_data": sample_resume,
+        "content": "Synthetic source",
+    }
+    if boundary in ("preview", "direct"):
+        base_resume.update(parent_id=None, processing_status="ready")
+    else:
+        base_resume["parent_id"] = "master"
+    monkeypatch.setattr(resumes.db, "get_resume", AsyncMock(return_value=base_resume))
     monkeypatch.setattr(resumes.db, "get_job", AsyncMock(return_value={"content": "Python engineer"}))
     monkeypatch.setattr(resumes.db, "get_improvement_by_tailored_resume", AsyncMock(return_value={"job_id": "j"}))
     if boundary == "enhance":
@@ -581,9 +595,9 @@ async def test_auxiliary_boundary_failure_is_not_an_optional_item_error(
     from app.ai_limits import PromptSizeError
 
     kind = AIOperationDeadlineExceeded if failure == "deadline" else PromptSizeError
-    monkeypatch.setattr(resumes, "generate_resume_title", AsyncMock(side_effect=kind("synthetic boundary")))
+    monkeypatch.setattr(resumes, "generate_cover_letter", AsyncMock(side_effect=kind("synthetic boundary")))
     with pytest.raises(kind):
-        await resumes._generate_auxiliary_messages({}, "Engineer", "en", False, False, False)
+        await resumes._generate_auxiliary_messages({}, "Engineer", "en", True, False, False)
 
 
 @pytest.mark.parametrize("failure", ["deadline", "prompt"])

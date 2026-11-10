@@ -13,7 +13,7 @@ from app.ai_budget import (
 )
 from app.ai_limits import PromptSizeError
 from app.config import settings
-from app.database import db
+from app.database import DatabaseBusyError, db
 from app.preview import (
     FineTuneClaim,
     PreviewBusyError,
@@ -258,11 +258,26 @@ async def fine_tune_confirm(
         raise HTTPException(status_code=409, detail=str(e)) from e
     except HTTPException:
         raise
+    except DatabaseBusyError:
+        # Storage contention keeps its retryable 503 + Retry-After contract
+        # (global handler); the broad 500 below must not mask it.
+        raise
     except Exception as e:
         logger.error("Fine-tune confirm failed for %s: %s", resume_id, e)
         raise HTTPException(
             status_code=500, detail="Failed to apply fine-tuned resume. Please try again."
         ) from e
     finally:
-        if claim is not None:
-            await db.release_fine_tune_preview_claim(claim)
+        if claim is not None and claim.token is not None:
+            try:
+                # Shield the release from request-task cancellation (client
+                # disconnect / deadline): a cancelled lease would otherwise
+                # block every retry until its TTL expires.
+                await asyncio.shield(
+                    db.release_fine_tune_preview_claim(claim)
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to release fine-tune claim for preview %s",
+                    claim.preview_id,
+                )

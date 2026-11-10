@@ -42,6 +42,7 @@ import logging
 import re
 from typing import Any
 
+from app.ai_limits import PromptSizeError
 from app.config_cache import get_content_language
 from app.llm import complete_json, get_llm_config, get_model_name, get_safe_max_tokens
 from app.prompts import get_language_name
@@ -78,6 +79,7 @@ from app.services.diagnosis_checks import (
     technical_skill_entries,
 )
 from app.services.diagnosis_competency import (
+    NO_COMPETENCY_MODEL_KEY,
     expand_rules,
     parse_competency_models,
     resolve_competency_model,
@@ -105,6 +107,16 @@ _ORIGINAL_RESUME_CHAR_LIMIT = 20_000
 # Whole rendered-layout block bound (facts JSON + per-page text mirror). The
 # mirror is the bulk, so under overflow it is what gets truncated.
 _RENDERED_BLOCK_CHAR_LIMIT = 12_000
+
+
+class DiagnosisModeConflictError(ValueError):
+    """Raised when one request asks for both competency-model and JD diagnosis.
+
+    The product defines three mutually exclusive modes — base only,
+    base + competency model, base + target JD. The triple overlap
+    (base + model + JD) is intentionally unsupported and rejected at the
+    router as HTTP 400.
+    """
 
 
 def _build_rendered_block(
@@ -530,15 +542,32 @@ async def _judge_with_llm(
     if getattr(config, "reasoning_effort", None) is not None:
         config = config.model_copy(update={"reasoning_effort": None})
     max_tokens = get_safe_max_tokens(get_model_name(config), requested=12000, config=config)
-    result = await complete_json(
-        prompt=prompt,
-        system_prompt=DIAGNOSIS_SYSTEM_PROMPT,
-        config=config,
-        max_tokens=max_tokens,
-        schema_type="diagnosis",
-        response_validator=_build_validator(frozenset(subjective_ids)),
-        salvage_response=salvage_diagnosis_response,
-    )
+    try:
+        result = await complete_json(
+            prompt=prompt,
+            system_prompt=DIAGNOSIS_SYSTEM_PROMPT,
+            config=config,
+            max_tokens=max_tokens,
+            schema_type="diagnosis",
+            response_validator=_build_validator(frozenset(subjective_ids)),
+            salvage_response=salvage_diagnosis_response,
+        )
+    except PromptSizeError:
+        # Router-level contract: oversized prompts map to their own 4xx.
+        raise
+    except ValueError as exc:
+        # Content-quality exhaustion (empty/truncated/unusable output on every
+        # retry, including a model that honestly returns {"items": []}). Keep
+        # the no-HTTP-500 promise: return no verdicts and let the merge loop
+        # mark every subjective item partial with a manual-review warning.
+        # Transport failures / timeouts are not ValueErrors and still raise.
+        logger.error(
+            "Diagnosis LLM judge produced no usable content after retries; "
+            "subjective items %s will default to partial: %s",
+            subjective_ids,
+            exc,
+        )
+        return {}, None
     verdicts: dict[int, tuple[str, str, str]] = {}
     for entry in result.get("items", []):
         item_id = int(entry["id"])
@@ -585,12 +614,29 @@ async def diagnose_resume(
     base_rules = get_rules()
 
     resolved_title = _resolve_target_title(resume_data, target_title)
+    explicit_model_key = competency_model_key.strip() if competency_model_key else None
+    # Mode contract — three mutually exclusive diagnosis modes:
+    #   1. base only (no model, no JD)
+    #   2. base + competency model (a real model key, no JD)
+    #   3. base + target JD (JD present; the explicit 'none' opt-out is allowed)
+    # A JD therefore suppresses BOTH the explicit level model and title
+    # auto-matching, so the base+model+JD triple overlap can never run. The
+    # modal enforces this in the UI; the guard keeps the contract honest for
+    # direct API callers. The router maps this error to HTTP 400.
+    if job_description:
+        if explicit_model_key and explicit_model_key != NO_COMPETENCY_MODEL_KEY:
+            raise DiagnosisModeConflictError(
+                f"Competency model {explicit_model_key!r} cannot combine with a job description"
+            )
+        effective_model_key = NO_COMPETENCY_MODEL_KEY
+    else:
+        effective_model_key = explicit_model_key
     # Explicit user pick wins (req: confirm/choose when no intention or no
     # automatic title match); KeyError on an unknown key maps to HTTP 400.
     model = resolve_competency_model(
         parse_competency_models(base_rules.competency_models),
         resolved_title,
-        competency_model_key,
+        effective_model_key,
     )
     rules = expand_rules(base_rules, model)
 
@@ -655,19 +701,27 @@ async def diagnose_resume(
     if skill_review_requested:
         skill_review_block = _build_skill_review_block(skill_miss_keys, skill_entries)
 
-    llm_verdicts, raw_skill_review = await _judge_with_llm(
-        resume_data,
-        facts,
-        rules,
-        subjective_ids,
-        job_description,
-        resolved_title,
-        competency_block,
-        language,
-        original_markdown,
-        rendered_block,
-        skill_review_block,
-    )
+    # Nothing for the model to judge: every item is either answered
+    # deterministically or gated na (e.g. basic mode with empty optional
+    # modules, no JD and no competency model). Skip the call entirely —
+    # an honest model returns {"items": []} for an empty assignment, which
+    # the validator must reject, so asking would only burn retries and 500.
+    llm_verdicts: dict[int, tuple[str, str, str]] = {}
+    raw_skill_review: Any = None
+    if subjective_ids:
+        llm_verdicts, raw_skill_review = await _judge_with_llm(
+            resume_data,
+            facts,
+            rules,
+            subjective_ids,
+            job_description,
+            resolved_title,
+            competency_block,
+            language,
+            original_markdown,
+            rendered_block,
+            skill_review_block,
+        )
     rescued_skill_groups: frozenset[str] = frozenset()
     if skill_review_requested:
         rescued_skill_groups = _verify_skill_group_review(

@@ -60,13 +60,16 @@ vi.mock('@/components/builder/resume-form', () => ({
   ResumeForm: ({
     resumeData,
     onUpdate,
+    focusSectionKey,
   }: {
     resumeData: ResumeData;
     onUpdate: (data: ResumeData) => void;
+    focusSectionKey?: string | null;
   }) => (
     <div>
       <output data-testid="name">{resumeData.personalInfo?.name}</output>
       <output data-testid="summary">{resumeData.summary}</output>
+      <output data-testid="focus-section">{focusSectionKey ?? ''}</output>
       <button
         data-testid="edit"
         onClick={() => onUpdate({ ...resumeData, summary: `edit-${Date.now()}` })}
@@ -98,8 +101,24 @@ const REAL_RESUME = {
   additional: {},
 };
 
-const importBuilder = async () =>
-  (await import('@/components/builder/resume-builder')).ResumeBuilder;
+const importBuilder = async () => {
+  // Mirror the real (default) layout, which wraps the app in ToastProvider.
+  // Both modules must come from the SAME registry instance: afterEach calls
+  // vi.resetModules(), so a statically imported ToastProvider would hold a
+  // different React context object than the useToast() inside the
+  // dynamically re-imported builder.
+  const [{ ResumeBuilder }, { ToastProvider }] = await Promise.all([
+    import('@/components/builder/resume-builder'),
+    import('@/components/ui/toast'),
+  ]);
+  return function BuilderWithToast() {
+    return (
+      <ToastProvider>
+        <ResumeBuilder />
+      </ToastProvider>
+    );
+  };
+};
 
 beforeEach(() => {
   currentSearch = 'id=res-1';
@@ -241,6 +260,10 @@ describe('builder document ownership', () => {
       await act(async () => {
         screen.getByRole('button', { name: 'common.reset' }).click();
       });
+      // Reset is gated behind a confirmation dialog; confirm the discard.
+      await act(async () => {
+        screen.getByRole('button', { name: 'builder.discardChanges' }).click();
+      });
       expect(screen.getByTestId('name')).toHaveTextContent('Bob');
       expect(screen.getByTestId('summary')).toHaveTextContent('Bob server baseline');
       await edit();
@@ -251,6 +274,40 @@ describe('builder document ownership', () => {
       );
     }
   );
+
+  it('requires confirmation before resetting and keeps edits when cancelled', async () => {
+    fetchResume.mockResolvedValue({ processed_resume: REAL_RESUME });
+    const Builder = await importBuilder();
+    render(<Builder />);
+    await tick();
+    await edit();
+    const editedSummary = screen.getByTestId('summary').textContent;
+    expect(editedSummary).not.toBe('Real summary from the server');
+
+    // First click opens the confirmation; nothing is discarded yet.
+    await act(async () => {
+      screen.getByRole('button', { name: 'common.reset' }).click();
+    });
+    expect(screen.getByRole('dialog')).toHaveTextContent('confirmations.discardChanges');
+    expect(screen.getByTestId('summary').textContent).toBe(editedSummary);
+
+    // Cancel closes the dialog and preserves the unsaved edit.
+    await act(async () => {
+      screen.getByRole('button', { name: 'common.cancel' }).click();
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByTestId('summary').textContent).toBe(editedSummary);
+
+    // Reopen and confirm: the editor rolls back to the server baseline.
+    await act(async () => {
+      screen.getByRole('button', { name: 'common.reset' }).click();
+    });
+    await act(async () => {
+      screen.getByRole('button', { name: 'builder.discardChanges' }).click();
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByTestId('summary')).toHaveTextContent('Real summary from the server');
+  });
 
   it('ignores an old GET after another resume has loaded', async () => {
     const old = deferred<unknown>();
@@ -547,5 +604,36 @@ describe('builder acknowledgement of wizard completion', () => {
     await tick();
     expect(screen.getByTestId('name')).toHaveTextContent('Ada Lovelace');
     expect(readResumeWizardCompletion()).toBeNull();
+  });
+});
+
+describe('builder diagnosis deep-link (?section= param)', () => {
+  it('forwards a canonical section key to ResumeForm', async () => {
+    currentSearch = 'id=res-1&tab=resume&section=education';
+    fetchResume.mockResolvedValue({ processed_resume: REAL_RESUME });
+    const Builder = await importBuilder();
+    render(<Builder />);
+    await tick();
+
+    expect(screen.getByTestId('focus-section').textContent).toBe('education');
+  });
+
+  it('rejects unknown section values instead of forwarding them', async () => {
+    currentSearch = 'id=res-1&section=__late_certifications__';
+    fetchResume.mockResolvedValue({ processed_resume: REAL_RESUME });
+    const Builder = await importBuilder();
+    render(<Builder />);
+    await tick();
+
+    expect(screen.getByTestId('focus-section').textContent).toBe('');
+  });
+
+  it('renders without a focus target when the param is absent', async () => {
+    fetchResume.mockResolvedValue({ processed_resume: REAL_RESUME });
+    const Builder = await importBuilder();
+    render(<Builder />);
+    await tick();
+
+    expect(screen.getByTestId('focus-section').textContent).toBe('');
   });
 });

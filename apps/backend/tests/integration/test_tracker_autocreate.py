@@ -2,8 +2,9 @@
 
 Drives a real ``/improve/preview`` → ``/improve/confirm`` round trip (every LLM
 boundary mocked, exactly like ``test_pipeline_e2e``) and asserts an ``applied``
-card lands on the board carrying the LLM-extracted company/role — with zero
-extra LLM call on the confirm path (company/role come from the cached job).
+card lands on the board carrying the LLM-extracted company and the
+deterministic 姓名-岗位名称 resume title as its role — with zero extra LLM call
+on the confirm path (company/role come from the cached job and resume data).
 """
 
 import copy
@@ -81,11 +82,6 @@ async def _preview_then_confirm(
             new_callable=AsyncMock,
             side_effect=RuntimeError("refinement disabled for test"),
         ),
-        patch(
-            "app.routers.resumes.generate_resume_title",
-            new_callable=AsyncMock,
-            return_value="Senior Backend Engineer - Acme Corp",
-        ),
     ):
         async with _new_client() as client:
             preview_resp = await client.post(
@@ -133,9 +129,10 @@ class TestTrackerAutoCreate:
         assert card["resume_id"] == tailored_id
         assert card["master_resume_id"] == resume_id
         assert card["job_id"] == job_id
-        # Company comes from the cached job; role falls back to the resume title.
+        # Company comes from the cached job; the card role uses the
+        # deterministic 姓名-岗位名称 title of the tailored resume.
         assert card["company"] == "Acme Corp"
-        assert card["role"] == "Senior Backend Engineer - Acme Corp"
+        assert card["role"] == "Jane Doe-Senior Backend Engineer"
         assert card["applied_at"] is not None
 
     async def test_autocreate_is_idempotent_on_double_confirm(

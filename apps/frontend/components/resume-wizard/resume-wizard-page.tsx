@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import PenLine from 'lucide-react/dist/esm/icons/pen-line';
+import Target from 'lucide-react/dist/esm/icons/target';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useStatusCache } from '@/lib/context/status-cache';
@@ -179,6 +181,19 @@ export function ResumeWizardPage() {
     }
   };
 
+  // Second next-step on the completion receipt: jump straight into tailoring
+  // with the new resume preselected (?source= is the tailor deep-link contract
+  // shared with the resume viewer). Same navigation-failure guard as the
+  // builder CTA so a thrown push leaves the user on the recovery receipt.
+  const handleTailorCreated = () => {
+    if (!createdResumeId) return;
+    try {
+      router.push(`/tailor?source=${encodeURIComponent(createdResumeId)}`);
+    } catch {
+      setErrorKey('resumeWizard.errors.createdNavigationFailed');
+    }
+  };
+
   return (
     <main className="min-h-screen bg-background px-4 py-6 text-black md:px-8 md:py-10">
       <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -193,7 +208,7 @@ export function ResumeWizardPage() {
           </div>
 
           {draftStorageUnavailable && state.step !== 'complete' && (
-            <div className="border-2 border-orange-500 bg-orange-50 p-4" role="alert">
+            <div className="border-2 border-warning bg-orange-50 p-4" role="alert">
               <p className="font-mono text-sm font-bold uppercase tracking-wider text-orange-700">
                 {t('resumeWizard.draftStorageUnavailable.title')}
               </p>
@@ -212,8 +227,8 @@ export function ResumeWizardPage() {
           )}
 
           {errorKey && (
-            <div className="border-2 border-red-600 bg-red-100 p-4" role="alert">
-              <p className="font-mono text-sm font-bold uppercase tracking-wider text-red-600">
+            <div className="border-2 border-destructive bg-red-100 p-4" role="alert">
+              <p className="font-mono text-sm font-bold uppercase tracking-wider text-destructive">
                 {t('common.error')}
               </p>
               <p className="mt-1 font-sans text-sm">{t(errorKey)}</p>
@@ -221,14 +236,21 @@ export function ResumeWizardPage() {
           )}
 
           {state.step === 'complete' && createdResumeId ? (
-            <section className="border-2 border-green-700 bg-white p-5 shadow-sw-lg md:p-8">
-              <p className="font-mono text-xs font-bold uppercase tracking-wider text-green-700">
+            <section className="border-2 border-success bg-white p-5 shadow-sw-lg md:p-8">
+              <p className="font-mono text-xs font-bold uppercase tracking-wider text-success">
                 {t('resumeWizard.created.title')}
               </p>
               <p className="mt-3 font-sans text-sm">{t('resumeWizard.created.description')}</p>
-              <Button type="button" className="mt-5" onClick={handleOpenCreated}>
-                {t('resumeWizard.actions.openCreated')}
-              </Button>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Button type="button" onClick={handleOpenCreated}>
+                  <PenLine className="h-4 w-4" />
+                  {t('resumeWizard.actions.openCreated')}
+                </Button>
+                <Button type="button" variant="outline" onClick={handleTailorCreated}>
+                  <Target className="h-4 w-4" />
+                  {t('resumeWizard.actions.tailorCreated')}
+                </Button>
+              </div>
             </section>
           ) : (
             <QuestionCard

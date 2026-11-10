@@ -39,7 +39,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             value={data.name || ''}
             onChange={(e) => handleChange('name', e.target.value)}
             placeholder={t('builder.personalInfoForm.placeholders.name')}
-            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary bg-transparent"
           />
         </div>
         <div className="space-y-2">
@@ -54,7 +54,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             value={data.title || ''}
             onChange={(e) => handleChange('title', e.target.value)}
             placeholder={t('builder.personalInfoForm.placeholders.title')}
-            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary bg-transparent"
           />
         </div>
         <div className="space-y-2">
@@ -69,7 +69,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             value={data.gender || ''}
             onChange={(e) => handleChange('gender', e.target.value)}
             placeholder={t('builder.personalInfoForm.placeholders.gender')}
-            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary bg-transparent"
           />
         </div>
         <div className="space-y-2">
@@ -84,7 +84,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             value={data.age || ''}
             onChange={(e) => handleChange('age', e.target.value)}
             placeholder={t('builder.personalInfoForm.placeholders.age')}
-            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary bg-transparent"
           />
         </div>
         <div className="space-y-2">
@@ -99,7 +99,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             value={data.educationLevel || ''}
             onChange={(e) => handleChange('educationLevel', e.target.value)}
             placeholder={t('builder.personalInfoForm.placeholders.educationLevel')}
-            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary bg-transparent"
           />
         </div>
         <div className="space-y-2">
@@ -114,7 +114,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             value={data.workYears || ''}
             onChange={(e) => handleChange('workYears', e.target.value)}
             placeholder={t('builder.personalInfoForm.placeholders.workYears')}
-            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary bg-transparent"
           />
         </div>
         <div className="space-y-2">
@@ -130,7 +130,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             value={data.email || ''}
             onChange={(e) => handleChange('email', e.target.value)}
             placeholder={t('builder.personalInfoForm.placeholders.email')}
-            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary bg-transparent"
           />
         </div>
         <div className="space-y-2">
@@ -146,7 +146,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             value={data.phone || ''}
             onChange={(e) => handleChange('phone', e.target.value)}
             placeholder={t('builder.personalInfoForm.placeholders.phone')}
-            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary bg-transparent"
           />
         </div>
         <div className="space-y-2">
@@ -161,7 +161,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             value={data.location || ''}
             onChange={(e) => handleChange('location', e.target.value)}
             placeholder={t('builder.personalInfoForm.placeholders.location')}
-            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary bg-transparent"
           />
         </div>
         <div className="space-y-2">
@@ -176,7 +176,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             value={data.website || ''}
             onChange={(e) => handleChange('website', e.target.value)}
             placeholder={t('builder.personalInfoForm.placeholders.website')}
-            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary bg-transparent"
           />
         </div>
         <div className="space-y-2">
@@ -191,7 +191,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             value={data.linkedin || ''}
             onChange={(e) => handleChange('linkedin', e.target.value)}
             placeholder={t('builder.personalInfoForm.placeholders.linkedin')}
-            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary bg-transparent"
           />
         </div>
         <div className="space-y-2">
@@ -206,7 +206,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             value={data.github || ''}
             onChange={(e) => handleChange('github', e.target.value)}
             placeholder={t('builder.personalInfoForm.placeholders.github')}
-            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-blue-700 bg-transparent"
+            className="rounded-none border-black focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-primary bg-transparent"
           />
         </div>
       </div>

@@ -308,6 +308,9 @@ describe('ResumeSingleColumn', () => {
     phone: '电话',
     email: '邮箱',
     foreignLanguage: '外语水平',
+    website: '个人网站',
+    linkedin: '领英',
+    github: 'GitHub',
   };
 
   it('renders the basic-info facts as labeled, left-aligned cells in the Chinese-resume order', () => {
@@ -371,12 +374,35 @@ describe('ResumeSingleColumn', () => {
     expect(phoneCell.querySelector('a')).toBeNull();
     expect(container.querySelector('a[href^="tel:"]')).toBeNull();
 
-    // Website/LinkedIn/GitHub stay available but are never labeled header facts.
+    // Website/LinkedIn/GitHub each carry their localized label before the link.
     const headerText = name.parentElement!.textContent ?? '';
-    expect(headerText).not.toContain('个人网站');
+    expect(headerText).toContain('个人网站');
+    expect(headerText).toContain('领英');
+    expect(headerText).toContain('GitHub');
     expect(screen.getByRole('link', { name: 'wanghao.dev' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'in/wanghao' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'wanghao' })).toBeInTheDocument();
+
+    // Each label sits directly before its anchor inside the same wrapper.
+    const websiteLink = screen.getByRole('link', { name: 'wanghao.dev' });
+    const websiteLabel = websiteLink.parentElement!.querySelector('span');
+    expect(websiteLabel).toHaveTextContent('个人网站');
+  });
+
+  it('renders an absolute https website value as a labeled clickable anchor', () => {
+    const absoluteUrlData: ResumeData = {
+      ...(data as object),
+      personalInfo: {
+        name: '徐洪晨',
+        website: 'https://fengba.blog.csdn.net/',
+      },
+    } as ResumeData;
+
+    render(<ResumeSingleColumn data={absoluteUrlData} personalInfoLabels={zhLabels} />);
+
+    const anchor = screen.getByRole('link', { name: 'fengba.blog.csdn.net/' });
+    expect(anchor.getAttribute('href')).toBe('https://fengba.blog.csdn.net/');
+    expect(anchor.parentElement!.querySelector('span')).toHaveTextContent('个人网站');
   });
 
   it('falls back to the education degree for 学历 when personalInfo omits it', () => {

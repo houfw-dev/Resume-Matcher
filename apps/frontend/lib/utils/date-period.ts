@@ -51,8 +51,10 @@ const MONTH_ALTERNATION = Object.keys(EN_MONTH_BY_NAME)
 const NUMERIC_POINT_RE = /(\d{4})\s*[年./-]\s*(0?[1-9]|1[0-2])(?!\d|[./-]\d)(?:\s*月)?/g;
 // "Jan 2020" / "January 2020" (optional trailing dot).
 const EN_POINT_RE = new RegExp(`\\b(${MONTH_ALTERNATION})\\.?\\s+(\\d{4})`, 'gi');
-// Bare four-digit year, never adjacent to another date component.
-const BARE_YEAR_RE = /(?<![\d.])(\d{4})(?!\d|[./-]\d)/g;
+// Bare four-digit year, never adjacent to another date component. ES2017 has
+// no lookbehind, so the leading non-digit/non-dot boundary is captured as
+// group 1 (empty at string start) and the token offset is compensated below.
+const BARE_YEAR_RE = /(^|[^\d.])(\d{4})(?!\d|[./-]\d)/g;
 const PRESENT_RE = /至今|现在|目前|Present|Current|Now|Ongoing/gi;
 const CONNECTOR_WORD_RE = /\bto\b/gi;
 const TRAILING_NOTE_RE = /^[（(][^（）()]*[)）]\s*$/;
@@ -118,11 +120,14 @@ export function canonicalizeDatePeriod(value: string): string {
   }
 
   for (const match of collect(value, BARE_YEAR_RE)) {
-    if (!overlaps(match.index, match.index + match[0].length, tokens)) {
+    // Group 1 is the consumed boundary char; the year itself starts after it.
+    const start = match.index + match.groups[0].length;
+    const end = start + match.groups[1].length;
+    if (!overlaps(start, end, tokens)) {
       tokens.push({
-        start: match.index,
-        end: match.index + match[0].length,
-        text: Number(match.groups[0]).toString().padStart(4, '0'),
+        start,
+        end,
+        text: Number(match.groups[1]).toString().padStart(4, '0'),
       });
     }
   }

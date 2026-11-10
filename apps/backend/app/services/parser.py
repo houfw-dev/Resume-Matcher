@@ -450,6 +450,10 @@ def _validate_doc_container(path: Path) -> None:
     major_version = int.from_bytes(header[26:28], "little")
     file_size = path.stat().st_size
     sector_size = 1 << sector_shift
+    # WPS Office appends a non-CFB trailer (signature/watermark metadata, seen
+    # in the wild at 153 bytes) after the final sector. Floor division keeps
+    # every pointer check on the sector-aligned base; the trailing partial
+    # sector is ignored, exactly as textutil/LibreOffice ignore it.
     sector_count = file_size // sector_size - 1
     fat_sector_count = int.from_bytes(header[44:48], "little")
     first_directory_sector = int.from_bytes(header[48:52], "little")
@@ -463,7 +467,6 @@ def _validate_doc_container(path: Path) -> None:
         or (major_version == 3 and sector_shift != 9)
         or (major_version == 4 and sector_shift != 12)
         or file_size < sector_size * 3
-        or file_size % sector_size != 0
         or fat_sector_count < 1
         or fat_sector_count > sector_count
         or first_directory_sector >= sector_count
@@ -473,6 +476,41 @@ def _validate_doc_container(path: Path) -> None:
         raise DocumentValidationError(
             "The uploaded file is not a valid PDF, DOC, or DOCX document."
         )
+
+
+# Real container signatures hidden behind a legacy ``.doc`` filename. Files
+# saved by WPS/Word/Google Docs (or renamed in the file manager) frequently
+# carry a .doc extension while their bytes are OOXML, RTF or Word HTML.
+_ZIP_LOCAL_FILE_SIGNATURE = b"PK\x03\x04"
+_RTF_SIGNATURE = b"{\\rtf"
+
+
+def _sniff_legacy_doc_format(path: Path) -> str:
+    """Identify the real container behind a ``.doc`` filename.
+
+    Returns ``"ole2"`` for a genuine binary Word document, ``"docx"`` for an
+    OOXML package, ``"rtf"`` / ``"html"`` for those text formats, and
+    ``"unknown"`` for anything unrecognised.
+    """
+    try:
+        with path.open("rb") as stream:
+            header = stream.read(512)
+    except OSError as exc:
+        raise DocumentValidationError(
+            "The uploaded file is not a valid PDF, DOC, or DOCX document."
+        ) from exc
+
+    if header[:8] == _COMPOUND_FILE_SIGNATURE:
+        return "ole2"
+    if header[:4] == _ZIP_LOCAL_FILE_SIGNATURE:
+        return "docx"
+    # RTF/HTML may carry a UTF-8 BOM or leading whitespace before the marker.
+    stripped = header.lstrip(b"\xef\xbb\xbf \t\r\n").lower()
+    if stripped.startswith(_RTF_SIGNATURE):
+        return "rtf"
+    if stripped.startswith(b"<!doctype") or stripped.startswith(b"<html"):
+        return "html"
+    return "unknown"
 
 
 def _validate_extracted_text(text: str) -> None:
@@ -742,6 +780,17 @@ _HEADER_FIELD_LABELS: tuple[tuple[str, str], ...] = (
         r"|目\s*标\s*岗\s*位",
     ),
     ("location", r"(?:期\s*望|意\s*向|工\s*作)\s*(?:城\s*市|地\s*点)"),
+    # Personal-link cells share the header row. Recognizing them is what ends
+    # the previous fact's value span: an unrecognized "博客地址：" label used to
+    # glue its Markdown link onto workYears ("13年 博客地址：[x](https://…)").
+    (
+        "website",
+        r"博\s*客\s*地\s*址|个\s*人\s*网\s*站|个\s*人\s*主\s*页|个\s*人\s*博\s*客"
+        r"|个\s*人\s*网\s*址|主\s*页|博\s*客|网\s*站|网\s*址"
+        r"|Website|Web\s*site|Homepage|Blog(?:\s*site)?",
+    ),
+    ("linkedin", r"领\s*英|Linked\s*[Ii]n"),
+    ("github", r"Git\s*[Hh]ub"),
 )
 
 _HEADER_LABEL_RE = re.compile(
@@ -836,6 +885,63 @@ def _clean_header_value(raw: str) -> str:
     return re.sub(r"\s+", " ", line).strip()
 
 
+# Short header facts whose values must stay single, label-free tokens. When a
+# neighboring header cell is glued onto one of them, the pollution always takes
+# one of three shapes below (observed in real uploads: workYears
+# "13年 博客地址：[fengba.blog.csdn.net](https://…)" and educationLevel
+# "本科 学 校： 西安电子科技大学").
+_HEADER_FACT_FIELDS: tuple[str, ...] = ("gender", "age", "workYears", "educationLevel")
+
+# Inline Markdown link/image, e.g. "[fengba.blog.csdn.net](https://…)" — the
+# URL target is captured so link fields can collapse to it.
+_MARKDOWN_INLINE_LINK_RE = re.compile(r"!?\[[^\]]*\]\(\s*([^)\s]*)\s*\)")
+_BARE_URL_RE = re.compile(r"(?:https?://|www\.)[^\s|｜，,；;）)】\]]+")
+# A second "label：" inside a fact value marks the next glued cell. The label
+# must follow whitespace (the cell separator) so a value whose own opening
+# characters reach a colon ("本科 学 校：…") is cut at the label, not at its
+# first character. Spaces inside the label are allowed because markitdown
+# splits CJK runs ("学 校").
+_EMBEDDED_LABEL_RE = re.compile(r"(?<=\s)[一-鿿A-Za-z][一-鿿A-Za-z\s]{0,11}\s*[:：]")
+
+
+def sanitize_header_fact_value(value: str) -> str:
+    """Drop glued next-cell content from a short header fact value.
+
+    Header facts (gender/age/workYears/educationLevel) are short tokens; an
+    inline Markdown link, bare URL, or embedded ``label：`` inside the value
+    means another header cell was glued onto it. Everything from the glued
+    boundary onward is truncated; the clean prefix survives verbatim. A
+    boundary at position 0 is ignored rather than blanking the whole field.
+    """
+    cut = len(value)
+    for pattern in (_MARKDOWN_INLINE_LINK_RE, _BARE_URL_RE, _EMBEDDED_LABEL_RE):
+        match = pattern.search(value)
+        if match and 0 < match.start() < cut:
+            cut = match.start()
+    return value[:cut].strip(" \t　:：;；,，、")
+
+
+def normalize_header_link_value(value: str) -> str:
+    """Normalize one personal-link header cell (website/linkedin/github).
+
+    Markdown links collapse to their URL target ("[blog](https://x.com)" →
+    "https://x.com"); a bare URL embedded in prose is extracted; plain hosts
+    and other text pass through stripped, since the render layer promotes
+    bare hosts to "https://…" itself.
+    """
+    inline = _MARKDOWN_INLINE_LINK_RE.search(value)
+    if inline:
+        if inline.group(1):
+            return inline.group(1).strip()
+        # Empty target "[text]()": fall back to the bracket text.
+        bracket = re.match(r"!?\[([^\]]*)\]", inline.group(0))
+        return bracket.group(1).strip() if bracket else ""
+    bare = _BARE_URL_RE.search(value)
+    if bare:
+        return bare.group(0).rstrip(".,;)）】]")
+    return value.strip()
+
+
 def _extract_header_fields(markdown: str) -> dict[str, str]:
     """Scan the resume header for ``label：value`` demographics."""
     region = _header_demographics_region(markdown)
@@ -861,6 +967,10 @@ def _extract_header_fields(markdown: str) -> dict[str, str]:
 
 def _normalize_header_value(field: str, value: str) -> str | list[str]:
     """Normalize one raw header value for its schema field."""
+    if field in _HEADER_FACT_FIELDS:
+        value = sanitize_header_fact_value(value)
+    if field in ("website", "linkedin", "github"):
+        return normalize_header_link_value(value)
     if field == "email":
         match = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", value)
         return match.group(0) if match else ""
@@ -886,8 +996,11 @@ def backfill_personal_info_from_markdown(
     For gender/age/workYears/educationLevel the recovered (verbatim) value
     also replaces a stripped LLM value — e.g. source "统招本科(211)" parsed as
     "本科" — so header facts and their qualifiers (211/985/统招/全日制) survive
-    regardless of LLM behavior. name/phone/email/title/location only fill
-    empty fields; recovered languages are unioned into additional.languages.
+    regardless of LLM behavior. Glued next-cell content (a personal link or
+    embedded "label：" boundary) is truncated from those fact values first.
+    name/phone/email/title/location/website/linkedin/github only fill empty
+    fields (Markdown links collapse to their URL target); recovered languages
+    are unioned into additional.languages.
     """
     extracted = _extract_header_fields(markdown)
     if not extracted:
@@ -899,8 +1012,20 @@ def backfill_personal_info_from_markdown(
         parsed_data["personalInfo"] = info
 
     patched = 0
-    verbatim_fields = ("gender", "age", "workYears", "educationLevel")
-    for field in ("name", "phone", "email", "title", "location", *verbatim_fields):
+    verbatim_fields = _HEADER_FACT_FIELDS
+    # Personal links are contact-style facts: they fill an empty field but
+    # never replace a value the LLM already extracted.
+    for field in (
+        "name",
+        "phone",
+        "email",
+        "title",
+        "location",
+        "website",
+        "linkedin",
+        "github",
+        *verbatim_fields,
+    ):
         raw_value = extracted.get(field)
         if not raw_value:
             continue
@@ -1200,6 +1325,27 @@ _SUB_LABEL_CANDIDATES = (
     "项目业绩",
     "主要成果",
     "核心成果",
+    # Outcome/effectiveness modules are PEERS of 项目亮点 (real resumes carry
+    # both in one project: highlight bullets followed by a 项目成效 prose
+    # block). They stay verbatim — deliberately NOT in
+    # PROJECT_SUB_LABEL_CANONICAL, so they must never be merged into 项目亮点
+    # or rendered as a nested numbered head inside it.
+    "项目成效",
+    "工作成效",
+    "实施成效",
+    "建设成效",
+    "应用成效",
+    "业务成效",
+    "落地成效",
+    "实际成效",
+    "量化成效",
+    "运营成效",
+    "项目效果",
+    "实施效果",
+    "应用效果",
+    "落地效果",
+    "运行效果",
+    "实际效果",
     "项目角色",
     "担任角色",
 )
@@ -1968,6 +2114,18 @@ def normalize_text_hygiene(parsed_data: dict[str, Any]) -> dict[str, Any]:
                 "github",
             ),
         )
+        # Self-heal glued header cells from pre-fix uploads (e.g. workYears
+        # "13年 博客地址：[blog](https://…)", educationLevel "本科 学 校： …")
+        # and resolve Markdown links stored verbatim in personal-link fields.
+        # Idempotent, so repeated GETs leave already-clean values untouched.
+        for fact_field in _HEADER_FACT_FIELDS:
+            fact_value = personal_info.get(fact_field)
+            if isinstance(fact_value, str):
+                personal_info[fact_field] = sanitize_header_fact_value(fact_value)
+        for link_field in ("website", "linkedin", "github"):
+            link_value = personal_info.get(link_field)
+            if isinstance(link_value, str) and link_value:
+                personal_info[link_field] = normalize_header_link_value(link_value)
 
     work_entries = parsed_data.get("workExperience")
     if isinstance(work_entries, list):
@@ -3503,7 +3661,28 @@ def _parse_document_sync(content: bytes, filename: str) -> str:
         if suffix == ".pdf":
             _validate_pdf_container(tmp_path)
         elif suffix == ".doc":
-            _validate_doc_container(tmp_path)
+            sniffed_format = _sniff_legacy_doc_format(tmp_path)
+            if sniffed_format == "ole2":
+                _validate_doc_container(tmp_path)
+            elif sniffed_format == "docx":
+                # Mislabeled OOXML package: markitdown infers the converter
+                # from the extension, so re-suffix before its DOCX path.
+                docx_path = tmp_path.with_suffix(".docx")
+                tmp_path.rename(docx_path)
+                tmp_path = docx_path
+                suffix = ".docx"
+                _validate_docx_container(tmp_path)
+            elif sniffed_format in ("rtf", "html"):
+                # The local legacy converter (textutil/LibreOffice) sniffs
+                # content and reads RTF/HTML directly; a server without a
+                # converter gets the actionable LegacyDocConversionError.
+                text = normalize_cjk_compat(_convert_legacy_doc(tmp_path))
+                _validate_extracted_text(text)
+                return text
+            else:
+                raise DocumentValidationError(
+                    "The uploaded file is not a valid PDF, DOC, or DOCX document."
+                )
         elif suffix == ".docx":
             _validate_docx_container(tmp_path)
         md = MarkItDown()

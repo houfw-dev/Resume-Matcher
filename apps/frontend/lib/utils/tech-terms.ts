@@ -6,10 +6,13 @@
 // "mysql集群" -> "MySQL集群"). It never adds/removes/translates anything;
 // OCR/typo spelling correction stays the LLM's job.
 //
-// Boundary semantics: `(?<![A-Za-z0-9]) … (?![A-Za-z0-9])` means adjacency to
-// CJK, punctuation or whitespace matches ("Redis集群"), adjacency to another
-// ASCII letter/digit does not ("Java" can't match inside "JavaScript",
-// "Vue.js" can't match inside "Vue.jsx"), and longest terms win.
+// Boundary semantics: a non-ASCII-alphanumeric boundary (or string start) on
+// each side means adjacency to CJK, punctuation or whitespace matches
+// ("Redis集群"), adjacency to another ASCII letter/digit does not ("Java"
+// can't match inside "JavaScript", "Vue.js" can't match inside "Vue.jsx"),
+// and longest terms win. The build targets ES2017, which has no lookbehind,
+// so the leading boundary is consumed as a capture group and re-emitted by
+// the replace callback — semantically identical to `(?<![A-Za-z0-9])`.
 import type { ResumeData } from '@/components/dashboard/resume-component';
 
 // Curated mainstream-stack table, canonical casing. Order is irrelevant —
@@ -99,8 +102,11 @@ const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\
 
 // Longest-first so compounds win over their prefixes.
 const SORTED_TERMS = [...new Set(CANONICAL_TERMS)].sort((a, b) => b.length - a.length);
+// Group 1 is the leading boundary char (or empty at string start); the term
+// itself is group 2. The boundary is consumed during matching but preserved in
+// the replacement output.
 const TERM_RE = new RegExp(
-  `(?<![A-Za-z0-9])(?:${SORTED_TERMS.map(escapeRegExp).join('|')})(?![A-Za-z0-9])`,
+  `(^|[^A-Za-z0-9])(?:${SORTED_TERMS.map(escapeRegExp).join('|')})(?![A-Za-z0-9])`,
   'gi'
 );
 const CANONICAL_BY_LOWER = new Map<string, string>(
@@ -112,9 +118,10 @@ export const canonicalizeTermsInText = (value: unknown): unknown => {
   if (typeof value !== 'string' || value.length === 0) {
     return value;
   }
-  return value.replace(TERM_RE, (match) => {
-    const canonical = CANONICAL_BY_LOWER.get(match.toLowerCase());
-    return canonical ?? match;
+  return value.replace(TERM_RE, (match, boundary: string) => {
+    const term = match.slice(boundary.length);
+    const canonical = CANONICAL_BY_LOWER.get(term.toLowerCase());
+    return `${boundary}${canonical ?? term}`;
   });
 };
 

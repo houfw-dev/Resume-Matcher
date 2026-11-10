@@ -11,8 +11,13 @@ from unittest.mock import patch
 
 import pytest
 from docx import Document
+from markitdown import UnsupportedFormatException
 
-from app.services.parser import DocumentResourceLimitError, parse_document
+from app.services.parser import (
+    DocumentResourceLimitError,
+    LegacyDocConversionError,
+    parse_document,
+)
 
 
 def _docx_bytes(text: str) -> bytes:
@@ -21,6 +26,28 @@ def _docx_bytes(text: str) -> bytes:
     stream = io.BytesIO()
     document.save(stream)
     return stream.getvalue()
+
+
+def _minimal_ole2_bytes(*, trailer: bytes = b"", sector_count: int = 2) -> bytes:
+    """Synthesize a CFB v3 compound-file header plus empty sectors.
+
+    Layout: 512-byte header (one inline FAT pointer, directory at sector 1)
+    followed by ``sector_count`` zeroed 512-byte sectors. WPS-style writers
+    append a non-CFB trailer after the final sector; pass ``trailer`` to
+    reproduce that shape without shipping a binary fixture.
+    """
+    header = bytearray(512)
+    header[0:8] = bytes.fromhex("d0cf11e0a1b11ae1")  # compound file signature
+    header[26:28] = (3).to_bytes(2, "little")  # major version 3 → 512B sectors
+    header[28:30] = b"\xfe\xff"  # little-endian byte order
+    header[30:32] = (9).to_bytes(2, "little")  # sector shift → 512
+    header[32:34] = (6).to_bytes(2, "little")  # mini sector shift → 64
+    header[44:48] = (1).to_bytes(4, "little")  # one FAT sector
+    header[48:52] = (1).to_bytes(4, "little")  # first directory sector
+    header[76:80] = (0).to_bytes(4, "little")  # DIFAT[0] → FAT sector 0
+    for offset in range(80, 512, 4):  # remaining DIFAT slots are free
+        header[offset : offset + 4] = b"\xff\xff\xff\xff"
+    return bytes(header) + b"\x00" * (512 * sector_count) + trailer
 
 
 def _pdf_with_content_streams(
@@ -154,6 +181,87 @@ async def test_parse_document_rejects_malformed_legacy_doc_container() -> None:
     """Legacy DOC support requires a compound-file container, not fallback text."""
     with pytest.raises(ValueError, match="valid PDF, DOC, or DOCX"):
         await parse_document(b"plain text pretending to be Word", "broken.doc")
+
+
+async def test_parse_document_accepts_ole2_container_with_non_cfb_trailer() -> None:
+    """WPS appends signature/watermark bytes after the last CFB sector.
+
+    The on-disk size is therefore not sector-aligned (seen in the wild: an
+    84,121-byte WPS file = 164 full sectors + 153 trailer bytes). Structural
+    checks run against the sector-aligned base and the converter ignores the
+    trailer, so the document must still parse.
+    """
+    ole2_with_trailer = _minimal_ole2_bytes(trailer=b"\x00" * 153)
+    assert len(ole2_with_trailer) % 512 != 0
+
+    with (
+        patch(
+            "app.services.parser.MarkItDown.convert",
+            side_effect=UnsupportedFormatException("no legacy .doc converter"),
+        ),
+        patch(
+            "app.services.parser._convert_legacy_doc",
+            return_value="WPS trailer resume body",
+        ) as convert,
+    ):
+        markdown = await parse_document(ole2_with_trailer, "wps-resume.doc")
+
+    convert.assert_called_once()
+    assert markdown == "WPS trailer resume body"
+
+
+async def test_parse_document_rejects_truncated_ole2_container() -> None:
+    """Tolerating trailers must not make a truncated compound file valid."""
+    truncated = _minimal_ole2_bytes(sector_count=1)  # header + one sector only
+    with pytest.raises(ValueError, match="valid PDF, DOC, or DOCX"):
+        await parse_document(truncated, "truncated.doc")
+
+
+async def test_parse_document_accepts_ooxml_package_renamed_as_doc() -> None:
+    """A .doc filename wrapping a ZIP/OOXML package routes through the DOCX path."""
+    markdown = await parse_document(_docx_bytes("Renamed OOXML engineer"), "legacy.doc")
+
+    assert "Renamed OOXML engineer" in markdown
+
+
+async def test_parse_document_routes_rtf_renamed_as_doc_to_legacy_converter() -> None:
+    """RTF bytes behind a .doc extension are extracted via the local converter."""
+    rtf_bytes = b"{\\rtf1\\ansi RTF resume body\\par}"
+    with patch(
+        "app.services.parser._convert_legacy_doc", return_value="RTF resume body"
+    ) as convert:
+        markdown = await parse_document(rtf_bytes, "legacy.doc")
+
+    convert.assert_called_once()
+    assert markdown == "RTF resume body"
+
+
+async def test_parse_document_routes_html_renamed_as_doc_to_legacy_converter() -> None:
+    """Word HTML saved with a .doc extension is extracted via the local converter."""
+    html_bytes = (
+        b"\xef\xbb\xbf<html><body><p>HTML resume body</p></body></html>"
+    )
+    with patch(
+        "app.services.parser._convert_legacy_doc", return_value="HTML resume body"
+    ) as convert:
+        markdown = await parse_document(html_bytes, "legacy.doc")
+
+    convert.assert_called_once()
+    assert markdown == "HTML resume body"
+
+
+async def test_parse_document_legacy_converter_failure_stays_actionable() -> None:
+    """A converter backend gap on RTF input surfaces the client-safe 422 text."""
+    rtf_bytes = b"{\\rtf1\\ansi RTF resume body\\par}"
+    with patch(
+        "app.services.parser._convert_legacy_doc",
+        side_effect=LegacyDocConversionError(
+            "Legacy binary Word (.doc) is not supported on this server. "
+            "Please open the file in Word and save it as PDF or DOCX, then upload again."
+        ),
+    ):
+        with pytest.raises(LegacyDocConversionError, match="save it as PDF or DOCX"):
+            await parse_document(rtf_bytes, "legacy.doc")
 
 
 async def test_parse_document_rejects_docx_over_unpacked_limit() -> None:

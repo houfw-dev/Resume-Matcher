@@ -12,6 +12,7 @@ const diagnoseResumeMock = vi.fn();
 const exportDiagnosisDocxMock = vi.fn();
 const downloadBlobAsFileMock = vi.fn();
 const fetchCompetencyModelsMock = vi.fn();
+const mockRouterPush = vi.fn();
 
 vi.mock('@/lib/api/diagnosis', () => ({
   diagnoseResume: (...args: unknown[]) => diagnoseResumeMock(...args),
@@ -29,6 +30,10 @@ vi.mock('@/lib/utils/download', async (importOriginal) => {
 
 vi.mock('@/lib/context/language-context', () => ({
   useLanguage: () => ({ uiLanguage: 'zh' }),
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: (...args: unknown[]) => mockRouterPush(...args) }),
 }));
 
 const measureResumeLayoutMock = vi.fn();
@@ -152,15 +157,19 @@ describe('DiagnosisModal — request form and target title', () => {
     render(<DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} />);
 
     expect(screen.getByText('diagnosis.targetEmptyHint')).toBeInTheDocument();
-    await screen.findByText('diagnosis.modelNone');
+    await screen.findByText('diagnosis.modeBasicTitle');
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
 
     await waitFor(() => expect(diagnoseResumeMock).toHaveBeenCalledTimes(1));
-    expect(diagnoseResumeMock).toHaveBeenCalledWith('r1', {
-      jobDescription: undefined,
-      targetTitle: undefined,
-      competencyModelKey: 'none',
-    });
+    expect(diagnoseResumeMock).toHaveBeenCalledWith(
+      'r1',
+      {
+        jobDescription: undefined,
+        targetTitle: undefined,
+        competencyModelKey: 'none',
+      },
+      expect.any(AbortSignal)
+    );
   });
 
   it('shows a single intention read-only and uses it as the target', async () => {
@@ -172,15 +181,19 @@ describe('DiagnosisModal — request form and target title', () => {
     // Single intention is bold text, not a target radio; models load below.
     expect(document.querySelector('input[name="diagnosis-target-title"]')).toBeNull();
     expect(screen.getByText('大数据开发工程师')).toBeInTheDocument();
-    await screen.findByText('diagnosis.modelNone');
+    await screen.findByText('diagnosis.modeBasicTitle');
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
 
     await waitFor(() =>
-      expect(diagnoseResumeMock).toHaveBeenCalledWith('r1', {
-        jobDescription: undefined,
-        targetTitle: '大数据开发工程师',
-        competencyModelKey: 'none',
-      })
+      expect(diagnoseResumeMock).toHaveBeenCalledWith(
+        'r1',
+        {
+          jobDescription: undefined,
+          targetTitle: '大数据开发工程师',
+          competencyModelKey: 'none',
+        },
+        expect.any(AbortSignal)
+      )
     );
   });
 
@@ -195,7 +208,7 @@ describe('DiagnosisModal — request form and target title', () => {
       />
     );
 
-    await screen.findByText('diagnosis.modelNone');
+    await screen.findByText('diagnosis.modeBasicTitle');
     // The dialog renders through a portal, so query document, not container.
     const targetRadios = document.querySelectorAll('input[name="diagnosis-target-title"]');
     expect(targetRadios).toHaveLength(3);
@@ -205,15 +218,19 @@ describe('DiagnosisModal — request form and target title', () => {
     expect(screen.getByRole('radio', { name: '大数据开发' })).toBeChecked();
     // Catalog is re-queried for the newly selected title.
     await waitFor(() => expect(fetchCompetencyModelsMock).toHaveBeenCalledWith('大数据开发'));
-    await screen.findByText('diagnosis.modelNone');
+    await screen.findByText('diagnosis.modeBasicTitle');
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
 
     await waitFor(() =>
-      expect(diagnoseResumeMock).toHaveBeenCalledWith('r1', {
-        jobDescription: undefined,
-        targetTitle: '大数据开发',
-        competencyModelKey: 'none',
-      })
+      expect(diagnoseResumeMock).toHaveBeenCalledWith(
+        'r1',
+        {
+          jobDescription: undefined,
+          targetTitle: '大数据开发',
+          competencyModelKey: 'none',
+        },
+        expect.any(AbortSignal)
+      )
     );
   });
 
@@ -221,24 +238,100 @@ describe('DiagnosisModal — request form and target title', () => {
     diagnoseResumeMock.mockResolvedValueOnce(makeReport());
     render(<DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} />);
 
-    await screen.findByText('diagnosis.modelNone');
-    fireEvent.change(screen.getByLabelText('diagnosis.jobDescriptionLabel'), {
-      target: { value: 'Java 架构师岗位' },
+    await screen.findByText('diagnosis.modeBasicTitle');
+    // The JD textarea only mounts in JD mode.
+    fireEvent.click(screen.getByRole('radio', { name: /modeJdTitle/ }));
+    const jdBox = screen.getByLabelText('diagnosis.jobDescriptionLabel');
+    // Empty JD mode blocks the run and shows the required hint.
+    expect(screen.getByText('diagnosis.jdRequiredHint')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'diagnosis.run' })).toBeDisabled();
+    // Model radios never mount in JD mode — the triple overlap is impossible.
+    expect(document.querySelector('input[name="diagnosis-competency-model"]')).toBeNull();
+
+    fireEvent.change(jdBox, {
+      target: { value: '  Java 架构师岗位  ' },
     });
+    expect(screen.getByRole('button', { name: 'diagnosis.run' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
 
     await waitFor(() =>
-      expect(diagnoseResumeMock).toHaveBeenCalledWith('r1', {
-        jobDescription: 'Java 架构师岗位',
-        targetTitle: undefined,
-        competencyModelKey: 'none',
-      })
+      expect(diagnoseResumeMock).toHaveBeenCalledWith(
+        'r1',
+        {
+          jobDescription: 'Java 架构师岗位',
+          targetTitle: undefined,
+          competencyModelKey: 'none',
+        },
+        expect.any(AbortSignal)
+      )
     );
   });
 });
 
+describe('DiagnosisModal — cancellation', () => {
+  it('aborts a running diagnosis from the Cancel button and stays on the form', async () => {
+    // The pending call only settles when its AbortSignal fires.
+    diagnoseResumeMock.mockImplementation(
+      (_resumeId: string, _options: unknown, signal?: AbortSignal) =>
+        new Promise<never>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            const err = new Error('aborted');
+            err.name = 'AbortError';
+            reject(err);
+          });
+        })
+    );
+
+    render(<DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} />);
+    await screen.findByText('diagnosis.modeBasicTitle');
+    fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
+
+    const cancelButton = await screen.findByRole('button', { name: 'common.cancel' });
+    const signal = diagnoseResumeMock.mock.calls[0][2] as AbortSignal;
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal.aborted).toBe(false);
+
+    await act(async () => cancelButton.click());
+
+    expect(signal.aborted).toBe(true);
+    expect(screen.queryByRole('button', { name: 'common.cancel' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'diagnosis.run' })).toBeEnabled();
+    // Flush the aborted continuation: the AbortError must not become an error panel.
+    await act(async () => {});
+    expect(screen.queryByText('diagnosis.error')).toBeNull();
+
+    // The retired run cannot clobber a successor: rerun resolves and renders the report.
+    diagnoseResumeMock.mockImplementationOnce(() => Promise.resolve(makeReport()));
+    fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
+    await waitFor(() => expect(diagnoseResumeMock).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('diagnosis.countsLabel')).toBeInTheDocument();
+  });
+
+  it('aborts the in-flight run when the dialog is closed', async () => {
+    diagnoseResumeMock.mockImplementation(
+      (_resumeId: string, _options: unknown, signal?: AbortSignal) =>
+        new Promise<never>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            const err = new Error('aborted');
+            err.name = 'AbortError';
+            reject(err);
+          });
+        })
+    );
+
+    const onOpenChange = vi.fn();
+    const { rerender } = render(<DiagnosisModal resumeId="r1" open onOpenChange={onOpenChange} />);
+    await screen.findByText('diagnosis.modeBasicTitle');
+    fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
+    const signal = diagnoseResumeMock.mock.calls[0][2] as AbortSignal;
+
+    rerender(<DiagnosisModal resumeId="r1" open={false} onOpenChange={onOpenChange} />);
+    expect(signal.aborted).toBe(true);
+  });
+});
+
 describe('DiagnosisModal — competency model picker', () => {
-  it('fetches the catalog for the target title and preselects the auto-match', async () => {
+  it('fetches the catalog for the target title and upgrades into model mode on auto-match', async () => {
     diagnoseResumeMock.mockResolvedValueOnce(makeReport());
     render(
       <DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} intentionTitle="Java 开发工程师" />
@@ -248,41 +341,55 @@ describe('DiagnosisModal — competency model picker', () => {
     await screen.findByText('diagnosis.modelMatchedHint');
     const p4 = screen.getByRole('radio', { name: /P4 Java开发工程师能力模型/ });
     expect(p4).toBeChecked();
-    expect(screen.getByRole('radio', { name: 'diagnosis.modelNone' })).not.toBeChecked();
+    // A confident match switches the modal into model mode; there is no
+    // "none" radio anymore — opting out means returning to the basic card.
+    expect(screen.getByRole('radio', { name: /modeModelTitle/ })).toBeChecked();
+    expect(screen.queryByRole('radio', { name: 'diagnosis.modelNone' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
     await waitFor(() =>
-      expect(diagnoseResumeMock).toHaveBeenCalledWith('r1', {
-        jobDescription: undefined,
-        targetTitle: 'Java 开发工程师',
-        competencyModelKey: 'java-p4',
-      })
+      expect(diagnoseResumeMock).toHaveBeenCalledWith(
+        'r1',
+        {
+          jobDescription: undefined,
+          targetTitle: 'Java 开发工程师',
+          competencyModelKey: 'java-p4',
+        },
+        expect.any(AbortSignal)
+      )
     );
   });
 
-  it('defaults to explicit "no model" when the title matches nothing, allowing manual pick', async () => {
+  it('stays on basic mode when nothing matches and lets the user pick a level manually', async () => {
     diagnoseResumeMock.mockResolvedValueOnce(makeReport());
     render(
       <DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} intentionTitle="大数据开发工程师" />
     );
 
-    await screen.findByText('diagnosis.modelNoMatchHint');
-    expect(screen.getByRole('radio', { name: 'diagnosis.modelNone' })).toBeChecked();
+    await screen.findByText('diagnosis.modeBasicTitle');
+    // No confident match: the modal must not bounce the user into model mode.
+    expect(screen.getByRole('radio', { name: /modeBasicTitle/ })).toBeChecked();
 
+    fireEvent.click(screen.getByRole('radio', { name: /modeModelTitle/ }));
+    await screen.findByText('diagnosis.modelNoMatchHint');
     fireEvent.click(screen.getByRole('radio', { name: /高级Java开发工程师能力模型/ }));
     expect(screen.getByRole('radio', { name: /高级Java开发工程师能力模型/ })).toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
 
     await waitFor(() =>
-      expect(diagnoseResumeMock).toHaveBeenCalledWith('r1', {
-        jobDescription: undefined,
-        targetTitle: '大数据开发工程师',
-        competencyModelKey: 'java-p5',
-      })
+      expect(diagnoseResumeMock).toHaveBeenCalledWith(
+        'r1',
+        {
+          jobDescription: undefined,
+          targetTitle: '大数据开发工程师',
+          competencyModelKey: 'java-p5',
+        },
+        expect.any(AbortSignal)
+      )
     );
   });
 
-  it('lets the user opt out of a title auto-match by picking "no model"', async () => {
+  it('lets the user opt out of a title auto-match by returning to the basic card', async () => {
     diagnoseResumeMock.mockResolvedValueOnce(makeReport());
     render(
       <DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} intentionTitle="Java 开发工程师" />
@@ -291,32 +398,53 @@ describe('DiagnosisModal — competency model picker', () => {
     await screen.findByText('diagnosis.modelMatchedHint');
     expect(screen.getByRole('radio', { name: /P4 Java开发工程师能力模型/ })).toBeChecked();
 
-    fireEvent.click(screen.getByRole('radio', { name: 'diagnosis.modelNone' }));
+    // Back to basic: the run carries the explicit 'none' opt-out.
+    fireEvent.click(screen.getByRole('radio', { name: /modeBasicTitle/ }));
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
 
     await waitFor(() =>
-      expect(diagnoseResumeMock).toHaveBeenCalledWith('r1', {
-        jobDescription: undefined,
-        targetTitle: 'Java 开发工程师',
-        competencyModelKey: 'none',
-      })
+      expect(diagnoseResumeMock).toHaveBeenCalledWith(
+        'r1',
+        {
+          jobDescription: undefined,
+          targetTitle: 'Java 开发工程师',
+          competencyModelKey: 'none',
+        },
+        expect.any(AbortSignal)
+      )
     );
   });
 
-  it('survives a catalog load failure and runs the base checklist with model none', async () => {
+  it('surfaces a catalog failure only inside model mode and keeps the basic run working', async () => {
     fetchCompetencyModelsMock.mockRejectedValueOnce(new Error('500'));
     diagnoseResumeMock.mockResolvedValueOnce(makeReport());
     render(<DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} />);
 
+    await screen.findByText('diagnosis.modeBasicTitle');
+    // Basic mode never blocks on the catalog; the error is revealed only when
+    // the user explicitly enters model mode.
+    expect(screen.queryByText('diagnosis.modelLoadError')).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: /modeModelTitle/ }));
     expect(await screen.findByText('diagnosis.modelLoadError')).toBeInTheDocument();
+
+    // Retry restores the catalog (the default mock serves the next call).
+    fireEvent.click(screen.getByRole('button', { name: 'diagnosis.modelRetry' }));
+    await waitFor(() => expect(fetchCompetencyModelsMock).toHaveBeenCalledTimes(2));
+
+    // A basic run still sends the explicit none opt-out.
+    fireEvent.click(screen.getByRole('radio', { name: /modeBasicTitle/ }));
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
 
     await waitFor(() =>
-      expect(diagnoseResumeMock).toHaveBeenCalledWith('r1', {
-        jobDescription: undefined,
-        targetTitle: undefined,
-        competencyModelKey: 'none',
-      })
+      expect(diagnoseResumeMock).toHaveBeenCalledWith(
+        'r1',
+        {
+          jobDescription: undefined,
+          targetTitle: undefined,
+          competencyModelKey: 'none',
+        },
+        expect.any(AbortSignal)
+      )
     );
   });
 });
@@ -367,7 +495,7 @@ describe('DiagnosisModal — template layout measurement', () => {
     diagnoseResumeMock.mockResolvedValueOnce(makeReport());
     renderModal();
 
-    await screen.findByText('diagnosis.modelNone');
+    await screen.findByText('diagnosis.modeBasicTitle');
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
 
     await waitFor(() => expect(diagnoseResumeMock).toHaveBeenCalledTimes(1));
@@ -382,7 +510,8 @@ describe('DiagnosisModal — template layout measurement', () => {
       expect.objectContaining({
         templateSettings: DEFAULT_TEMPLATE_SETTINGS,
         renderedLayout: fakeLayout,
-      })
+      }),
+      expect.any(AbortSignal)
     );
     expect(screen.queryByText('diagnosis.layoutSkipped')).not.toBeInTheDocument();
   });
@@ -396,7 +525,7 @@ describe('DiagnosisModal — template layout measurement', () => {
     diagnoseResumeMock.mockResolvedValueOnce(makeReport());
     renderModal();
 
-    await screen.findByText('diagnosis.modelNone');
+    await screen.findByText('diagnosis.modeBasicTitle');
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
 
     expect(await screen.findByText('diagnosis.measuringLayout')).toBeInTheDocument();
@@ -417,7 +546,7 @@ describe('DiagnosisModal — template layout measurement', () => {
     diagnoseResumeMock.mockResolvedValueOnce(makeReport());
     renderModal();
 
-    await screen.findByText('diagnosis.modelNone');
+    await screen.findByText('diagnosis.modeBasicTitle');
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
 
     await waitFor(() => expect(diagnoseResumeMock).toHaveBeenCalledTimes(1));
@@ -432,7 +561,7 @@ describe('DiagnosisModal — template layout measurement', () => {
     diagnoseResumeMock.mockResolvedValueOnce(makeReport());
     render(<DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} />);
 
-    await screen.findByText('diagnosis.modelNone');
+    await screen.findByText('diagnosis.modeBasicTitle');
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
 
     await waitFor(() => expect(diagnoseResumeMock).toHaveBeenCalledTimes(1));
@@ -446,7 +575,7 @@ describe('DiagnosisModal — checklist report', () => {
     diagnoseResumeMock.mockResolvedValueOnce(makeReport());
     render(<DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} />);
 
-    await screen.findByText('diagnosis.modelNone');
+    await screen.findByText('diagnosis.modeBasicTitle');
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
 
     expect(await screen.findByText('diagnosis.countsLabel')).toBeInTheDocument();
@@ -500,7 +629,7 @@ describe('DiagnosisModal — checklist report', () => {
     };
     diagnoseResumeMock.mockResolvedValueOnce(passed);
     render(<DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} />);
-    await screen.findByText('diagnosis.modelNone');
+    await screen.findByText('diagnosis.modeBasicTitle');
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
 
     expect(await screen.findByText('diagnosis.redlinePassed')).toBeInTheDocument();
@@ -510,7 +639,7 @@ describe('DiagnosisModal — checklist report', () => {
   it('problems filter hides conforming and N/A items', async () => {
     diagnoseResumeMock.mockResolvedValueOnce(makeReport());
     render(<DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} />);
-    await screen.findByText('diagnosis.modelNone');
+    await screen.findByText('diagnosis.modeBasicTitle');
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
     await screen.findByText('diagnosis.countsLabel');
 
@@ -532,7 +661,7 @@ describe('DiagnosisModal — checklist report', () => {
     });
     exportDiagnosisDocxMock.mockResolvedValueOnce(blob);
     render(<DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} />);
-    await screen.findByText('diagnosis.modelNone');
+    await screen.findByText('diagnosis.modeBasicTitle');
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
     await screen.findByText('diagnosis.countsLabel');
 
@@ -555,7 +684,7 @@ describe('DiagnosisModal — checklist report', () => {
     diagnoseResumeMock.mockResolvedValueOnce(makeReport());
     exportDiagnosisDocxMock.mockRejectedValueOnce(new Error('500'));
     render(<DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} />);
-    await screen.findByText('diagnosis.modelNone');
+    await screen.findByText('diagnosis.modeBasicTitle');
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
     await screen.findByText('diagnosis.countsLabel');
 
@@ -573,7 +702,7 @@ describe('DiagnosisModal — checklist report', () => {
   it('shows a generic error with retry when the API fails', async () => {
     diagnoseResumeMock.mockRejectedValueOnce(new Error('network'));
     render(<DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} />);
-    await screen.findByText('diagnosis.modelNone');
+    await screen.findByText('diagnosis.modeBasicTitle');
     fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
 
     expect(await screen.findByText('diagnosis.error')).toBeInTheDocument();
@@ -582,5 +711,64 @@ describe('DiagnosisModal — checklist report', () => {
     fireEvent.click(screen.getByRole('button', { name: 'common.retry' }));
     expect(await screen.findByText('diagnosis.countsLabel')).toBeInTheDocument();
     expect(diagnoseResumeMock).toHaveBeenCalledTimes(2);
+  });
+
+  /** Report whose only problem is item 9 (项目经验 → personalProjects). */
+  function makeFixableReport(): DiagnosisReport {
+    return {
+      ...makeReport(),
+      redline_passed: true,
+      failed_redline_ids: [],
+      redlines: [],
+      dimensions: [
+        {
+          key: 'content',
+          name: '撰写规范',
+          counts: { conform: 0, partial: 0, nonconform: 1, na: 0, effective: 1 },
+        },
+      ],
+      items: [
+        {
+          id: 9,
+          dimension: 'content',
+          dimension_name: '撰写规范',
+          sub_dimension: '项目经验',
+          topic: '项目经验',
+          severity: 'normal',
+          judgment_method: 'objective',
+          rating: 'nonconform',
+          evidence: '项目缺少技术栈字段。',
+          suggestion: '为每个项目补一行技术栈。',
+        },
+      ],
+    };
+  }
+
+  it('deep-links from the fix CTA to the owning builder section and closes the modal', async () => {
+    diagnoseResumeMock.mockResolvedValueOnce(makeFixableReport());
+    const onOpenChange = vi.fn();
+    render(<DiagnosisModal resumeId="r1" open onOpenChange={onOpenChange} />);
+    await screen.findByText('diagnosis.modeBasicTitle');
+    fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
+
+    const fixButton = await screen.findByRole('button', {
+      name: 'diagnosis.fixInBuilder',
+    });
+    fireEvent.click(fixButton);
+
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      '/builder?id=r1&tab=resume&section=personalProjects'
+    );
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('renders no fix CTA for problem items without a single owning section (e.g. red line #16)', async () => {
+    diagnoseResumeMock.mockResolvedValueOnce(makeReport());
+    render(<DiagnosisModal resumeId="r1" open onOpenChange={vi.fn()} />);
+    await screen.findByText('diagnosis.modeBasicTitle');
+    fireEvent.click(screen.getByRole('button', { name: 'diagnosis.run' }));
+    await screen.findByText('diagnosis.countsLabel');
+
+    expect(screen.queryByRole('button', { name: 'diagnosis.fixInBuilder' })).toBeNull();
   });
 });

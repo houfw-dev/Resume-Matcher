@@ -18,9 +18,9 @@ import RefreshCw from 'lucide-react/dist/esm/icons/refresh-cw';
 import Plus from 'lucide-react/dist/esm/icons/plus';
 import Settings from 'lucide-react/dist/esm/icons/settings';
 import AlertTriangle from 'lucide-react/dist/esm/icons/alert-triangle';
-import Stethoscope from 'lucide-react/dist/esm/icons/stethoscope';
+import UploadCloud from 'lucide-react/dist/esm/icons/upload-cloud';
 
-import { DiagnosisWorkspace } from '@/components/diagnosis/diagnosis-workspace';
+import { ResumeImportWorkspace } from '@/components/dashboard/resume-import-workspace';
 
 import {
   fetchResume,
@@ -32,6 +32,7 @@ import {
 } from '@/lib/api/resume';
 import { useStatusCache } from '@/lib/context/status-cache';
 import { hasMeaningfulResumeContent } from '@/lib/utils/resume-content';
+import { getProcessingStatusLabelKey } from '@/lib/utils/resume-status';
 
 type ProcessingStatus = 'pending' | 'processing' | 'ready' | 'failed' | 'loading';
 
@@ -46,7 +47,7 @@ export default function DashboardPage() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [isMasterChoiceDialogOpen, setIsMasterChoiceDialogOpen] = useState(false);
-  const [isDiagnosisWorkspaceOpen, setIsDiagnosisWorkspaceOpen] = useState(false);
+  const [isImportWorkspaceOpen, setIsImportWorkspaceOpen] = useState(false);
   const router = useRouter();
 
   // Status cache for optimistic counter updates and LLM status check
@@ -359,29 +360,40 @@ export default function DashboardPage() {
   };
 
   const getStatusDisplay = () => {
+    // 'loading' is a frontend-only pre-poll state; the four backend statuses
+    // share one label map with the tailored-card grid.
+    if (processingStatus === 'loading') {
+      return {
+        text: t('dashboard.status.checking'),
+        icon: <Loader2 className="w-3 h-3 animate-spin" />,
+        color: 'text-steel-grey',
+      };
+    }
     switch (processingStatus) {
-      case 'loading':
-        return {
-          text: t('dashboard.status.checking'),
-          icon: <Loader2 className="w-3 h-3 animate-spin" />,
-          color: 'text-steel-grey',
-        };
       case 'processing':
         return {
-          text: t('dashboard.status.processing'),
+          text: t(getProcessingStatusLabelKey(processingStatus)),
           icon: <Loader2 className="w-3 h-3 animate-spin" />,
-          color: 'text-blue-700',
+          color: 'text-primary',
         };
       case 'ready':
-        return { text: t('dashboard.status.ready'), icon: null, color: 'text-green-700' };
+        return {
+          text: t(getProcessingStatusLabelKey(processingStatus)),
+          icon: null,
+          color: 'text-success',
+        };
       case 'failed':
         return {
-          text: t('dashboard.status.failed'),
+          text: t(getProcessingStatusLabelKey(processingStatus)),
           icon: <AlertCircle className="w-3 h-3" />,
-          color: 'text-red-600',
+          color: 'text-destructive',
         };
       default:
-        return { text: t('dashboard.status.pending'), icon: null, color: 'text-steel-grey' };
+        return {
+          text: t(getProcessingStatusLabelKey(processingStatus)),
+          icon: null,
+          color: 'text-steel-grey',
+        };
     }
   };
 
@@ -415,7 +427,7 @@ export default function DashboardPage() {
   };
 
   // Master branch: master card + tailored cards. No-master branch: one
-  // initialize/settings card. Diagnosis and create live in the SwissGrid
+  // initialize/settings card. Resume import and create live in the SwissGrid
   // footer bar (footerActions), not in the card grid.
   const totalCards = masterResumeId ? 1 + tailoredResumes.length : 1;
   const fillerCount = Math.max(0, (5 - (totalCards % 5)) % 5);
@@ -424,16 +436,16 @@ export default function DashboardPage() {
   // Using the hex values from before to maintain exact look, or we could map them to variants
   const fillerPalette = ['bg-secondary', 'bg-[#D8D8D2]', 'bg-[#CFCFC7]', 'bg-[#E0E0D8]'];
 
-  const openDiagnosisWorkspace = () => setIsDiagnosisWorkspaceOpen(true);
+  const openImportWorkspace = () => setIsImportWorkspaceOpen(true);
 
-  const handleDiagnosisCardKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+  const handleImportCardKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      setIsDiagnosisWorkspaceOpen(true);
+      setIsImportWorkspaceOpen(true);
     }
   };
 
-  // Diagnosis and create entries share the SwissGrid footer bar with the
+  // Resume import and create entries share the SwissGrid footer bar with the
   // application-tracker and settings actions (per product decision: module
   // entries grouped together instead of square grid cards).
   const footerActionClass =
@@ -443,13 +455,13 @@ export default function DashboardPage() {
     <>
       <button
         type="button"
-        onClick={openDiagnosisWorkspace}
-        onKeyDown={handleDiagnosisCardKeyDown}
+        onClick={openImportWorkspace}
+        onKeyDown={handleImportCardKeyDown}
         className={footerActionClass}
-        aria-label={t('diagnosis.workspace.cta')}
+        aria-label={t('importWorkspace.cta')}
       >
-        <Stethoscope className="w-4 h-4 text-primary" />
-        {t('diagnosis.workspace.cta')}
+        <UploadCloud className="w-4 h-4 text-primary" />
+        {t('importWorkspace.cta')}
       </button>
       <button
         type="button"
@@ -461,7 +473,7 @@ export default function DashboardPage() {
           isTailorEnabled ? t('dashboard.createResume') : t('dashboard.initializeMasterResume')
         }
       >
-        <Plus className="w-4 h-4 text-green-700" />
+        <Plus className="w-4 h-4 text-success" />
         {t('dashboard.createResume')}
       </button>
     </>
@@ -470,12 +482,12 @@ export default function DashboardPage() {
   const listErrorAlert = listError ? (
     <div
       role="alert"
-      className="m-6 rounded-none border-2 border-red-600 bg-red-100 p-6 shadow-sw-default"
+      className="m-6 rounded-none border-2 border-destructive bg-red-100 p-6 shadow-sw-default"
     >
       <div className="flex items-start gap-3">
-        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
         <div>
-          <p className="font-mono text-sm font-bold uppercase text-red-600">
+          <p className="font-mono text-sm font-bold uppercase text-destructive">
             {t('dashboard.errors.loadFailed')}
           </p>
           <Button className="mt-4" variant="outline" onClick={loadTailoredResumes}>
@@ -598,7 +610,7 @@ export default function DashboardPage() {
           >
             <div className="flex-1 flex flex-col h-full">
               <div className="flex justify-between items-start mb-6">
-                <div className="w-16 h-16 border-2 border-black bg-blue-700 text-white flex items-center justify-center">
+                <div className="w-16 h-16 border-2 border-black bg-primary text-white flex items-center justify-center">
                   <span className="font-mono font-bold text-lg">M</span>
                 </div>
                 <div className="flex gap-1">
@@ -607,7 +619,7 @@ export default function DashboardPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 hover:bg-blue-100 hover:text-blue-700 z-10 rounded-none relative"
+                        className="h-8 w-8 hover:bg-blue-100 hover:text-primary z-10 rounded-none relative"
                         onClick={handleRetryProcessing}
                         disabled={isRetrying}
                         aria-label={t('dashboard.retryProcessing')}
@@ -651,7 +663,7 @@ export default function DashboardPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-xs h-7 rounded-none border-red-600 text-red-600 hover:bg-red-50"
+                      className="text-xs h-7 rounded-none border-destructive text-destructive hover:bg-red-50"
                       onClick={handleDeleteAndReupload}
                     >
                       {t('dashboard.deleteAndReupload')}
@@ -684,7 +696,7 @@ export default function DashboardPage() {
                     <span className="font-mono font-bold">{getMonogram(title)}</span>
                   </div>
                   <span className="font-mono text-xs text-steel-grey uppercase">
-                    {resume.processing_status}
+                    {t(getProcessingStatusLabelKey(resume.processing_status))}
                   </span>
                 </div>
                 <CardTitle className="text-lg">
@@ -746,10 +758,10 @@ export default function DashboardPage() {
       </SwissGrid>
 
       {/* Conditional mount: closing discards workspace-only state/polls. */}
-      {isDiagnosisWorkspaceOpen && (
-        <DiagnosisWorkspace
+      {isImportWorkspaceOpen && (
+        <ResumeImportWorkspace
           open
-          onClose={() => setIsDiagnosisWorkspaceOpen(false)}
+          onClose={() => setIsImportWorkspaceOpen(false)}
           onResumeMutated={() => void loadTailoredResumes()}
         />
       )}

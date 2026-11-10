@@ -546,9 +546,6 @@ async def test_auxiliary_blank_and_failed_outputs_become_durable_warnings(
     )
     monkeypatch.setattr(resumes, "get_content_language", lambda: "en")
     monkeypatch.setattr(
-        resumes, "generate_resume_title", AsyncMock(return_value="   ")
-    )
-    monkeypatch.setattr(
         resumes, "generate_cover_letter", AsyncMock(return_value="\n")
     )
     monkeypatch.setattr(
@@ -572,13 +569,14 @@ async def test_auxiliary_blank_and_failed_outputs_become_durable_warnings(
     assert response.status_code == 200, response.text
     warnings = response.json()["data"]["warnings"]
     assert warnings == [
-        "Title generation failed",
         "Cover Letter generation failed",
         "Outreach generation failed",
     ]
     stored = await isolated_db.get_resume(response.json()["data"]["resume_id"])
     assert stored is not None
     assert stored["processing_status"] == "ready"
-    assert stored.get("title") is None
+    # The title never depends on an LLM call: it is the deterministic
+    # 姓名-岗位名称 built from the resume facts.
+    assert stored.get("title") == "Jane Doe-Senior Backend Engineer"
     assert stored.get("cover_letter") is None
     assert stored.get("outreach_message") is None

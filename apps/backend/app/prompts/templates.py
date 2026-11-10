@@ -599,6 +599,26 @@ Requirements:
 
 Output plain text only. No JSON, no markdown formatting."""
 
+COVER_LETTER_NO_JD_PROMPT = """Write a concise cover letter based only on the candidate's resume. No job description is provided.
+
+IMPORTANT: Write in {output_language}.
+
+Candidate Resume (JSON):
+{resume_data}
+
+Requirements:
+- 100-150 words maximum
+- 3-4 short paragraphs with clear, logical flow
+- Opening: State the candidate's professional identity and target direction directly, grounded in the resume (no generic greetings to a specific employer)
+- Middle: Highlight the 2-3 strongest qualifications from the resume (achievements with concrete metrics where the resume provides them), most relevant first
+- Closing: Simple, confident availability for a conversation
+- Do NOT invent information not in the resume
+- Do NOT reference a specific company, job posting, or job description, since none is provided
+- Tone: Confident peer, not eager applicant
+- Do NOT use em dash ("—") anywhere in the writing/output, even if it exists, remove it
+
+Output plain text only. No JSON, no markdown formatting."""
+
 OUTREACH_MESSAGE_PROMPT = """Generate a cold outreach message for LinkedIn or email about this job opportunity.
 
 IMPORTANT: Write in {output_language}.
@@ -616,6 +636,27 @@ Guidelines:
 - End with low-friction ask: "Worth a quick chat?" not "I'd love the opportunity to discuss"
 - Tone: How you'd message a former colleague, not a stranger
 - Do NOT include placeholder brackets
+- Do NOT use phrases like "excited about" or "passionate about"
+- Do NOT use em dash ("—") anywhere in the writing/output, even if it exists, remove it
+
+Output plain text only. No JSON, no markdown formatting."""
+
+OUTREACH_NO_JD_PROMPT = """Generate a short professional outreach message based only on the candidate's resume. No job description or recipient company is provided, so write a general-purpose networking message.
+
+IMPORTANT: Write in {output_language}.
+
+Candidate Resume (JSON):
+{resume_data}
+
+Guidelines:
+- 70-100 words maximum (shorter than a cover letter)
+- Open with the candidate's professional identity and strongest, resume-grounded qualification, not "I'm reaching out" or "I saw your posting"
+- Include one concrete achievement with a metric where the resume provides one
+- Frame the message as a general introduction suitable for an in-platform private message to a recruiter or hiring contact
+- End with a low-friction ask such as "Worth a quick chat?"
+- Do NOT reference a specific company, job posting, or job description, since none is provided
+- Do NOT include placeholder brackets
+- Do NOT invent information not in the resume
 - Do NOT use phrases like "excited about" or "passionate about"
 - Do NOT use em dash ("—") anywhere in the writing/output, even if it exists, remove it
 
@@ -675,6 +716,58 @@ Content requirements:
 - Keep all suggested answer points factual and resume-grounded.
 - Do NOT use markdown fences or commentary outside the JSON."""
 
+INTERVIEW_PREP_NO_JD_PROMPT = """Generate structured interview preparation based only on the candidate's resume. No job description is provided.
+
+IMPORTANT: Write in {output_language}.
+Do NOT translate JSON property names. Keep every JSON key exactly as shown in the schema; translate only string values.
+
+Candidate Resume (JSON):
+{resume_data}
+
+Truthfulness guardrails:
+- Use only evidence from the resume JSON.
+- Do NOT invent experience, tools, employers, metrics, certifications, skills, responsibilities, education, projects, or claims beyond the provided evidence.
+- Do NOT imply the candidate has a skill or background unless it is present in the resume.
+- Treat the candidate's stated target role (求职意向) as the interview context; when it is absent, prepare for a role matching the candidate's demonstrated experience.
+- Skill gaps are preparation targets only: adjacent skills and topics a candidate with this background is commonly asked about. They are not claimed candidate skills.
+
+Return ONLY a valid JSON object with exactly these top-level keys:
+{{
+  "role_fit_analysis": ["Short evidence-based observation about how the resume fits the candidate's target direction"],
+  "resume_questions": [
+    {{
+      "question": "Interview question grounded in the resume evidence",
+      "focus_area": "Resume evidence being tested",
+      "suggested_answer_points": ["Truthful point based on resume evidence"]
+    }}
+  ],
+  "project_follow_ups": [
+    {{
+      "question": "Follow-up question about a real resume project or experience",
+      "focus_area": "Project, impact, tradeoff, or implementation detail",
+      "suggested_answer_points": ["Truthful point based on resume evidence"]
+    }}
+  ],
+  "skill_gaps": [
+    {{
+      "skill": "Adjacent skill or topic to prepare, suggested by the candidate's background",
+      "why_it_matters": "Why this topic commonly comes up for candidates with this profile",
+      "preparation_suggestion": "How to prepare without claiming unsupported experience"
+    }}
+  ],
+  "talking_points": ["Concise talking point grounded in the resume"]
+}}
+
+Content requirements:
+- role_fit_analysis: 3-5 bullets.
+- resume_questions: 5-8 questions.
+- project_follow_ups: 3-6 questions.
+- skill_gaps: 3-5 preparation targets.
+- talking_points: 5-8 concise points.
+- Keep all suggested answer points factual and resume-grounded.
+- Do NOT reference a specific company, job posting, or job description, since none is provided.
+- Do NOT use markdown fences or commentary outside the JSON."""
+
 GENERATE_TITLE_PROMPT = """Extract the job title and company name from this job description.
 
 IMPORTANT: Write in {output_language}.
@@ -687,9 +780,21 @@ Rules:
 - If the company name is not found, return just the role (e.g., "Senior Frontend Engineer")
 - Maximum 60 characters
 - Use the most specific role title mentioned
-- Do not add any other text, quotes, or formatting
+- Output exactly ONE line containing only the title, no quotes or formatting
+- Never describe the task or echo this instruction: do not start with phrases
+  like "The user wants", "Here is", "Sure", "用户", "以下是", "好的"
+- No reasoning, no commentary, no greeting — the first character you emit must
+  be the first character of the title itself
 
 Output the title only, nothing else."""
+
+# Appended on retry when a model answers with a request-paraphrase preamble
+# instead of the title (observed on reasoning-style OpenAI-compatible models).
+GENERATE_TITLE_STRICT_REMINDER = """
+
+CRITICAL REMINDER: Your previous response described the task instead of
+performing it. Respond with the title alone on one line in {output_language}.
+Any text other than the title is a failure."""
 
 # Alias for backward compatibility
 RESUME_SCHEMA = RESUME_SCHEMA_EXAMPLE

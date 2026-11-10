@@ -2,9 +2,13 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.database import DatabaseBusyError, db
+from app.routers.request_bodies import (
+    MAX_JSON_REQUEST_BYTES,
+    read_limited_json_model,
+)
 from app.schemas import JobUploadRequest, JobUploadResponse
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
@@ -12,12 +16,18 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("/upload", response_model=JobUploadResponse)
-async def upload_job_descriptions(request: JobUploadRequest) -> JobUploadResponse:
+async def upload_job_descriptions(http_request: Request) -> JobUploadResponse:
     """Upload one or more job descriptions.
 
     Stores the raw text for later use in resume tailoring.
     Returns an array of job_ids corresponding to the input array.
     """
+    request = await read_limited_json_model(
+        http_request,
+        JobUploadRequest,
+        MAX_JSON_REQUEST_BYTES,
+        detail="Job descriptions are too large. Please try again.",
+    )
     if not request.job_descriptions:
         raise HTTPException(status_code=400, detail="No job descriptions provided")
 

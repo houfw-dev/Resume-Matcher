@@ -560,3 +560,86 @@ describe('ResumeWizardPage', () => {
     expect(screen.queryByRole('button', { name: 'resumeWizard.actions.create' })).toBeNull();
   });
 });
+
+describe('ResumeWizardPage — completion receipt next-step CTAs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  function seedReceipt(resumeId: string): void {
+    localStorage.setItem(
+      'resume_wizard_draft',
+      JSON.stringify({ schemaVersion: 1, completedResumeId: resumeId })
+    );
+  }
+
+  it('renders both the builder and tailor next-step buttons on the receipt', async () => {
+    seedReceipt('resume_123');
+    render(<ResumeWizardPage />);
+
+    expect(
+      await screen.findByRole('button', { name: 'resumeWizard.actions.openCreated' })
+    ).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: 'resumeWizard.actions.tailorCreated' })
+    ).toBeVisible();
+    // The question form is gone: the receipt replaces it entirely.
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('routes the tailor CTA to /tailor with the new resume preselected via ?source=', async () => {
+    seedReceipt('resume_123');
+    render(<ResumeWizardPage />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'resumeWizard.actions.tailorCreated' })
+    );
+
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith('/tailor?source=resume_123');
+  });
+
+  it('percent-encodes special characters in the tailor source id', async () => {
+    seedReceipt('res/1 2');
+    render(<ResumeWizardPage />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'resumeWizard.actions.tailorCreated' })
+    );
+
+    expect(push).toHaveBeenCalledWith('/tailor?source=res%2F1%202');
+  });
+
+  it('keeps the builder CTA routing to /builder with the created id', async () => {
+    seedReceipt('resume_123');
+    render(<ResumeWizardPage />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'resumeWizard.actions.openCreated' })
+    );
+
+    expect(push).toHaveBeenCalledWith('/builder?id=resume_123');
+  });
+
+  it('surfaces the navigation error and keeps the receipt when tailor routing throws', async () => {
+    seedReceipt('resume_123');
+    push.mockImplementationOnce(() => {
+      throw new Error('navigation unavailable');
+    });
+    render(<ResumeWizardPage />);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'resumeWizard.actions.tailorCreated' })
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'resumeWizard.errors.createdNavigationFailed'
+    );
+    // Both recovery CTAs stay mounted so the user can retry either path.
+    expect(
+      screen.getByRole('button', { name: 'resumeWizard.actions.tailorCreated' })
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'resumeWizard.actions.openCreated' })).toBeVisible();
+  });
+});

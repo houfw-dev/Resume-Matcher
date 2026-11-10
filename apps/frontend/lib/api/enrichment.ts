@@ -58,10 +58,14 @@ export interface EnhancementPreview {
  * Analyze a resume to identify items that need enrichment.
  * Returns items with weak descriptions and clarifying questions.
  */
-export async function analyzeResume(resumeId: string): Promise<AnalysisResponse> {
+export async function analyzeResume(
+  resumeId: string,
+  signal?: AbortSignal
+): Promise<AnalysisResponse> {
   const res = await apiFetch(`/enrichment/analyze/${resumeId}`, {
     method: 'POST',
     credentials: 'include',
+    signal,
   });
 
   if (!res.ok) {
@@ -77,12 +81,18 @@ export async function analyzeResume(resumeId: string): Promise<AnalysisResponse>
  */
 export async function generateEnhancements(
   resumeId: string,
-  answers: AnswerInput[]
+  answers: AnswerInput[],
+  signal?: AbortSignal
 ): Promise<EnhancementPreview> {
-  const res = await apiPost('/enrichment/enhance', {
-    resume_id: resumeId,
-    answers,
-  });
+  const res = await apiPost(
+    '/enrichment/enhance',
+    {
+      resume_id: resumeId,
+      answers,
+    },
+    undefined,
+    signal
+  );
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));

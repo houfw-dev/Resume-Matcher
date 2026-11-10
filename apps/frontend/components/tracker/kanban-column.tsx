@@ -14,6 +14,7 @@ interface KanbanColumnProps {
   sharedResumeIds: Set<string>;
   onToggleSelect: (id: string) => void;
   onOpen: (id: string) => void;
+  dragDisabled?: boolean;
 }
 
 export function KanbanColumn({
@@ -23,6 +24,7 @@ export function KanbanColumn({
   sharedResumeIds,
   onToggleSelect,
   onOpen,
+  dragDisabled = false,
 }: KanbanColumnProps) {
   const { t } = useTranslations();
   // Droppable wrapper so EMPTY columns still accept a dropped card. The id is
@@ -62,6 +64,7 @@ export function KanbanColumn({
                 }
                 onToggleSelect={onToggleSelect}
                 onOpen={onOpen}
+                dragDisabled={dragDisabled}
               />
             ))
           )}

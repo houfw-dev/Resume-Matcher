@@ -40,6 +40,40 @@ class TestListAndGroup:
         assert len(columns["interview"]) == 1
         assert columns["applied"][0]["resume_id"] == "r1"
 
+    async def test_resume_id_query_filters_board(self, isolated_db):
+        await _seed_card(isolated_db, job_id="j1", resume_id="r1", status="applied")
+        await _seed_card(
+            isolated_db,
+            job_id="j2",
+            resume_id="r2",
+            master_resume_id="r1",
+            status="interview",
+        )
+        await _seed_card(isolated_db, job_id="j3", resume_id="r3", status="saved")
+        async with _client() as client:
+            resp = await client.get(
+                "/api/v1/applications", params={"resume_id": "r1"}
+            )
+        assert resp.status_code == 200
+        columns = resp.json()["columns"]
+        # All seven keys remain present; only matching cards are grouped.
+        assert set(columns.keys()) == set(APPLICATION_STATUS_ORDER)
+        ids = {card["application_id"] for col in columns.values() for card in col}
+        assert len(ids) == 2
+        assert len(columns["applied"]) == 1
+        assert len(columns["interview"]) == 1
+        assert columns["saved"] == []
+
+    async def test_unknown_resume_id_returns_empty_columns(self, isolated_db):
+        await _seed_card(isolated_db, job_id="j1", resume_id="r1")
+        async with _client() as client:
+            resp = await client.get(
+                "/api/v1/applications", params={"resume_id": "ghost"}
+            )
+        assert resp.status_code == 200
+        columns = resp.json()["columns"]
+        assert all(columns[s] == [] for s in APPLICATION_STATUS_ORDER)
+
 
 class TestManualAdd:
     async def test_manual_add_extracts_company_role(self, isolated_db):

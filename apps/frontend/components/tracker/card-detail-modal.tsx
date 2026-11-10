@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useTranslations } from '@/lib/i18n';
+import { formatLocaleMonthYear } from '@/lib/utils/format-date';
 import { getApplicationDetail, updateApplication, type ApplicationDetail } from '@/lib/api/tracker';
 
 interface CardDetailModalProps {
@@ -31,7 +32,7 @@ export function CardDetailModal({
   onOpenChange,
   onUpdated,
 }: CardDetailModalProps) {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const router = useRouter();
   const [detail, setDetail] = useState<ApplicationDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -105,14 +106,7 @@ export function CardDetailModal({
               <span className="border border-black bg-paper-tint px-2 py-0.5">
                 {t(`tracker.columns.${detail.status}`)}
               </span>
-              {detail.applied_at && (
-                <span>
-                  {new Date(detail.applied_at).toLocaleDateString('en-US', {
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </span>
-              )}
+              {detail.applied_at && <span>{formatLocaleMonthYear(detail.applied_at, locale)}</span>}
             </div>
 
             <div className="space-y-1">

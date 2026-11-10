@@ -12,8 +12,10 @@ import {
   LATE_CERTIFICATIONS_KEY,
 } from '@/lib/utils/section-order';
 import {
+  DEFAULT_PERSONAL_INFO_LABELS,
   resolveAdditionalModuleTitle,
   type LateAdditionalModuleKind,
+  type PersonalInfoLabels,
 } from '@/lib/utils/resume-headings';
 import { formatDateRange } from '@/lib/utils';
 import { DescriptionList } from './description-list';
@@ -27,6 +29,7 @@ interface ResumeModernProps {
   showContactIcons?: boolean;
   additionalSectionLabels?: Partial<AdditionalSectionLabels>;
   sectionHeadings?: Partial<ResumeSectionHeadings>;
+  personalInfoLabels?: Partial<PersonalInfoLabels>;
 }
 
 /**
@@ -43,8 +46,14 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
   showContactIcons = false,
   additionalSectionLabels,
   sectionHeadings,
+  personalInfoLabels,
 }) => {
   const { personalInfo, summary, workExperience, education, personalProjects, additional } = data;
+
+  const infoLabels: PersonalInfoLabels = {
+    ...DEFAULT_PERSONAL_INFO_LABELS,
+    ...personalInfoLabels,
+  };
 
   // Visible sections in canonical order plus the render-only late markers for
   // 培训与证书 / 荣誉奖项 (projected to the back by getRenderSections).
@@ -60,8 +69,14 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
     GitHub: <Github size={12} />,
   };
 
-  // Helper function to render contact details
-  const renderContactDetail = (label: string, value?: string, hrefPrefix: string = '') => {
+  // Helper function to render contact details. `displayLabel` renders a muted
+  // label before the value (e.g. 个人网站： https://…) for personal links.
+  const renderContactDetail = (
+    label: string,
+    value?: string,
+    hrefPrefix: string = '',
+    displayLabel?: string
+  ) => {
     if (!value) return null;
 
     let finalHrefPrefix = hrefPrefix;
@@ -74,10 +89,9 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
     }
 
     const href = finalHrefPrefix + value;
-    const isLink =
-      finalHrefPrefix.startsWith('http') ||
-      finalHrefPrefix.startsWith('mailto:') ||
-      finalHrefPrefix.startsWith('tel:');
+    // Test the composed href (not just the prefix): an already-absolute
+    // "https://…" value with an empty prefix must still render as a link.
+    const isLink = href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:');
 
     let displayText = value;
     if (isLink && (label === 'LinkedIn' || label === 'GitHub' || label === 'Website')) {
@@ -87,6 +101,7 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
     return (
       <span className="inline-flex items-center gap-1">
         {showContactIcons && contactIcons[label]}
+        {displayLabel && <span className={baseStyles['text-muted']}>{displayLabel}</span>}
         {isLink ? (
           <a
             href={href}
@@ -323,19 +338,19 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
             {personalInfo.website && (
               <>
                 <span className={baseStyles['text-muted']}>,</span>
-                {renderContactDetail('Website', personalInfo.website)}
+                {renderContactDetail('Website', personalInfo.website, '', infoLabels.website)}
               </>
             )}
             {personalInfo.linkedin && (
               <>
                 <span className={baseStyles['text-muted']}>,</span>
-                {renderContactDetail('LinkedIn', personalInfo.linkedin)}
+                {renderContactDetail('LinkedIn', personalInfo.linkedin, '', infoLabels.linkedin)}
               </>
             )}
             {personalInfo.github && (
               <>
                 <span className={baseStyles['text-muted']}>,</span>
-                {renderContactDetail('GitHub', personalInfo.github)}
+                {renderContactDetail('GitHub', personalInfo.github, '', infoLabels.github)}
               </>
             )}
           </div>

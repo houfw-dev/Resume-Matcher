@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ResumeData } from '@/components/dashboard/resume-component';
-import { cleanTextBlock, normalizeTextHygiene } from '@/lib/utils/text-hygiene';
+import {
+  cleanTextBlock,
+  normalizeHeaderLinkValue,
+  normalizeTextHygiene,
+  sanitizeHeaderFactValue,
+} from '@/lib/utils/text-hygiene';
 
 const baseResume = (): ResumeData =>
   ({
@@ -161,6 +166,42 @@ describe('normalizeTextHygiene', () => {
     expect(info.workYears).toBe('15年+ 5年大型医院项目');
   });
 
+  it('self-heals glued blog-link cells from personalInfo facts', () => {
+    // Real upload (resume de8ce72b): the unrecognized "博客地址：" cell glued
+    // its Markdown link onto workYears; the link field holds the markdown raw.
+    const resume = baseResume();
+    resume.personalInfo = {
+      workYears: '13年 博客地址：[fengba.blog.csdn.net](https://fengba.blog.csdn.net/)',
+      educationLevel: '本科 学 校： 西安电子科技大学',
+      website: '[fengba.blog.csdn.net](https://fengba.blog.csdn.net/)',
+      linkedin: 'see https://www.linkedin.com/in/wanghao here',
+      github: 'github.com/wanghao',
+    } as ResumeData['personalInfo'];
+
+    const info = normalizeTextHygiene(resume).personalInfo!;
+    expect(info.workYears).toBe('13年');
+    expect(info.educationLevel).toBe('本科');
+    expect(info.website).toBe('https://fengba.blog.csdn.net/');
+    expect(info.linkedin).toBe('https://www.linkedin.com/in/wanghao');
+    expect(info.github).toBe('github.com/wanghao');
+  });
+
+  it('leaves clean personalInfo facts without internal boundaries untouched', () => {
+    const resume = baseResume();
+    resume.personalInfo = {
+      gender: '男',
+      age: '35岁',
+      workYears: '5年大型医院项目，3年电商',
+      educationLevel: '统招本科(211)',
+    } as ResumeData['personalInfo'];
+
+    const info = normalizeTextHygiene(resume).personalInfo!;
+    expect(info.gender).toBe('男');
+    expect(info.age).toBe('35岁');
+    expect(info.workYears).toBe('5年大型医院项目，3年电商');
+    expect(info.educationLevel).toBe('统招本科(211)');
+  });
+
   it('is idempotent', () => {
     const resume = baseResume();
     resume.summary = ' 10 年经验。\n\n\n主导架构演进。\n';
@@ -199,5 +240,51 @@ describe('cleanTextBlock', () => {
   it('leaves non-string values untouched', () => {
     expect(cleanTextBlock(undefined, { stripEndings: true })).toBeUndefined();
     expect(cleanTextBlock(null, { stripEndings: true })).toBeNull();
+  });
+});
+
+describe('sanitizeHeaderFactValue', () => {
+  it('truncates a glued markdown link and its label', () => {
+    expect(
+      sanitizeHeaderFactValue(
+        '13年 博客地址：[fengba.blog.csdn.net](https://fengba.blog.csdn.net/)'
+      )
+    ).toBe('13年');
+  });
+
+  it('truncates a glued bare URL', () => {
+    expect(sanitizeHeaderFactValue('13年 https://fengba.blog.csdn.net/')).toBe('13年');
+  });
+
+  it('truncates a glued spaced CJK label cell', () => {
+    expect(sanitizeHeaderFactValue('本科 学 校： 西安电子科技大学')).toBe('本科');
+  });
+
+  it('keeps clean fact values byte-identical', () => {
+    for (const value of ['男', '35岁', '8年', '统招本科(211)', '5年大型医院项目，3年电商']) {
+      expect(sanitizeHeaderFactValue(value)).toBe(value);
+    }
+  });
+});
+
+describe('normalizeHeaderLinkValue', () => {
+  it('collapses a markdown link to its URL target', () => {
+    expect(normalizeHeaderLinkValue('[fengba.blog.csdn.net](https://fengba.blog.csdn.net/)')).toBe(
+      'https://fengba.blog.csdn.net/'
+    );
+  });
+
+  it('extracts a bare URL embedded in prose', () => {
+    expect(normalizeHeaderLinkValue('see https://example.com/x here')).toBe(
+      'https://example.com/x'
+    );
+  });
+
+  it('passes plain hosts through for the render layer to promote', () => {
+    expect(normalizeHeaderLinkValue('github.com/wanghao')).toBe('github.com/wanghao');
+  });
+
+  it('falls back to bracket text when the link target is empty', () => {
+    expect(normalizeHeaderLinkValue('[my-blog]()')).toBe('my-blog');
   });
 });

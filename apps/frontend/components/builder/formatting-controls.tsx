@@ -168,7 +168,7 @@ export const FormattingControls: React.FC<FormattingControlsProps> = ({ settings
         className="w-full flex items-center justify-between p-3 hover:bg-paper-tint transition-colors"
       >
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-blue-700"></div>
+          <div className="w-2 h-2 bg-primary"></div>
           <span className="font-mono text-xs font-bold uppercase tracking-wider">
             {t('builder.formatting.panelTitle')}
           </span>
@@ -195,7 +195,7 @@ export const FormattingControls: React.FC<FormattingControlsProps> = ({ settings
                   onClick={() => handleTemplateChange(template.id)}
                   className={`group flex flex-col items-center p-2 border transition-all ${
                     settings.template === template.id
-                      ? 'border-blue-700 bg-white shadow-[2px_2px_0px_0px_#1D4ED8]'
+                      ? 'border-primary bg-white shadow-[2px_2px_0px_0px_#1D4ED8]'
                       : 'border-black bg-white hover:bg-paper-tint hover:shadow-sw-xs'
                   }`}
                   title={templateLabels[template.id].description}
@@ -208,7 +208,7 @@ export const FormattingControls: React.FC<FormattingControlsProps> = ({ settings
                   </div>
                   <span
                     className={`font-mono text-[9px] uppercase tracking-wider font-bold ${
-                      settings.template === template.id ? 'text-blue-700' : 'text-ink-soft'
+                      settings.template === template.id ? 'text-primary' : 'text-ink-soft'
                     }`}
                   >
                     {templateLabels[template.id].name}
@@ -233,7 +233,7 @@ export const FormattingControls: React.FC<FormattingControlsProps> = ({ settings
                     onClick={() => handleAccentColorChange(color)}
                     className={`flex items-center gap-2 px-3 py-2 border font-mono text-xs transition-all ${
                       settings.accentColor === color
-                        ? 'border-blue-700 bg-white shadow-[2px_2px_0px_0px_#1D4ED8]'
+                        ? 'border-primary bg-white shadow-[2px_2px_0px_0px_#1D4ED8]'
                         : 'border-black bg-white hover:bg-paper-tint'
                     }`}
                     title={t(`builder.formatting.accentColors.${color}`)}
@@ -261,7 +261,7 @@ export const FormattingControls: React.FC<FormattingControlsProps> = ({ settings
                   onClick={() => handlePageSizeChange(size)}
                   className={`flex-1 px-3 py-2 border font-mono text-xs transition-all ${
                     settings.pageSize === size
-                      ? 'border-blue-700 bg-white text-blue-700 shadow-[2px_2px_0px_0px_#1D4ED8]'
+                      ? 'border-primary bg-white text-primary shadow-[2px_2px_0px_0px_#1D4ED8]'
                       : 'border-black bg-white text-ink-soft hover:bg-paper-tint'
                   }`}
                   title={PAGE_SIZE_INFO[size].dimensions}
@@ -356,7 +356,7 @@ export const FormattingControls: React.FC<FormattingControlsProps> = ({ settings
                       onClick={() => handleHeaderFontChange(font)}
                       className={`px-2 py-1 font-mono text-xs border transition-all ${
                         settings.fontSize.headerFont === font
-                          ? 'bg-blue-700 text-white border-blue-700 shadow-sw-xs'
+                          ? 'bg-primary text-white border-primary shadow-sw-xs'
                           : 'bg-white text-ink-soft border-steel-grey hover:border-black'
                       }`}
                       style={{
@@ -385,7 +385,7 @@ export const FormattingControls: React.FC<FormattingControlsProps> = ({ settings
                       onClick={() => handleBodyFontChange(font)}
                       className={`px-2 py-1 font-mono text-xs border transition-all ${
                         settings.fontSize.bodyFont === font
-                          ? 'bg-blue-700 text-white border-blue-700 shadow-sw-xs'
+                          ? 'bg-primary text-white border-primary shadow-sw-xs'
                           : 'bg-white text-ink-soft border-steel-grey hover:border-black'
                       }`}
                       style={{
@@ -417,13 +417,13 @@ export const FormattingControls: React.FC<FormattingControlsProps> = ({ settings
                   onClick={handleCompactModeToggle}
                   className={`relative w-10 h-5 border-2 transition-all ${
                     settings.compactMode
-                      ? 'bg-blue-700 border-blue-700'
+                      ? 'bg-primary border-primary'
                       : 'bg-white border-steel-grey'
                   }`}
                 >
                   <span
                     className={`absolute top-0.5 w-3.5 h-3.5 bg-white border transition-all ${
-                      settings.compactMode ? 'left-5 border-blue-700' : 'left-0.5 border-steel-grey'
+                      settings.compactMode ? 'left-5 border-primary' : 'left-0.5 border-steel-grey'
                     }`}
                   />
                 </button>
@@ -438,14 +438,14 @@ export const FormattingControls: React.FC<FormattingControlsProps> = ({ settings
                   onClick={handleShowContactIconsToggle}
                   className={`relative w-10 h-5 border-2 transition-all ${
                     settings.showContactIcons
-                      ? 'bg-blue-700 border-blue-700'
+                      ? 'bg-primary border-primary'
                       : 'bg-white border-steel-grey'
                   }`}
                 >
                   <span
                     className={`absolute top-0.5 w-3.5 h-3.5 bg-white border transition-all ${
                       settings.showContactIcons
-                        ? 'left-5 border-blue-700'
+                        ? 'left-5 border-primary'
                         : 'left-0.5 border-steel-grey'
                     }`}
                   />
@@ -540,12 +540,12 @@ const MarginSlider: React.FC<MarginSliderProps> = ({ label, value, onChange }) =
                    [&::-webkit-slider-thumb]:appearance-none
                    [&::-webkit-slider-thumb]:w-3
                    [&::-webkit-slider-thumb]:h-3
-                   [&::-webkit-slider-thumb]:bg-blue-700
+                   [&::-webkit-slider-thumb]:bg-primary
                    [&::-webkit-slider-thumb]:border-none
                    [&::-webkit-slider-thumb]:cursor-pointer
                    [&::-moz-range-thumb]:w-3
                    [&::-moz-range-thumb]:h-3
-                   [&::-moz-range-thumb]:bg-blue-700
+                   [&::-moz-range-thumb]:bg-primary
                    [&::-moz-range-thumb]:border-none
                    [&::-moz-range-thumb]:cursor-pointer"
       />
@@ -578,7 +578,7 @@ const SpacingSelector: React.FC<SpacingSelectorProps> = ({ label, value, onChang
             onClick={() => onChange(level)}
             className={`w-6 h-6 font-mono text-xs border transition-all ${
               value === level
-                ? 'bg-blue-700 text-white border-blue-700 shadow-sw-xs'
+                ? 'bg-primary text-white border-primary shadow-sw-xs'
                 : 'bg-white text-ink-soft border-steel-grey hover:border-black'
             }`}
           >

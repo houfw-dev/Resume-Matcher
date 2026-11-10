@@ -194,7 +194,7 @@ export function DiffPreviewModal({
         </div>
 
         {errorMessage && (
-          <div className="mt-4 border-2 border-red-600 bg-red-50 p-3 font-mono text-xs text-red-700">
+          <div className="mt-4 border-2 border-destructive bg-red-50 p-3 font-mono text-xs text-red-700">
             {errorMessage}
           </div>
         )}

@@ -7,6 +7,7 @@ import type {
   ResumeFallbackLabels,
 } from '@/components/dashboard/resume-component';
 import { getSortedSections, getSectionMeta } from '@/lib/utils/section-helpers';
+import { DEFAULT_PERSONAL_INFO_LABELS, type PersonalInfoLabels } from '@/lib/utils/resume-headings';
 import { formatDateRange } from '@/lib/utils';
 import { DescriptionList } from './description-list';
 import { stripPointMarker } from './list-format';
@@ -19,6 +20,7 @@ interface ResumeVividProps {
   showContactIcons?: boolean;
   sectionHeadings?: Partial<ResumeSectionHeadings>;
   fallbackLabels?: Partial<ResumeFallbackLabels>;
+  personalInfoLabels?: Partial<PersonalInfoLabels>;
 }
 
 /**
@@ -37,8 +39,14 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
   showContactIcons = false,
   sectionHeadings,
   fallbackLabels,
+  personalInfoLabels,
 }) => {
   const { personalInfo, summary, workExperience, education, personalProjects, additional } = data;
+
+  const infoLabels: PersonalInfoLabels = {
+    ...DEFAULT_PERSONAL_INFO_LABELS,
+    ...personalInfoLabels,
+  };
 
   const clean = (items?: string[]) =>
     (items ?? []).filter((item): item is string => typeof item === 'string' && item.trim() !== '');
@@ -92,7 +100,13 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
     GitHub: <Github size={11} />,
   };
 
-  const renderContactDetail = (label: string, value?: string, hrefPrefix: string = '') => {
+  // `displayLabel` renders a muted label before the value (e.g. 个人网站： …).
+  const renderContactDetail = (
+    label: string,
+    value?: string,
+    hrefPrefix: string = '',
+    displayLabel?: string
+  ) => {
     if (!value) return null;
 
     let finalHrefPrefix = hrefPrefix;
@@ -105,10 +119,9 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
     }
 
     const href = finalHrefPrefix + value;
-    const isLink =
-      finalHrefPrefix.startsWith('http') ||
-      finalHrefPrefix.startsWith('mailto:') ||
-      finalHrefPrefix.startsWith('tel:');
+    // Test the composed href (not just the prefix): an already-absolute
+    // "https://…" value with an empty prefix must still render as a link.
+    const isLink = href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:');
 
     let displayText = value;
     if (isLink && (label === 'LinkedIn' || label === 'GitHub' || label === 'Website')) {
@@ -118,6 +131,7 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
     return (
       <span className={styles.contactChip}>
         {showContactIcons && <span className={styles.iconCircle}>{contactIcons[label]}</span>}
+        {displayLabel && <span className={baseStyles['text-muted']}>{displayLabel}</span>}
         {isLink ? (
           <a
             href={href}
@@ -160,9 +174,9 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
         {personalInfo?.title && <div className={styles.titleLine}>{personalInfo.title}</div>}
         {personalInfo && (
           <div className={`flex flex-wrap gap-x-4 gap-y-1 mt-2 ${styles.contactRow}`}>
-            {renderContactDetail('Website', personalInfo.website)}
-            {renderContactDetail('LinkedIn', personalInfo.linkedin)}
-            {renderContactDetail('GitHub', personalInfo.github)}
+            {renderContactDetail('Website', personalInfo.website, '', infoLabels.website)}
+            {renderContactDetail('LinkedIn', personalInfo.linkedin, '', infoLabels.linkedin)}
+            {renderContactDetail('GitHub', personalInfo.github, '', infoLabels.github)}
             {renderContactDetail('Email', personalInfo.email, 'mailto:')}
             {renderContactDetail('Phone', personalInfo.phone)}
             {renderContactDetail('Location', personalInfo.location)}
@@ -380,13 +394,24 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
                   className={`${baseStyles['resume-stack-tight']} ${baseStyles['resume-meta-sm']}`}
                 >
                   {personalInfo.linkedin && (
-                    <div>{renderContactDetail('LinkedIn', personalInfo.linkedin)}</div>
+                    <div>
+                      {renderContactDetail(
+                        'LinkedIn',
+                        personalInfo.linkedin,
+                        '',
+                        infoLabels.linkedin
+                      )}
+                    </div>
                   )}
                   {personalInfo.github && (
-                    <div>{renderContactDetail('GitHub', personalInfo.github)}</div>
+                    <div>
+                      {renderContactDetail('GitHub', personalInfo.github, '', infoLabels.github)}
+                    </div>
                   )}
                   {personalInfo.website && (
-                    <div>{renderContactDetail('Website', personalInfo.website)}</div>
+                    <div>
+                      {renderContactDetail('Website', personalInfo.website, '', infoLabels.website)}
+                    </div>
                   )}
                 </div>
               </div>

@@ -17,31 +17,101 @@ POST /api/v1/resumes/upload
 
 ## Resume Improvement
 
+Any **master or standalone resume** (`parent_id` NULL, `processing_status =
+"ready"`, with structured data) can be the tailoring source — not just the
+single master. All three entry points (`POST /resumes/improve/preview`,
+`/improve/confirm`, legacy `/improve`) run `_validate_tailor_source` first and
+return **400** when the source is an already-tailored resume (no nested
+grandchild chains), is still processing/failed, or has no processed data. The
+refinement truth baseline is the selected source itself, so keyword injection
+and master-alignment are grounded in the chosen resume rather than the global
+master.
+
 ```
-POST /api/v1/resumes/improve
+POST /api/v1/resumes/improve[/preview | /confirm]
 ├── Fetch resume + job from DB
+├── _validate_tailor_source(resume) → 400 on tailored/non-ready/no-data source
 ├── extract_job_keywords() → LLM
-├── improve_resume() → LLM
+├── improve_resume() / diff pipeline → LLM
+├── refine_resume(master_resume = selected source's structured data)
 ├── [If enabled] generate_cover_letter() → LLM
 ├── [If enabled] generate_outreach_message() → LLM
 ├── [If enabled] generate_interview_prep() → LLM
-├── db.create_resume(improved)
-├── db.create_improvement()
+├── db.create_resume(improved, parent_id = source resume id)
+├── db.create_improvement(original_resume_id = source resume id)
 └── Return {data, cover_letter, outreach_message, interview_prep}
 ```
 
-## Interview Prep Generation
+The frontend picks the source on `/tailor` (`lib/utils/tailor-source.ts`):
+eligible list = `parent_id` NULL + `ready`; selection priority is `?source=`
+query param (set by the "tailor from this resume" button on the resume viewer)
+→ the master → the cached localStorage master id → the first eligible resume;
+with no eligible resume the page redirects to `/dashboard`.
+
+## On-Demand AI Content (any resume)
+
+The three on-demand generation endpoints share one job-context rule
+(`_resolve_generation_job_context`): tailored resumes load their stored job via
+the improvement record; standalone resumes generate from the resume alone with
+an empty JD.
 
 ```
 POST /api/v1/resumes/{id}/generate-interview-prep
-├── Require tailored resume (parent_id)
-├── Fetch improvement record and associated job description
-├── Require processed resume data
+├── Fetch resume (404 if missing); require processed_data (400 otherwise)
+├── parent_id set?
+│   ├── Yes → improvement record (400 if missing) → job (404 if missing) → its JD
+│   └── No  → job_description = ""
+├── _validate_ai_sources(resume, job)
+├── JD blank?
+│   ├── Yes → INTERVIEW_PREP_NO_JD_PROMPT (resume + 求职意向 only)
+│   └── No  → INTERVIEW_PREP_PROMPT (truncated JD; custom prompts unsupported here)
 ├── generate_interview_prep() → LLM JSON
 ├── Validate InterviewPrepData
 ├── Save resumes.interview_prep as serialized JSON TEXT
 └── Return {interview_prep, message}
 ```
+
+`POST /resumes/{id}/generate-cover-letter` and
+`POST /resumes/{id}/generate-outreach` follow the same resolution rule. The
+cover-letter and outreach services branch on a blank JD
+(`COVER_LETTER_NO_JD_PROMPT` / `OUTREACH_NO_JD_PROMPT`, built-in templates
+only); on the JD-present path custom feature-prompt overrides remain supported.
+Outreach's no-JD branch skips JD size validation entirely.
+
+## Cover Letter Generation (explicit JD, any resume)
+
+```
+POST /api/v1/resumes/{id}/cover-letter/generate  body {"job_description": str}
+├── Fetch resume (404 if missing); require processed_data (400 otherwise)
+├── Validate source sizes (422 when JD exceeds 100,000 chars)
+├── job_description blank?
+│   ├── Yes → COVER_LETTER_NO_JD_PROMPT (resume-only, no custom-prompt override)
+│   └── No  → COVER_LETTER_PROMPT (custom feature prompt override supported)
+├── generate_cover_letter() → LLM plain text in the content language
+├── Save resumes.cover_letter (reuses PATCH update and PDF export paths)
+└── Return {content, message}
+```
+
+## Content PDF Exports (stored content, no LLM)
+
+```
+GET /api/v1/resumes/{id}/{cover-letter|interview-prep|jd-match}/pdf?pageSize=&lang=
+├── Fetch resume (404 if missing)
+├── Cover letter / interview prep: 404 when the stored content is empty
+├── JD match: standalone resume → 404 (tailored resumes only);
+│   tailored → re-resolve stored job (400 missing improvement / 404 missing job)
+├── Build {frontend_base_url}/print/<kind>/{id}?pageSize=…[&lang=…]
+├── render_resume_pdf(selector=".cover-letter-print" |
+│                     ".interview-prep-print" | ".jd-match-print")
+├── PDFRenderError → 503 (details logged)
+└── application/pdf, attachment filename <kind>_{id}.pdf
+```
+
+The `/print/interview-prep/[id]` and `/print/jd-match/[id]` pages are server
+components like the existing print routes (never `'use client'`, no `app/api`
+routes): they fetch via `API_BASE` with `cache: 'no-store'`, localize through
+`translate(locale, key)`, and the JD-match page reuses the pure
+`keyword-matcher` utilities so its stats/highlights match the on-screen tab.
 
 ## PDF Generation
 
@@ -118,8 +188,8 @@ POST /api/v1/jobs/upload
 ## Application Tracker
 
 ```
-GET /api/v1/applications
-├── db.list_applications()
+GET /api/v1/applications[?resume_id=<id>]
+├── db.list_applications(resume_id=...)   # optional filter: resume_id OR master_resume_id match
 └── Return {columns}        # grouped by the 7 status keys (all present):
                             #   saved/applied/no_response/response/interview/accepted/rejected
 

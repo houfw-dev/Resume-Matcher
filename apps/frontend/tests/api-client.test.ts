@@ -82,6 +82,33 @@ describe('api client', () => {
       expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
       expect(init.body).toBe(JSON.stringify({ job_descriptions: ['x'] }));
     });
+
+    it('forwards a caller signal so long-running POSTs can be cancelled', async () => {
+      let requestSignal: AbortSignal | undefined;
+      fetchMock.mockImplementationOnce((_url: string, init: RequestInit) => {
+        // apiFetch wires the internal controller to the caller signal rather
+        // than passing the caller signal through verbatim.
+        requestSignal = init.signal ?? undefined;
+        return new Promise<Response>(() => undefined);
+      });
+      const caller = new AbortController();
+      const request = apiPost(
+        '/resumes/r1/diagnose',
+        { target_title: null },
+        undefined,
+        caller.signal
+      );
+
+      expect(requestSignal).toBeInstanceOf(AbortSignal);
+      expect(requestSignal?.aborted).toBe(false);
+
+      caller.abort('user cancelled');
+      await expect(request).rejects.toMatchObject({
+        name: 'AbortError',
+        cause: 'user cancelled',
+      });
+      expect(requestSignal?.aborted).toBe(true);
+    });
   });
 
   describe('timeout / error handling', () => {

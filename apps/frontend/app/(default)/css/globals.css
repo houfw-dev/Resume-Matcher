@@ -159,12 +159,21 @@
   .resume-print,
   .resume-print *,
   .cover-letter-print,
-  .cover-letter-print * {
+  .cover-letter-print *,
+  .interview-prep-print,
+  .interview-prep-print *,
+  .jd-match-print,
+  .jd-match-print *,
+  .outreach-print,
+  .outreach-print * {
     visibility: visible !important;
   }
 
   .resume-print,
-  .cover-letter-print {
+  .cover-letter-print,
+  .interview-prep-print,
+  .jd-match-print,
+  .outreach-print {
     width: 100% !important;
     max-width: 210mm !important;
     min-height: 0 !important;

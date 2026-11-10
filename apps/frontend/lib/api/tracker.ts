@@ -99,9 +99,14 @@ async function asJson<T>(res: Response, fallback: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-// List all applications grouped by status column.
-export async function listApplications(): Promise<ApplicationListResponse> {
-  const res = await apiFetch('/applications', { credentials: 'include' });
+// List all applications grouped by status column. Pass `resumeId` to narrow
+// the board to cards that applied that resume directly or descend from it
+// (server matches resume_id OR master_resume_id).
+export async function listApplications(options?: {
+  resumeId?: string;
+}): Promise<ApplicationListResponse> {
+  const query = options?.resumeId ? `?resume_id=${encodeURIComponent(options.resumeId)}` : '';
+  const res = await apiFetch(`/applications${query}`, { credentials: 'include' });
   return asJson<ApplicationListResponse>(res, 'Failed to load applications');
 }
 

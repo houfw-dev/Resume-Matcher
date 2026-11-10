@@ -156,14 +156,23 @@ export async function apiFetch(
 
 /**
  * POST request with JSON body.
+ *
+ * An optional caller `signal` is forwarded to apiFetch so long-running LLM
+ * endpoints can be cancelled by the user (rejects with an AbortError).
  */
-export async function apiPost<T>(endpoint: string, body: T, timeoutMs?: number): Promise<Response> {
+export async function apiPost<T>(
+  endpoint: string,
+  body: T,
+  timeoutMs?: number,
+  signal?: AbortSignal
+): Promise<Response> {
   return apiFetch(
     endpoint,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
     },
     timeoutMs
   );

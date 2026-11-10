@@ -30,15 +30,15 @@ vi.mock('@/components/dashboard/resume-upload-dialog', () => ({ ResumeUploadDial
 vi.mock('@/components/dashboard/master-resume-choice-dialog', () => ({
   MasterResumeChoiceDialog: () => null,
 }));
-vi.mock('@/components/diagnosis/diagnosis-workspace', () => ({
-  DiagnosisWorkspace: ({
+vi.mock('@/components/dashboard/resume-import-workspace', () => ({
+  ResumeImportWorkspace: ({
     onClose,
     onResumeMutated,
   }: {
     onClose: () => void;
     onResumeMutated?: () => void;
   }) => (
-    <div role="dialog" aria-label="ws-stub" data-testid="diagnosis-workspace">
+    <div role="dialog" aria-label="ws-stub" data-testid="resume-import-workspace">
       <button type="button" onClick={onClose}>
         ws-close
       </button>
@@ -69,20 +69,20 @@ beforeEach(() => {
   });
 });
 
-describe('dashboard diagnosis entry card', () => {
-  it('opens the workspace from the empty-account card and closes back to the dashboard', async () => {
+describe('dashboard resume import entry card', () => {
+  it('opens the import workspace from the empty-account card and closes back to the dashboard', async () => {
     list.mockResolvedValue([]);
     render(<Dashboard />);
 
-    const card = await screen.findByRole('button', { name: 'diagnosis.workspace.cta' });
+    const card = await screen.findByRole('button', { name: 'importWorkspace.cta' });
     expect(card).toBeInTheDocument();
 
     fireEvent.click(card);
-    expect(await screen.findByTestId('diagnosis-workspace')).toBeInTheDocument();
+    expect(await screen.findByTestId('resume-import-workspace')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'ws-close' }));
     await waitFor(() =>
-      expect(screen.queryByTestId('diagnosis-workspace')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('resume-import-workspace')).not.toBeInTheDocument()
     );
   });
 
@@ -98,29 +98,43 @@ describe('dashboard diagnosis entry card', () => {
     // branches, so the early no-master instance would otherwise be detached).
     await screen.findByText('dashboard.masterResume');
 
-    const card = screen.getByRole('button', { name: 'diagnosis.workspace.cta' });
+    const card = screen.getByRole('button', { name: 'importWorkspace.cta' });
     fireEvent.keyDown(card, { key: 'Enter' });
-    expect(await screen.findByTestId('diagnosis-workspace')).toBeInTheDocument();
+    expect(await screen.findByTestId('resume-import-workspace')).toBeInTheDocument();
   });
 
-  it('groups diagnosis and create actions in the footer bar with the tracker link', async () => {
+  it('localizes processing status on tailored cards instead of the raw enum', async () => {
+    list.mockResolvedValue([
+      row('master', true),
+      { ...row('tailored-failed'), processing_status: 'failed' },
+      { ...row('tailored-ready'), processing_status: 'ready' },
+    ]);
+    render(<Dashboard />);
+    await screen.findByText('dashboard.masterResume');
+
+    expect(screen.getByText('dashboard.status.failed')).toBeInTheDocument();
+    expect(screen.getByText('dashboard.status.ready')).toBeInTheDocument();
+    // Raw backend enum strings must never reach the localized UI.
+    expect(screen.queryByText('failed')).not.toBeInTheDocument();
+    expect(screen.queryByText('ready')).not.toBeInTheDocument();
+  });
+
+  it('groups import and create actions in the footer bar with the tracker link', async () => {
     list.mockResolvedValue([]);
     render(<Dashboard />);
 
-    const diagnosisButton = await screen.findByRole('button', {
-      name: 'diagnosis.workspace.cta',
-    });
+    const importButton = await screen.findByRole('button', { name: 'importWorkspace.cta' });
     const createButton = screen.getByRole('button', { name: 'dashboard.createResume' });
     const trackerLink = screen.getByRole('link', { name: /nav.applicationTracker/ });
 
     // All three module entries share the SwissGrid footer action group.
     const footerGroup = trackerLink.parentElement;
     expect(footerGroup).not.toBeNull();
-    expect(footerGroup).toContainElement(diagnosisButton);
+    expect(footerGroup).toContainElement(importButton);
     expect(footerGroup).toContainElement(createButton);
 
     // They are footer buttons, not square grid cards anymore.
-    expect(diagnosisButton.closest('[class*="aspect-square"]')).toBeNull();
+    expect(importButton.closest('[class*="aspect-square"]')).toBeNull();
     expect(createButton.closest('[class*="aspect-square"]')).toBeNull();
   });
 
@@ -139,11 +153,11 @@ describe('dashboard diagnosis entry card', () => {
   it('refreshes the resume list when the workspace reports a mutation', async () => {
     list.mockResolvedValue([]);
     render(<Dashboard />);
-    await screen.findByRole('button', { name: 'diagnosis.workspace.cta' });
+    await screen.findByRole('button', { name: 'importWorkspace.cta' });
     await waitFor(() => expect(list).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('button', { name: 'diagnosis.workspace.cta' }));
-    await screen.findByTestId('diagnosis-workspace');
+    fireEvent.click(screen.getByRole('button', { name: 'importWorkspace.cta' }));
+    await screen.findByTestId('resume-import-workspace');
 
     const callsBefore = list.mock.calls.length;
     fireEvent.click(screen.getByRole('button', { name: 'ws-mutate' }));

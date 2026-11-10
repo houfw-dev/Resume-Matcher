@@ -13,15 +13,25 @@ const api = vi.hoisted(() => ({
   jobs: vi.fn(),
   improvements: vi.fn(),
   resumes: vi.fn(),
+  fetchList: vi.fn(),
 }));
 const router = { push: api.push, back: api.back };
 const t = (key: string) => key;
-vi.mock('next/navigation', () => ({ useRouter: () => router }));
+vi.mock('next/navigation', () => {
+  // Stable reference across renders: a new object per call would make the
+  // page's [router, searchParams] effect loop forever.
+  const searchParams = { get: () => null };
+  return {
+    useRouter: () => router,
+    useSearchParams: () => searchParams,
+  };
+});
 vi.mock('@/lib/i18n', () => ({ useTranslations: () => ({ t }) }));
 vi.mock('@/lib/api/resume', () => ({
   uploadJobDescriptions: api.upload,
   previewImproveResume: api.preview,
   confirmImproveResume: api.confirm,
+  fetchResumeList: api.fetchList,
 }));
 vi.mock('@/lib/api/config', () => ({
   fetchPromptConfig: async () => ({ prompt_options: [], default_prompt_id: 'keywords' }),
@@ -95,6 +105,18 @@ beforeEach(() => {
   api.upload.mockResolvedValue('job');
   api.preview.mockResolvedValue(preview);
   api.confirm.mockResolvedValue(confirmed);
+  // One eligible master whose id matches the cached localStorage master.
+  api.fetchList.mockResolvedValue([
+    {
+      resume_id: 'master',
+      filename: 'master.pdf',
+      is_master: true,
+      parent_id: null,
+      processing_status: 'ready',
+      created_at: '',
+      updated_at: '',
+    },
+  ]);
 });
 
 async function generate() {
@@ -215,6 +237,46 @@ it('keeps missing-diff confirmation open while its durable request is pending', 
   await act(async () => pending.resolve(confirmed));
   expect(api.resumes).toHaveBeenCalledTimes(1);
   expect(api.push).toHaveBeenLastCalledWith('/resumes/tailored');
+});
+
+it('cancels an in-flight generation and returns to the form without an error', async () => {
+  // Never settles on its own: only the AbortSignal can end this call.
+  api.upload.mockImplementation(
+    (_descriptions: string[], _resumeId: string, signal?: AbortSignal) =>
+      new Promise<never>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      })
+  );
+  render(<TailorPage />);
+  await act(async () => {});
+  await generate();
+
+  const cancelButton = screen.getByRole('button', { name: 'common.cancel' });
+  const signal = api.upload.mock.calls[0][2] as AbortSignal;
+  expect(signal).toBeInstanceOf(AbortSignal);
+  expect(signal.aborted).toBe(false);
+
+  await act(async () => cancelButton.click());
+
+  expect(signal.aborted).toBe(true);
+  expect(screen.getByRole('button', { name: 'tailor.generateTailored' })).toBeEnabled();
+  expect(screen.queryByRole('button', { name: 'common.cancel' })).toBeNull();
+  // Let the aborted continuation flush: it must not render an error banner.
+  await act(async () => {});
+  expect(document.body.textContent).not.toMatch(/tailor\.errors/);
+
+  // A fresh run is possible and gets its own, unaborted signal.
+  api.upload.mockResolvedValue('job-2');
+  await generate();
+  expect(api.upload).toHaveBeenCalledTimes(2);
+  const nextSignal = api.upload.mock.calls[1][2] as AbortSignal;
+  expect(nextSignal).not.toBe(signal);
+  expect(nextSignal.aborted).toBe(false);
+  expect(screen.getByRole('button', { name: 'Confirm preview' })).toBeVisible();
 });
 
 it.each(['expired locally', 'rejected by server'])(

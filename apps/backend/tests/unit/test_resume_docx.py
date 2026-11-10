@@ -20,6 +20,7 @@ from docx.table import Table
 from app.schemas.models import DEFAULT_SECTION_META
 from app.services.resume_docx import (
     DOCX_MEDIA_TYPE,
+    _META_COLOR,
     build_resume_docx,
     resume_docx_headers,
 )
@@ -147,6 +148,13 @@ def _paragraph_texts(document: DocumentObject) -> list[str]:
     return [paragraph.text for paragraph in document.paragraphs]
 
 
+def _header_grid_texts(document: DocumentObject) -> list[str]:
+    """Flattened cell texts of the borderless header fact/link grid (table 0)."""
+    assert document.tables, "document has no tables"
+    header_table = document.tables[0]
+    return [cell.text for row in header_table.rows for cell in row.cells]
+
+
 def _heading_index(texts: list[str], heading: str) -> int:
     return texts.index(heading)
 
@@ -172,15 +180,54 @@ def test_build_returns_valid_docx_with_header_facts() -> None:
     texts = _paragraph_texts(document)
 
     assert texts[0] == "李勇"
-    fact_line = next(text for text in texts if text.startswith("性别："))
-    assert "学历：统招本科（985&211)" in fact_line
-    assert "工作年限：15年+ 5年大型医院项目，3年电商）" in fact_line
-    assert "外语水平：英语四级、日语N2" in fact_line
-    assert "英语四级、英语四级" not in fact_line
-    assert fact_line.count("英语四级") == 1
-    # Link row strips protocol / www / trailing slash.
-    assert "liyong.example.com" in "\n".join(texts)
+    # Facts live in the borderless three-column header grid, one labeled pair
+    # per cell, so labels never split from their values across wrapped lines.
+    header_cells = _header_grid_texts(document)
+    fact_blob = "\n".join(header_cells)
+    assert "性别：男" in header_cells
+    assert "学历：统招本科（985&211)" in fact_blob
+    assert "工作年限：15年+ 5年大型医院项目，3年电商）" in fact_blob
+    assert "外语水平：英语四级、日语N2" in fact_blob
+    assert "英语四级、英语四级" not in fact_blob
+    assert fact_blob.count("英语四级") == 1
+    # Nine facts fill three 3-cell rows; the link sits on its own fourth row.
+    header_table = document.tables[0]
+    assert (len(header_table.rows), len(header_table.columns)) == (4, 3)
+    # The link is labeled and strips protocol / www / trailing slash.
+    assert "个人网站：liyong.example.com" in header_cells
+    assert "https://" not in "\n".join(header_cells)
     assert "https://" not in "\n".join(texts)
+
+
+def test_header_grid_labels_every_personal_link() -> None:
+    data = _full_resume_data()
+    data["personalInfo"].update(
+        {
+            "website": "https://fengba.blog.csdn.net/",
+            "linkedin": "linkedin.com/in/wanghao",
+            "github": "github.com/wanghao",
+        }
+    )
+
+    document = _build_doc(data)
+    header_table = document.tables[0]
+    link_row = [cell.text for cell in header_table.rows[-1].cells]
+
+    # The three links share one labeled grid row, protocols stripped.
+    assert link_row == [
+        "个人网站：fengba.blog.csdn.net",
+        "领英：linkedin.com/in/wanghao",
+        "GitHub：github.com/wanghao",
+    ]
+    # Link cells render in the muted meta style (gray); fact runs carry no
+    # explicit color and inherit the default ink-black body style.
+    link_runs = [
+        run
+        for cell in header_table.rows[-1].cells
+        for paragraph in cell.paragraphs
+        for run in paragraph.runs
+    ]
+    assert all(run.font.color.rgb == _META_COLOR for run in link_runs if run.text)
 
 
 def test_markdown_emphasis_is_stripped_everywhere() -> None:
@@ -337,6 +384,15 @@ def _paragraph_bold(document: DocumentObject, text: str) -> bool:
     for paragraph in document.paragraphs:
         if paragraph.text == text:
             return all(bool(run.bold) for run in paragraph.runs) and bool(paragraph.runs)
+    raise AssertionError(f"paragraph {text!r} not found")
+
+
+def _paragraph_left_indent_cm(document: DocumentObject, text: str) -> float | None:
+    """Left indent in cm (None inherits the page edge; explicit Cm(0) is 0.0)."""
+    for paragraph in document.paragraphs:
+        if paragraph.text == text:
+            indent = paragraph.paragraph_format.left_indent
+            return None if indent is None else round(indent.cm, 3)
     raise AssertionError(f"paragraph {text!r} not found")
 
 
@@ -516,6 +572,139 @@ def test_nested_highlight_heads_with_all_bullet_details_use_composite_markers() 
     assert _paragraph_bold(document, "1. 重大生产环境问题解决：")
     assert _paragraph_bold(document, "2. 性能调优：")
     assert not _paragraph_bold(document, "1.1 成功解决明细下载系统卡死问题")
+
+
+def test_outcome_label_renders_as_peer_module_not_nested_head() -> None:
+    # Real upload (resume de8ce72b): in the source PDF 项目成效 is a same-level
+    # peer of 项目亮点. It must render as its own bold module label followed by
+    # an unnumbered prose paragraph — never as a bold "4." nested head with a
+    # "4.1" sub-point inside the 项目亮点 module.
+    data = _full_resume_data()
+    data["personalProjects"][0]["description"] = [
+        "项目亮点：",
+        "使用 Scala 编写 Spark Streaming 作业承接多源数据采集。",
+        "用 Spark SQL 构建格式校验与逻辑校验两层规则。",
+        "项目成效：",
+        "平台稳定支撑多家金融机构的数据报送，错报率下降约 70%。",
+    ]
+    data["personalProjects"][0]["descriptionStyles"] = [
+        "label",
+        "bullet",
+        "bullet",
+        "label",
+        "plain",
+    ]
+    document = _build_doc(data)
+    texts = _paragraph_texts(document)
+
+    section = texts.index("项目经验")
+    i = texts.index("项目亮点：", section)
+    # Hygiene strips the trailing period from bullet points only; the plain
+    # outcome prose keeps its period and renders without any number marker.
+    assert texts[i : i + 5] == [
+        "项目亮点：",
+        "1. 使用 Scala 编写 Spark Streaming 作业承接多源数据采集",
+        "2. 用 Spark SQL 构建格式校验与逻辑校验两层规则",
+        "项目成效：",
+        "平台稳定支撑多家金融机构的数据报送，错报率下降约 70%。",
+    ]
+    assert _paragraph_bold(document, "项目成效：")
+    assert not _paragraph_bold(
+        document, "平台稳定支撑多家金融机构的数据报送，错报率下降约 70%。"
+    )
+    # No nested-head composite markers may mention the outcome module.
+    assert not any(
+        text.startswith(("3.", "4.")) and "项目成效" in text for text in texts
+    )
+    # Flush geometry: the peer-module prose starts exactly at the label edge
+    # (no 0.6cm gutter; Cm(0) round-trips as 0.0), while big-four highlight
+    # bullets keep their hanging indent so their marker sits at the label edge.
+    assert _paragraph_left_indent_cm(
+        document, "平台稳定支撑多家金融机构的数据报送，错报率下降约 70%。"
+    ) in (None, 0.0)
+    assert (
+        _paragraph_left_indent_cm(
+            document, "1. 使用 Scala 编写 Spark Streaming 作业承接多源数据采集"
+        )
+        == 0.6
+    )
+
+
+def test_peer_module_keeps_numbered_markers_but_flushes_plain_rows() -> None:
+    # A non-big-four peer (责任描述， seen in stored resumes) can mix bullets and
+    # prose: numbered rows keep their hanging marker at the label edge, while
+    # unnumbered plain rows render flush with the label instead of indenting.
+    data = _full_resume_data()
+    data["personalProjects"][0]["description"] = [
+        "项目亮点：",
+        "完成核心链路重构。",
+        "责任描述：",
+        "参与异步任务链路重构，基于 RabbitMQ 实现任务异步处理。",
+        "参与流程引擎底层设计，支持可插拔的流程扩展。",
+    ]
+    data["personalProjects"][0]["descriptionStyles"] = [
+        "label",
+        "bullet",
+        "label",
+        "bullet",
+        "plain",
+    ]
+    document = _build_doc(data)
+    texts = _paragraph_texts(document)
+
+    section = texts.index("项目经验")
+    i = texts.index("责任描述：", section)
+    # Hygiene strips the bullet's trailing period; the plain row keeps it.
+    assert texts[i : i + 3] == [
+        "责任描述：",
+        "1. 参与异步任务链路重构，基于 RabbitMQ 实现任务异步处理",
+        "参与流程引擎底层设计，支持可插拔的流程扩展。",
+    ]
+    assert (
+        _paragraph_left_indent_cm(
+            document, "1. 参与异步任务链路重构，基于 RabbitMQ 实现任务异步处理"
+        )
+        == 0.6
+    )
+    assert _paragraph_left_indent_cm(
+        document, "参与流程引擎底层设计，支持可插拔的流程扩展。"
+    ) in (None, 0.0)
+
+
+@pytest.mark.parametrize(
+    "outcome_label",
+    ["项目效果：", "工作成效：", "落地效果：", "量化成效：", "业务成效："],
+)
+def test_outcome_aliases_render_as_peer_module_labels(outcome_label: str) -> None:
+    # Every 成效/效果 outcome name is a known sub-label: it opens a peer module
+    # whose list restarts at 1 instead of continuing the highlight numbering.
+    data = _full_resume_data()
+    data["personalProjects"][0]["description"] = [
+        "项目亮点：",
+        "完成核心链路重构。",
+        outcome_label,
+        "交付周期缩短 40%。",
+    ]
+    data["personalProjects"][0]["descriptionStyles"] = ["label", "bullet", "label", "plain"]
+    document = _build_doc(data)
+    texts = _paragraph_texts(document)
+
+    section = texts.index("项目经验")
+    i = texts.index("项目亮点：", section)
+    assert texts[i : i + 4] == [
+        "项目亮点：",
+        "1. 完成核心链路重构",
+        outcome_label,
+        "交付周期缩短 40%。",
+    ]
+    assert _paragraph_bold(document, outcome_label)
+    # The peer prose is flush with the label; the highlight bullet keeps the
+    # hanging gutter.
+    assert _paragraph_left_indent_cm(document, "交付周期缩短 40%。") in (
+        None,
+        0.0,
+    )
+    assert _paragraph_left_indent_cm(document, "1. 完成核心链路重构") == 0.6
 
 
 def test_bare_group_headings_render_as_hierarchical_numbered_heads() -> None:
@@ -801,8 +990,11 @@ def test_english_chrome() -> None:
         )
     ]
     assert en_indices == sorted(en_indices)
-    fact_line = next(text for text in texts if text.startswith("Gender"))
-    assert "Foreign Languages:" in fact_line
+    # Facts live in the borderless header grid with English chrome labels.
+    header_cells = _header_grid_texts(document)
+    assert "Gender: 男" in header_cells
+    assert "Foreign Languages: 英语四级、日语N2" in header_cells
+    assert "Website: liyong.example.com" in header_cells
     # Custom Chinese titles stay verbatim even under English chrome.
     assert "个人总结" in texts
 
@@ -941,13 +1133,14 @@ def test_docx_self_heal_relocates_misfiled_work_credentials() -> None:
     assert any("国家励志奖学金" in text for text in texts[i_awards + 1 :])
 
     # The language item reaches the header fact grid.
-    fact_line = next(text for text in texts if text.startswith("外语水平："))
-    assert "英语六级" in fact_line
+    header_cells = _header_grid_texts(document)
+    assert "外语水平：英语六级" in header_cells
 
-    # Nothing credential-related survives inside the work table.
+    # Nothing credential-related survives inside the work tables (the header
+    # grid is tables[0] and legitimately holds the relocated language fact).
     cell_blob = "\n".join(
         cell.text
-        for table in document.tables
+        for table in document.tables[1:]
         for row in table.rows
         for cell in row.cells
     )
@@ -963,7 +1156,7 @@ def test_docx_self_heal_relocates_language_under_english_fact_label() -> None:
     document = _build_doc(_misfiled_credentials_resume(), language="en")
     texts = _paragraph_texts(document)
 
-    fact_line = next(text for text in texts if text.startswith("Foreign Languages"))
-    assert "英语六级" in fact_line
+    header_cells = _header_grid_texts(document)
+    assert any(cell.startswith("Foreign Languages:") and "英语六级" in cell for cell in header_cells)
     i_awards = _heading_index(texts, "Awards")
     assert any("国家励志奖学金" in text for text in texts[i_awards + 1 :])

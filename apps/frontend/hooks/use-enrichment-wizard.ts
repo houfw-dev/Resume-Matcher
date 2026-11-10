@@ -3,9 +3,10 @@
  * Uses useReducer for clean state transitions.
  */
 
-import { useReducer, useCallback, useEffect } from 'react';
+import { useReducer, useCallback, useEffect, useRef } from 'react';
 import { useTranslations } from '@/lib/i18n';
 import { useOperationOwner } from './use-operation-owner';
+import { isAbortError } from '@/lib/utils/abort';
 import {
   analyzeResume,
   generateEnhancements,
@@ -175,6 +176,16 @@ export function useEnrichmentWizard(resumeId: string) {
   const { t } = useTranslations();
   const [state, dispatch] = useReducer(wizardReducer, initialState);
   const { begin, isCurrent, invalidate } = useOperationOwner(resumeId);
+  // Tracks the cancelable LLM leg (analyze / enhance). Apply is a quick local
+  // write and deliberately has no cancel surface.
+  const controllerRef = useRef<AbortController | null>(null);
+
+  const nextSignal = useCallback((): AbortSignal => {
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    return controller.signal;
+  }, []);
 
   // Start analysis
   const startAnalysis = useCallback(async () => {
@@ -183,7 +194,7 @@ export function useEnrichmentWizard(resumeId: string) {
     dispatch({ type: 'START_ANALYSIS' });
 
     try {
-      const result = await analyzeResume(resumeId);
+      const result = await analyzeResume(resumeId, nextSignal());
       if (!isCurrent(token)) return;
 
       // Check if there are any improvements needed
@@ -202,13 +213,17 @@ export function useEnrichmentWizard(resumeId: string) {
         summary: result.analysis_summary,
       });
     } catch (error) {
+      // Cancelled via reset/close or a superseded run. Defense in depth: the
+      // operation-owner token already retires these continuations, but the
+      // explicit check keeps the cancellation contract local to this hook.
+      if (isAbortError(error)) return;
       if (!isCurrent(token)) return;
       dispatch({
         type: 'SET_ERROR',
         error: error instanceof Error ? error.message : 'Failed to analyze resume',
       });
     }
-  }, [resumeId, begin, isCurrent]);
+  }, [resumeId, begin, isCurrent, nextSignal]);
 
   // Set answer for current question
   const setAnswer = useCallback((questionId: string, answer: string) => {
@@ -247,7 +262,7 @@ export function useEnrichmentWizard(resumeId: string) {
         return;
       }
       dispatch({ type: 'START_GENERATION' });
-      const result = await generateEnhancements(resumeId, answersArray);
+      const result = await generateEnhancements(resumeId, answersArray, nextSignal());
       if (!isCurrent(token)) return;
 
       dispatch({
@@ -256,13 +271,14 @@ export function useEnrichmentWizard(resumeId: string) {
         errors: result.errors ?? [],
       });
     } catch (error) {
+      if (isAbortError(error)) return;
       if (!isCurrent(token)) return;
       dispatch({
         type: 'SET_ERROR',
         error: error instanceof Error ? error.message : 'Failed to generate enhancements',
       });
     }
-  }, [resumeId, state.answers, begin, isCurrent, t]);
+  }, [resumeId, state.answers, begin, isCurrent, t, nextSignal]);
 
   // Apply enhancements to resume
   const applyChanges = useCallback(async () => {
@@ -283,11 +299,24 @@ export function useEnrichmentWizard(resumeId: string) {
     }
   }, [resumeId, state.preview, begin, isCurrent]);
 
-  // Reset wizard
+  // Reset wizard. Also cancels any in-flight LLM leg — this is the path the
+  // modal close / Cancel button takes, so a dismissed wizard stops its request.
   const reset = useCallback(() => {
+    controllerRef.current?.abort();
+    controllerRef.current = null;
     invalidate();
     dispatch({ type: 'RESET' });
   }, [invalidate]);
+
+  // Unmount must not leave a request whose continuation would dispatch into a
+  // destroyed reducer.
+  useEffect(() => {
+    const controller = controllerRef;
+    return () => {
+      controller.current?.abort();
+      controller.current = null;
+    };
+  }, []);
 
   useEffect(() => reset(), [resumeId, reset]);
 

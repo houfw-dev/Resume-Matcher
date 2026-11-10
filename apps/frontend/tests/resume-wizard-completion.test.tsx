@@ -122,6 +122,23 @@ describe('wizard completion receipt retirement', () => {
     expect(readResumeWizardCompletion()).toBe('master');
   });
 
+  it('keeps both next-step CTAs across a remount and routes tailor with ?source=', async () => {
+    const view = render(<ResumeWizardPage />);
+    await screen.findByRole('button', { name: 'resumeWizard.actions.tailorCreated' });
+    view.unmount();
+    render(<ResumeWizardPage />);
+
+    const tailorButton = await screen.findByRole('button', {
+      name: 'resumeWizard.actions.tailorCreated',
+    });
+    expect(tailorButton).toBeVisible();
+    expect(screen.getByRole('button', { name: 'resumeWizard.actions.openCreated' })).toBeVisible();
+
+    fireEvent.click(tailorButton);
+    expect(api.push).toHaveBeenLastCalledWith('/tailor?source=master');
+    expect(readResumeWizardCompletion()).toBe('master');
+  });
+
   it('keeps the receipt across repeated scheduled openings without a loaded destination', async () => {
     const first = render(<ResumeWizardPage />);
     fireEvent.click(

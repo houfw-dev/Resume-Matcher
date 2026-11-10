@@ -2,6 +2,7 @@
 
 import io
 import re
+import threading
 from urllib.parse import unquote
 
 import pytest
@@ -9,6 +10,7 @@ from docx import Document
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
+from app.routers import resumes
 
 
 def _client() -> AsyncClient:
@@ -106,3 +108,38 @@ async def test_diagnosis_document_404_unknown_resume(isolated_db: object) -> Non
             "/api/v1/resumes/does-not-exist/diagnose/document", json=_report_payload()
         )
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_diagnosis_document_build_runs_off_event_loop_thread(
+    isolated_db: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Synchronous python-docx generation must be offloaded via asyncio.to_thread
+    # so it never blocks the event loop.
+    created = await isolated_db.create_resume(  # type: ignore[attr-defined]
+        content="{}",
+        content_type="json",
+        processed_data={"personalInfo": {"name": "王浩"}},
+        title="后端开发简历",
+    )
+    payload = _report_payload()
+    payload["resume_id"] = created["resume_id"]
+    real_builder = resumes.build_diagnosis_docx
+    builder_thread: dict[str, int] = {}
+
+    def recording_builder(*args: object, **kwargs: object) -> bytes:
+        builder_thread["ident"] = threading.get_ident()
+        return real_builder(*args, **kwargs)
+
+    monkeypatch.setattr(resumes, "build_diagnosis_docx", recording_builder)
+    loop_thread = threading.get_ident()
+
+    async with _client() as client:
+        response = await client.post(
+            f"/api/v1/resumes/{created['resume_id']}/diagnose/document", json=payload
+        )
+
+    assert response.status_code == 200
+    assert response.content[:4] == b"PK\x03\x04"
+    assert "ident" in builder_thread
+    assert builder_thread["ident"] != loop_thread

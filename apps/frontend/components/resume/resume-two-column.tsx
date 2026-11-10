@@ -1,6 +1,7 @@
 import React from 'react';
 import { Mail, Phone, MapPin, Globe, Linkedin, Github, ExternalLink } from 'lucide-react';
 import type { ResumeData, ResumeSectionHeadings } from '@/components/dashboard/resume-component';
+import { DEFAULT_PERSONAL_INFO_LABELS, type PersonalInfoLabels } from '@/lib/utils/resume-headings';
 import { getSortedSections, getSectionMeta } from '@/lib/utils/section-helpers';
 import { formatDateRange } from '@/lib/utils';
 import { DynamicResumeSection } from './dynamic-resume-section';
@@ -14,6 +15,7 @@ interface ResumeTwoColumnProps {
   data: ResumeData;
   showContactIcons?: boolean;
   sectionHeadings?: Partial<ResumeSectionHeadings>;
+  personalInfoLabels?: Partial<PersonalInfoLabels>;
 }
 
 /**
@@ -31,8 +33,14 @@ export const ResumeTwoColumn: React.FC<ResumeTwoColumnProps> = ({
   data,
   showContactIcons = false,
   sectionHeadings,
+  personalInfoLabels,
 }) => {
   const { personalInfo, summary, workExperience, education, personalProjects, additional } = data;
+
+  const infoLabels: PersonalInfoLabels = {
+    ...DEFAULT_PERSONAL_INFO_LABELS,
+    ...personalInfoLabels,
+  };
 
   // Drop blank/whitespace-only entries so empty lines (e.g. from editing in the
   // builder) never render in the resume or PDF (issue #763).
@@ -96,8 +104,14 @@ export const ResumeTwoColumn: React.FC<ResumeTwoColumnProps> = ({
     GitHub: <Github size={12} />,
   };
 
-  // Helper function to render contact details
-  const renderContactDetail = (label: string, value?: string, hrefPrefix: string = '') => {
+  // Helper function to render contact details. `displayLabel` renders a muted
+  // label before the value (e.g. 个人网站： https://…) for personal links.
+  const renderContactDetail = (
+    label: string,
+    value?: string,
+    hrefPrefix: string = '',
+    displayLabel?: string
+  ) => {
     if (!value) return null;
 
     let finalHrefPrefix = hrefPrefix;
@@ -110,10 +124,9 @@ export const ResumeTwoColumn: React.FC<ResumeTwoColumnProps> = ({
     }
 
     const href = finalHrefPrefix + value;
-    const isLink =
-      finalHrefPrefix.startsWith('http') ||
-      finalHrefPrefix.startsWith('mailto:') ||
-      finalHrefPrefix.startsWith('tel:');
+    // Test the composed href (not just the prefix): an already-absolute
+    // "https://…" value with an empty prefix must still render as a link.
+    const isLink = href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:');
 
     let displayText = value;
     if (isLink && (label === 'LinkedIn' || label === 'GitHub' || label === 'Website')) {
@@ -123,6 +136,7 @@ export const ResumeTwoColumn: React.FC<ResumeTwoColumnProps> = ({
     return (
       <span className="inline-flex items-center gap-1">
         {showContactIcons && contactIcons[label]}
+        {displayLabel && <span className={baseStyles['text-muted']}>{displayLabel}</span>}
         {isLink ? (
           <a
             href={href}
@@ -183,19 +197,19 @@ export const ResumeTwoColumn: React.FC<ResumeTwoColumnProps> = ({
             {personalInfo.website && (
               <>
                 <span className={baseStyles['text-muted']}>,</span>
-                {renderContactDetail('Website', personalInfo.website)}
+                {renderContactDetail('Website', personalInfo.website, '', infoLabels.website)}
               </>
             )}
             {personalInfo.linkedin && (
               <>
                 <span className={baseStyles['text-muted']}>,</span>
-                {renderContactDetail('LinkedIn', personalInfo.linkedin)}
+                {renderContactDetail('LinkedIn', personalInfo.linkedin, '', infoLabels.linkedin)}
               </>
             )}
             {personalInfo.github && (
               <>
                 <span className={baseStyles['text-muted']}>,</span>
-                {renderContactDetail('GitHub', personalInfo.github)}
+                {renderContactDetail('GitHub', personalInfo.github, '', infoLabels.github)}
               </>
             )}
           </div>
@@ -446,13 +460,24 @@ export const ResumeTwoColumn: React.FC<ResumeTwoColumnProps> = ({
                   className={`${baseStyles['resume-stack-tight']} ${baseStyles['resume-meta-sm']}`}
                 >
                   {personalInfo.linkedin && (
-                    <div>{renderContactDetail('LinkedIn', personalInfo.linkedin)}</div>
+                    <div>
+                      {renderContactDetail(
+                        'LinkedIn',
+                        personalInfo.linkedin,
+                        '',
+                        infoLabels.linkedin
+                      )}
+                    </div>
                   )}
                   {personalInfo.github && (
-                    <div>{renderContactDetail('GitHub', personalInfo.github)}</div>
+                    <div>
+                      {renderContactDetail('GitHub', personalInfo.github, '', infoLabels.github)}
+                    </div>
                   )}
                   {personalInfo.website && (
-                    <div>{renderContactDetail('Website', personalInfo.website)}</div>
+                    <div>
+                      {renderContactDetail('Website', personalInfo.website, '', infoLabels.website)}
+                    </div>
                   )}
                 </div>
               </div>

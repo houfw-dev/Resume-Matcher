@@ -91,7 +91,7 @@ export function OutreachEditor({
             'font-mono text-sm leading-relaxed',
             'border-2 border-black bg-white',
             'resize-none',
-            'focus:outline-none focus:ring-2 focus:ring-blue-700 focus:ring-offset-2',
+            'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
             'placeholder:text-steel-grey'
           )}
         />

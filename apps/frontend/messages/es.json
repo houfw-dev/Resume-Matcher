@@ -21,6 +21,7 @@
     "finish": "Finalizar",
     "optional": "Opcional",
     "close": "Cerrar",
+    "notifications": "Notificaciones",
     "ok": "OK",
     "search": "Buscar",
     "filter": "Filtrar",
@@ -76,7 +77,7 @@
     "processingFailedHint": "No pudimos leer este archivo. Reintenta o sube otro.",
     "retrySuccess": "¡Procesamiento completado!",
     "retryFailed": "El reintento falló. Prueba a subir otro archivo.",
-    "createResume": "Crear currículum",
+    "createResume": "Personalizar CV",
     "edited": "Editado {date}",
     "statusLine": "ESTADO: {status}",
     "status": {
@@ -103,7 +104,16 @@
     },
     "errors": {
       "loadFailed": "No se pudieron cargar los currículums. Inténtalo de nuevo.",
-      "deleteFailed": "No se pudo eliminar el currículum. Tu currículum actual sigue disponible."
+      "deleteFailed": "No se pudo eliminar el currículum. Tu currículum actual sigue disponible.",
+      "uploadErrors": {
+        "fileTooLarge": "El archivo \"{name}\" supera el tamaño máximo de {limit}.",
+        "fileTypeNotAccepted": "El tipo del archivo \"{name}\" no está permitido. Tipos aceptados: {accept}",
+        "uploadUrlNotConfigured": "La URL de carga no está configurada.",
+        "uploadFailed": "Error al cargar {name}. Inténtalo de nuevo.",
+        "uploadErrorFallback": "Error al cargar {name}.",
+        "onlyOneFile": "Selecciona solo un archivo.",
+        "maxFiles": "Solo puedes cargar un máximo de {count} archivos."
+      }
     }
   },
   "builder": {
@@ -220,17 +230,21 @@
       "usLetter": "Carta (EE. UU.)"
     },
     "generatePrompt": {
-      "notAvailableTitle": "{title} no disponible",
-      "notAvailableDescription": "Para generar {title}, primero adapta tu currículum con una descripción del puesto.",
-      "goToDashboard": "Ir al panel",
       "generateTitle": "Generar {title}",
-      "coverLetterDescription": "Genera una carta de presentación adaptada según tu currículum y la descripción del puesto.",
-      "outreachDescription": "Genera un mensaje de contacto breve para LinkedIn o email según tu currículum y la descripción del puesto.",
+      "coverLetterDescription": "Genera una carta de presentación a partir de tu currículum; en los currículums adaptados también se incorpora la descripción del puesto.",
+      "outreachDescription": "Genera un mensaje de contacto breve para LinkedIn o email a partir de tu currículum; en los currículums adaptados también se incorpora la descripción del puesto.",
       "generateButton": "Generar {title}",
       "coverLetterFooter": "Consejo: adapta primero para mejores resultados.",
       "outreachFooter": "Consejo: manténlo breve y personalizado.",
-      "interviewPrepDescription": "Genera preparación para entrevistas según tu currículum adaptado y la descripción del puesto.",
-      "interviewPrepFooter": "Consejo: úsalo después de adaptar el currículum para preparar respuestas veraces basadas en evidencia."
+      "interviewPrepDescription": "Genera preparación para entrevistas a partir de tu currículum; en los currículums adaptados también se incorpora la descripción del puesto.",
+      "interviewPrepFooter": "Consejo: prepara respuestas veraces y basadas en la evidencia de tu currículum.",
+      "jobDescriptionLabel": "Descripción del puesto",
+      "jobDescriptionHint": "Opcional. Déjalo vacío para generar contenido basado solo en el currículum; pega una descripción del puesto para orientar el contenido a ese rol.",
+      "jobDescriptionPlaceholder": "Pega aquí la descripción del puesto objetivo (opcional)...",
+      "generateWithJd": "Generar con la descripción del puesto",
+      "generateWithoutJd": "Generar sin descripción del puesto",
+      "statusPending": "Pendiente",
+      "tailoredJdNote": "El contenido se generará a partir de la descripción de puesto ya vinculada a este currículum."
     },
     "regenerateDialog": {
       "title": "¿Regenerar {title}?",
@@ -296,7 +310,7 @@
       "atSeparator": " en ",
       "roleSeparator": "-",
       "aboutTitle": "Sobre la coincidencia JD",
-      "aboutDescription": "Esta vista muestra cómo de bien tu currículum coincide con la descripción del puesto. Las palabras clave de la JD se resaltan en amarillo para ayudarte a ver qué habilidades y términos ya están cubiertos.",
+      "aboutDescription": "Esta vista muestra cómo de bien tu currículum coincide con la descripción del puesto. Las palabras clave de la descripción del puesto se resaltan en amarillo para ayudarte a ver qué habilidades y términos ya están cubiertos.",
       "highlightedKeywordsTitle": "Palabras clave resaltadas",
       "highlightedKeywordsDescriptionPrefix": "Las palabras resaltadas en",
       "highlightColor": "amarillo",
@@ -306,7 +320,7 @@
       "tips": {
         "items": {
           "addMissingKeywords": "Usa la pestaña del currículum para añadir palabras clave faltantes",
-          "focusTechnicalSkills": "Enfócate en habilidades técnicas y herramientas mencionadas en la JD",
+          "focusTechnicalSkills": "Enfócate en habilidades técnicas y herramientas mencionadas en la descripción del puesto",
           "matchActionVerbs": "Haz coincidir verbos de acción de los requisitos"
         }
       },
@@ -512,7 +526,14 @@
       "outreachSaveFailed": "No se pudo guardar el mensaje de contacto. Por favor, inténtalo de nuevo.",
       "coverLetterGenerateFailed": "No se pudo generar la carta de presentación: {error}",
       "outreachGenerateFailed": "No se pudo generar el mensaje de contacto: {error}",
-      "interviewPrepGenerateFailed": "No se pudo generar la preparación de entrevista: {error}"
+      "outreachDownloadRequiresResume": "Guarda el currículum antes de descargar el mensaje de contacto.",
+      "outreachMissing": "No hay mensaje de contacto disponible. Genéralo primero.",
+      "outreachDownloadFailed": "No se pudo descargar el mensaje de contacto: {error}",
+      "interviewPrepGenerateFailed": "No se pudo generar la preparación de entrevista: {error}",
+      "interviewPrepDownloadRequiresContent": "Genera primero la preparación de la entrevista para descargarla.",
+      "interviewPrepDownloadFailed": "Error al descargar la preparación de la entrevista: {error}",
+      "jdMatchDownloadRequiresContext": "La coincidencia JD solo está disponible para currículums personalizados con una descripción de puesto.",
+      "jdMatchDownloadFailed": "Error al descargar la coincidencia JD: {error}"
     },
     "leaveWithoutDraft": {
       "title": "¿Salir con cambios sin guardar?",
@@ -575,6 +596,9 @@
     "subtitle": "Optimiza tu currículum para un trabajo específico",
     "heroTitle": "Personaliza tu currículum",
     "selectResume": "Seleccionar Currículum",
+    "sourceDescription": "Elige el currículum principal o uno independiente sobre el que personalizar. Los currículums ya personalizados no pueden ser origen.",
+    "sourceMaster": "Currículum principal",
+    "sourceStandalone": "Currículum independiente",
     "pasteJobDescription": "Pegar Descripción del Trabajo",
     "pasteJobDescriptionBelow": "Pega la descripción del trabajo abajo",
     "jobDescriptionPlaceholder": "Pega la descripción del trabajo aquí...",
@@ -652,6 +676,10 @@
   "settings": {
     "title": "Configuración",
     "subtitle": "Configura tus preferencias",
+    "nav": {
+      "language": "Idioma",
+      "label": "Secciones de configuración"
+    },
     "aiProvider": "Proveedor de IA",
     "aiProviderDescription": "Selecciona tu proveedor de IA preferido para el análisis de CV",
     "apiKey": "Clave API",
@@ -834,7 +862,9 @@
     "titlePlaceholder": "Ingrese el título del currículum...",
     "downloadFailedTitle": "Error de descarga",
     "renameFailedTitle": "Error al cambiar el nombre",
-    "diagnoseResume": "Diagnosticar CV"
+    "diagnoseResume": "Diagnosticar CV",
+    "tailorFromThis": "Personalizar desde este currículum",
+    "trackApplications": "Seguimiento de solicitudes"
   },
   "preview": {
     "margins": "Márgenes",
@@ -907,7 +937,24 @@
     "print": {
       "emptyContent": "No hay contenido de carta de presentación."
     },
-    "copied": "¡Copiado!"
+    "copied": "¡Copiado!",
+    "studio": {
+      "backToResume": "Volver al currículum",
+      "jobDescriptionLabel": "Descripción del puesto",
+      "jobDescriptionHint": "Opcional. Déjalo vacío para generar una carta basada solo en el currículum; añade una descripción para adaptar la carta al puesto.",
+      "jobDescriptionPlaceholder": "Pega aquí la descripción del puesto objetivo (opcional)...",
+      "resultLabel": "Carta de presentación",
+      "emptyResult": "Tu carta de presentación generada aparecerá aquí. Puedes editarla antes de guardarla.",
+      "saved": "Guardado",
+      "copyError": "Error al copiar. Selecciona y copia el texto manualmente.",
+      "errors": {
+        "loadFailed": "No se pudo cargar el currículum. Vuelve al panel e inténtalo de nuevo.",
+        "generateFailed": "No se pudo generar la carta de presentación. Inténtalo de nuevo.",
+        "saveFailed": "No se pudo guardar la carta de presentación. Inténtalo de nuevo.",
+        "downloadFailed": "No se pudo descargar el PDF. Inténtalo de nuevo.",
+        "emptyContent": "Genera una carta de presentación antes de descargarla."
+      }
+    }
   },
   "outreach": {
     "title": "Mensaje de Contacto",
@@ -934,6 +981,9 @@
       },
       "emptyTitle": "Todavía no hay mensaje de contacto.",
       "emptyDescription": "Activa la generación de mensajes en Ajustes y luego adapta un currículum."
+    },
+    "print": {
+      "emptyContent": "No hay contenido de mensaje de contacto disponible."
     }
   },
   "errors": {
@@ -994,6 +1044,7 @@
       "keepAdding": "Seguir añadiendo",
       "backToDashboard": "Volver al panel",
       "openCreated": "Abrir currículum creado",
+      "tailorCreated": "Personalizar este currículum",
       "retryDraftBackup": "Reintentar copia local",
       "stay": "Permanecer aquí",
       "leaveWithoutSaving": "Salir sin guardar"
@@ -1072,18 +1123,26 @@
     },
     "empty": {
       "title": "Aún no hay candidaturas",
-      "description": "Adapta un currículum a un empleo o añade uno manualmente para empezar."
+      "description": "Adapta un currículum a un empleo o añade uno manualmente para empezar.",
+      "goDashboard": "Ir al panel"
+    },
+    "filter": {
+      "banner": "Mostrando solicitudes vinculadas a este currículum",
+      "clear": "Borrar filtro",
+      "emptyTitle": "Aún no hay solicitudes para este currículum",
+      "emptyDescription": "Añade una manualmente o adapta este currículum a un puesto para empezar a seguirla."
     },
     "card": {
       "companyUnknown": "Empresa desconocida",
       "roleUnknown": "Puesto sin título",
       "sharedResume": "Currículum compartido",
       "selectAria": "Seleccionar candidatura",
-      "dragAria": "Arrastra para reordenar"
+      "dragAria": "Arrastra para reordenar",
+      "viewResume": "Ver currículum"
     },
     "modal": {
-      "jobDescription": "Descripción del empleo",
-      "noJobDescription": "No hay descripción del empleo.",
+      "jobDescription": "Descripción del puesto",
+      "noJobDescription": "No hay descripción del puesto.",
       "notes": "Notas",
       "notesPlaceholder": "Añade notas sobre esta candidatura…",
       "saveNotes": "Guardar notas",
@@ -1103,14 +1162,14 @@
       "description": "Haz seguimiento de una candidatura pegando su descripción.",
       "resume": "Currículum",
       "untitledResume": "Currículum sin título",
-      "jobDescription": "Descripción del empleo",
-      "jobDescriptionPlaceholder": "Pega aquí la descripción del empleo…",
+      "jobDescription": "Descripción del puesto",
+      "jobDescriptionPlaceholder": "Pega aquí la descripción del puesto…",
       "company": "Empresa",
       "role": "Puesto",
       "optional": "Opcional",
       "status": "Estado",
       "submit": "Añadir",
-      "validation": "Elige un currículum y pega una descripción del empleo.",
+      "validation": "Elige un currículum y pega una descripción del puesto.",
       "failed": "No se pudo crear la candidatura."
     },
     "errors": {
@@ -1138,6 +1197,19 @@
       "talkingPoints": "Puntos clave"
     }
   },
+  "importWorkspace": {
+    "cta": "Importar CV",
+    "dropzoneHint": "PDF, DOCX o DOC de hasta 4 MB.",
+    "parsing": "Analizando el CV subido…",
+    "parseFailed": "Falló el análisis de este CV. Reinténtalo, elimínalo o sube otro archivo.",
+    "importSuccess": "CV importado y analizado correctamente.",
+    "done": "Listo",
+    "paneResume": "CV importado",
+    "deleteResume": "Eliminar CV",
+    "deleteConfirmTitle": "¿Eliminar este CV?",
+    "deleteConfirmDescription": "El CV subido y sus datos analizados se eliminarán de forma permanente.",
+    "backToUpload": "Subir otro archivo"
+  },
   "diagnosis": {
     "title": "Diagnóstico de CV",
     "subtitle": "Lista de comprobación de la rúbrica V4: veredictos por ítem y resultado de líneas rojas.",
@@ -1145,10 +1217,18 @@
     "measuringLayout": "Midiendo la paginación con la plantilla seleccionada…",
     "layoutSkipped": "La medición de la composición no está disponible; el número de páginas y la densidad de párrafos se estiman a partir del texto.",
     "error": "El diagnóstico falló. Inténtalo de nuevo.",
-    "intro": "El informe combina comprobaciones deterministas con una revisión estructurada con IA. Pega opcionalmente la descripción del puesto objetivo para evaluar también la adecuación al empleo.",
-    "jobDescriptionLabel": "Descripción del puesto objetivo (opcional)",
+    "intro": "El informe combina comprobaciones deterministas con una revisión estructurada con IA. Elige el modo de diagnóstico que mejor encaje con tu objetivo.",
+    "modeLabel": "Modo de diagnóstico",
+    "modeExclusiveHint": "Elige un modo: el diagnóstico con modelo de competencias y el diagnóstico con descripción del puesto no pueden combinarse.",
+    "modeBasicTitle": "Diagnóstico básico",
+    "modeBasicDesc": "Lista de comprobación de 22 ítems y resultado de línea roja, sin apuntar a un puesto concreto.",
+    "modeModelTitle": "Diagnóstico con modelo de competencias",
+    "modeModelDesc": "Diagnóstico básico más 5 ítems de competencia del rol evaluados con un modelo de nivel P3–P8.",
+    "modeJdTitle": "Diagnóstico con descripción del puesto",
+    "modeJdDesc": "Diagnóstico básico más comprobaciones de adecuación frente a la descripción del puesto pegada.",
+    "jobDescriptionLabel": "Descripción del puesto objetivo",
     "jobDescriptionPlaceholder": "Pega aquí la descripción del puesto para activar las comprobaciones de adecuación…",
-    "jdHint": "Sin descripción del puesto, la comprobación de adecuación al puesto se marca como no aplicable. Los 5 ítems de competencia del rol no necesitan la JD, pero exigen una intención profesional clara que coincida con un modelo de nivel (o que lo seleccione explícitamente); de lo contrario, se marcan como no aplicables.",
+    "jdHint": "La comprobación de adecuación al puesto se evalúa frente a esta descripción. El diagnóstico con JD y el diagnóstico con modelo de competencias son mutuamente excluyentes.",
     "run": "Iniciar diagnóstico",
     "rerun": "Repetir",
     "specVersion": "Rúbrica {version}",
@@ -1161,6 +1241,7 @@
     "allConform": "Todas las comprobaciones se cumplen o no aplican.",
     "evidenceLabel": "Problema",
     "suggestionLabel": "Acción de mejora",
+    "fixInBuilder": "Corregir en el editor",
     "rating": {
       "conform": "Conforme",
       "partial": "Parcial",
@@ -1186,33 +1267,12 @@
     "countsSummary": "{effective} aplicables — conforme {conform}, parcial {partial}, no conforme {nonconform}; N/A {na}.",
     "modelLabel": "Modelo de competencias",
     "modelLoading": "Cargando modelos de competencias…",
-    "modelLoadError": "No se pudieron cargar los modelos de competencias; puedes ejecutar la lista de comprobación básica.",
-    "modelMatchedHint": "Asignado automáticamente al puesto objetivo: {name}. Cambia de nivel o ejecuta sin modelo.",
-    "modelNoMatchHint": "Ningún modelo de competencias coincide con el puesto objetivo. Elige uno para confirmar, o ejecuta sin modelo.",
-    "modelNone": "Ejecutar sin modelo de competencias",
-    "workspace": {
-      "cta": "Diagnóstico de CV",
-      "dropzoneHint": "PDF, DOCX o DOC de hasta 4 MB: el diagnóstico comienza automáticamente tras el análisis.",
-      "parsing": "Analizando el CV subido…",
-      "diagnosing": "Ejecutando la lista de comprobación; la revisión con IA puede tardar unos minutos…",
-      "parseFailed": "Falló el análisis de este CV. Reinténtalo, elimínalo o sube otro archivo.",
-      "paneResume": "CV subido",
-      "paneReport": "Informe de diagnóstico",
-      "structuredTab": "CV",
-      "originalTab": "Original",
-      "resizeHint": "Arrastra para ajustar los paneles",
-      "hideLeft": "Ocultar panel del CV",
-      "showLeft": "Mostrar panel del CV",
-      "hideRight": "Ocultar panel del informe",
-      "showRight": "Mostrar panel del informe",
-      "deleteResume": "Eliminar CV",
-      "deleteConfirmTitle": "¿Eliminar este CV?",
-      "deleteConfirmDescription": "El CV subido y sus datos analizados se eliminarán de forma permanente. El informe solo se conserva si lo exportas.",
-      "backToUpload": "Subir otro archivo",
-      "jdToggle": "Volver a diagnosticar con una descripción de puesto",
-      "jdRun": "Repetir con JD",
-      "exporting": "Exportando…"
-    }
+    "modelLoadError": "No se pudieron cargar los modelos de competencias. Reintenta o elige otro modo de diagnóstico.",
+    "modelMatchedHint": "Asignado automáticamente al puesto objetivo: {name}. Cambia de nivel o elige otro modo de diagnóstico.",
+    "modelNoMatchHint": "Ningún modelo de competencias coincide con el puesto objetivo. Elige uno para confirmar u otro modo de diagnóstico.",
+    "basicModeHint": "Solo ejecuta la lista de comprobación V4 y las líneas rojas. El informe no apunta a ningún puesto: los ítems de competencia y de adecuación se marcan como no aplicables.",
+    "jdRequiredHint": "Pega una descripción del puesto para iniciar: el diagnóstico con JD no puede combinarse con un modelo de competencias.",
+    "modelRetry": "Reintentar"
   },
   "fineTune": {
     "buttonLabel": "Ajuste fino con IA",

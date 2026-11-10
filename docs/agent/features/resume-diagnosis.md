@@ -227,6 +227,16 @@
   `complete_json` 的 `salvage_response` 钩子接入，仅最后一次尝试）会从残片中恢复
   每个完整的 `{...}` 条目对象。之后仍缺失的项默认为 `partial`、建议为空，并产出
   一条 `warnings`（"请人工复核"），因此部分畸形的模型响应永远不会变成 HTTP 500。
+- **零主观项时不调用 LLM（真实 500 回归修复）**：当全部 22 项都由确定性检查器
+  回答或被门控为 `na`（基础模式 + 选填模块为空 + 无 JD + 无匹配模型）时，
+  主观项 id 列表为空，服务层直接跳过评判调用。否则模型对空任务如实返回
+  `{"items": []}`，验证器必然拒绝、重试耗尽后抛错成 500。
+- **内容质量彻底失败的降级**：有主观项但模型在全部重试中都返回空/畸形/零可用
+  内容（同样表现为 `{"items": []}`），`_judge_with_llm` 捕获重试预算耗尽后的
+  `ValueError`、记 error 日志并返回空判定，由合并路径把每个主观项落为
+  `partial` + 人工复核 warning——整份报告仍可交付。`PromptSizeError`
+  （路由有专属 4xx 映射）与传输类/超时异常不是 `ValueError`，继续上抛，不会被
+  降级吞掉。
 - **前置门控**（唯一来源：规则制品的 `prerequisite` 字段，
   `"" | "jd" | "intention"`）。V4 中两个门控相互独立：
   - 无 JD → **#17** 为 `na`（"未提供目标岗位 JD，岗位匹配度检查项不适用。"）。
@@ -235,8 +245,9 @@
     `"none"`）→ **#18–22** 为 `na`
     （"未明确求职意向，或未匹配/选择对应职级的能力模型，专业能力项不适用。"）
     ——无论是否有 JD。
-  - 因此**无 JD 但有意向匹配的诊断现在会评判 18–22**；反之，有 JD 但无意向时
-    评判 #17，18–22 保持 `na`。
+  - 因此**无 JD 但有意向匹配的诊断现在会评判 18–22**；反之，JD 模式下
+    #17 评判而 18–22 恒为 `na`——只要请求带 JD，标题自动匹配就被强制抑制
+    （见下文「三种互斥的诊断模式」），即使标题本可命中模型也不评判能力项。
   - 有效开发年限不足 5 年时 **#15** 在检查器层客观判 `na`（仅供参考的规则）；
     ≥5 年时由 LLM 结合事实做晋升分析。
 
@@ -326,6 +337,31 @@
   下载跟随同一份设置、同一语言（uiLanguage）；DOCX 简历下载仍是单一规范版式，
   不受模板设置影响。
 
+## 三种互斥的诊断模式（产品契约）
+
+诊断只提供三种模式，**基础 + 能力模型 + JD 的三重叠加明确不支持**：
+
+| 模式                  | 评判范围                                              | 请求载荷（弹窗实际发送）              |
+| --------------------- | ----------------------------------------------------- | ------------------------------------- |
+| 基础诊断（basic）     | 仅 V4 基础细则与红线；#17、#18–22 均 `na`             | 无 JD，`competency_model_key="none"`  |
+| 能力模型诊断（model） | 基础诊断 ＋ 按 P3–P8 职级模型评判 #18–22；#17 仍 `na` | 无 JD，真实模型 key（自动匹配或手选） |
+| 岗位 JD 诊断（jd）    | 基础诊断 ＋ 针对粘贴 JD 评判 #17；#18–22 恒 `na`      | 带 JD，`competency_model_key="none"`  |
+
+服务端在 `app/services/diagnosis.py::diagnose_resume` 强制执行该契约：
+
+- 请求带 JD 且显式携带**真实**模型 key（非 `"none"`）→ 抛
+  `DiagnosisModeConflictError`，路由映射为 **HTTP 400**（通用提示，详情
+  `logger.warning` 落日志），LLM 不会被调用。
+- 请求带 JD 且 key 省略/为空/`"none"` → 有效 key 强制为 `"none"`，
+  **标题自动匹配被抑制**：即使目标标题本可命中职级模型，#18–22 也保持
+  `na`，杜绝变相的三重叠加。
+- 不带 JD → 模型解析规则不变：显式 key 优先（`"none"` 可退出自动匹配），
+  省略时按标题正则自动匹配，未命中则只跑基础细则。
+
+前端弹窗用模式卡片单选从结构上杜绝非法组合（JD 文本域只在 JD 模式挂载、
+模型单选只在模型模式挂载），因此正常 UI 流程永远发不出冲突请求；400 守卫
+面向直接调用 API 的客户端与回归测试。
+
 ## 目标岗位名称
 
 诊断是*针对一个岗位*进行的，在 `app/services/diagnosis.py`
@@ -377,16 +413,47 @@
   `{models: [{key, name, family, level}], matched_key}`，使标题→职级正则留在
   服务端；省略 `title` 时 `matched_key: null`。
 
-## 选择 / 确认 UX（需求：无明确意向或未匹配时可选择确认）
+## 选择 / 确认 UX（模式卡片单选原型）
 
-弹窗打开时拉取目录，所选目标名称变化时重新查询：
+弹窗顶部是三张 Swiss 单选卡片（`diagnosis.modeBasicTitle/modeModelTitle/
+modeJdTitle` + 各自描述），桌面端三列网格一排展示（窄屏退化为单列），下方是
+随模式挂载/卸载的上下文配置区，整体按一屏展示收紧（小间距、96px JD 文本域、
+模型单选双列网格），滚动容器仅作小屏与长报告的兜底；状态机为
+`type DiagnosisMode = 'basic' | 'model' | 'jd'`：
 
-- 服务端返回匹配 → 预选该模型，并有一行 `modelMatchedHint` 点名它；用户可以改选
-  其他职级，或显式选择"不使用能力模型"。
-- 无标题或不匹配 → 预选显式 **none** 选项，`modelNoMatchHint` 请用户手动确认
-  一个职级或不带模型运行。诊断不被阻塞——none 本身就是确认。
-- 目录加载失败显示内联错误，但仍允许运行（请求省略 key → 后端标题自动匹配 /
-  基础细则）。
+- **基础诊断**（默认）：只显示 `basicModeHint` 说明哪些项会标 N/A，运行按钮
+  永远可用。
+- **能力模型诊断**：挂载模型单选字段集（不再有"不使用模型"单选项——退出模型
+  诊断只需切回基础卡片）。弹窗打开即按当前目标名称拉取目录，所选目标变化时
+  重新查询：
+  - 服务端返回匹配 → 模式自动切到模型诊断并预选该模型，`modelMatchedHint`
+    点名它；用户可改选其他职级，或切回基础/JD 卡片。
+  - 无标题或不匹配 → 停留在基础诊断；用户手动点模型卡片后看到
+    `modelNoMatchHint`，须手选一个职级才能运行（按钮在此之前禁用）。
+  - 目录加载中 → `modelLoading`，运行按钮禁用；加载失败 → 内联
+    `modelLoadError` + `modelRetry` 重试按钮，基础诊断不受影响仍可运行。
+  - 目录答案**只在有匹配时升级模式，绝不强制降级**：重试成功但无匹配、或切换
+    目标名称后失去匹配，都不会把用户显式选择的模型/JD 模式弹回基础模式。
+- **岗位 JD 诊断**：挂载 JD 文本域（Enter 键 stopPropagation）；空白时显示
+  `jdRequiredHint` 且运行按钮禁用，有内容后显示 `jdHint` 并放行。模型单选
+  在此模式下不挂载，三重叠加在 UI 上不可达。
+- 目标名称选择器在所有模式下常驻（0 意向灰色提示 / 1 意向只读行 / ≥2 意向
+  单选卡片）。运行载荷按模式映射：模型模式发真实 key 且不发 JD；JD 模式发
+  JD 且 key 固定 `"none"`；基础模式 key 固定 `"none"`。
+
+### 报告导航与会话生命周期
+
+- **报告页「返回」按钮**（`common.back`，报告页脚左侧）：回到设置表单，
+  模式、目标名称、JD 文本、模型选择全部保留，用户改一项即可重新诊断；
+  能力模型目录复用内存数据，返回时**不重新请求**（catalog effect 不依赖
+  `report`，避免加载闪烁）。页脚另有「下载 WORD 文档」与「重新诊断」
+  （同参重跑）。
+- **重开弹窗 = 全新会话**：组件常驻挂载、Radix 等价物只切换 `open`，因此
+  每次 `open` 由 false→true 时重置全部会话态（模式回基础、JD 清空、报告/
+  错误/过滤器/下载态清空、目录重新拉取），不会再出现上一次的报告页。
+- **在途请求防污染**：每次开会话递增 `sessionRef`；诊断运行在两个 await
+  （版式测量、诊断请求）之后校验会话 id，关闭重开后才落地的旧结果直接丢弃，
+  不会覆盖新会话的表单，旧运行也不会误翻 loading 态。
 
 ## 清单汇总
 
@@ -438,8 +505,10 @@ java-p3(5), …, java-p8(5)`）。导出器校验：序号连续、维度/prereq
   `redlines`（`{id, topic, passed, rating, evidence, suggestion}`——无
   criterion/qc）、`failed_redline_ids`、`redline_passed`、`items`
   （用 `topic` 代替 criterion；无 `qc`）、`target_title`、
-  `competency_model`、`warnings`。简历未知返回 404，无 processed data 或模型
-  key 非法返回 400，请求体超过 128KB（`Content-Length` 守卫）返回 **413**，
+  `competency_model`、`warnings`。简历未知返回 404，无 processed data、模型
+  key 非法、或真实模型 key 与 JD 同时出现（模式冲突，见
+  「三种互斥的诊断模式」）返回 400；带 JD 时省略/`"none"` key 不报错，标题
+  自动匹配被抑制。请求体超过 128KB（`Content-Length` 守卫）返回 **413**，
   快照字段越界返回 **422**（`extra` 字段一律忽略）。内容细节植根于简历存储的原始
   markdown（上传时的解析器/OCR 输出；老记录用 md `content`），逐字发送给 LLM；
   模块归属/存在性/重复以结构化数据与事实包为准——见上文
@@ -498,16 +567,20 @@ competencyModelKey?, templateSettings?, renderedLayout? })`（240 秒超时；�
   - `components/diagnosis/diagnosis-modal.tsx`，从简历查看页
     （`app/(default)/resumes/[id]/page.tsx`，传入
     `intentionTitle={resumeData.personalInfo?.title}` 与显示态 `resumeData`；
-    主简历与定制简历均可用）打开。表单显示目标名称选择器、能力模型单选字段集
-    （目录驱动；预选匹配职级并提供显式 none 选项）与可选 JD 文本域（仅第
-    17 项）。点击运行先进入 `measuring` 阶段按 builder 当前设置离屏测量
-    （失败静默回退无快照诊断并显示 `layoutSkipped` 中性提示），再进入诊断
-    阶段。
-  - `components/diagnosis/diagnosis-workspace.tsx`，Dashboard 的「简历诊断」
-    入口：上传 → 解析 → 测量（对与左侧分屏同形的
-    `withLocalizedDefaultSections` 显示态数据；模板设置在工作区生命周期内快照
-    一份）→ 自动诊断（无 JD 基础运行先解析标题的职级模型，因此意向匹配时
-    18–22 都会被评判）、简历/报告分屏、JD 重诊（再次测量）、Word 导出。
+    主简历与定制简历均可用）打开。表单顶部是三张互斥模式卡片
+    （基础 / 能力模型 / 岗位 JD，见「选择 / 确认 UX」），目标名称选择器常驻；
+    能力模型单选字段集仅模型模式挂载（目录驱动，无 none 单选项），JD 文本域
+    仅 JD 模式挂载（空白时禁用运行按钮）。运行按钮按模式门控：基础恒可用、
+    模型须目录就绪且选中具体职级、JD 须文本非空。点击运行先进入 `measuring`
+    阶段按 builder 当前设置离屏测量（失败静默回退无快照诊断并显示
+    `layoutSkipped` 中性提示），再进入诊断阶段。
+  - Dashboard 的「简历导入」入口
+    （`components/dashboard/resume-import-workspace.tsx`）**只做导入**：
+    上传 → 轮询服务端解析（`useResumeProcessing`）→ 入库后以结构化简历
+    单视图预览，并显示成功横幅；解析失败提供重试、删除、重新上传。
+    它不调用任何 `lib/api/diagnosis` 接口，不做自动诊断、测量、报告或 Word
+    导出（测试以零调用断言锁定该导入-only 契约）。诊断能力仅保留在上方的
+    简历查看页弹窗入口。
   - `components/diagnosis/diagnosis-report-view.tsx` 是共享的纯维度驱动报告
     渲染器（`report.dimensions` + `item.dimension` 分组；无硬编码维度列表，
     因此 V4 的 7 维度布局无需组件改动）。
@@ -519,11 +592,13 @@ competencyModelKey?, templateSettings?, renderedLayout? })`（240 秒超时；�
   （`na` 时隐藏）与 全部/问题 过滤器。页脚"下载 Word 文档"按钮经
   `downloadBlobAsFile` 以带日期后缀的本地化文件名保存报告；失败显示可重试的
   内联错误。
-- i18n：每个语种文件 `messages/` 下的 `diagnosis.*` 树
-  （结构一致性由 `tests/i18n-locale-parity.test.ts` 与 pre-push 钩子强制）。
-  `diagnosis.subtitle` 点名 V4 细则，`diagnosis.jdHint` 解释两个相互独立的
-  门控（只有岗位匹配度需要 JD；五个能力项需要明确意向 + 匹配或手选的职级
-  模型）。
+- i18n：每个语种文件 `messages/` 下的 `diagnosis.*` 树（7 个语种
+  en/es/zh/fr/ja/ko/pt-BR，结构一致性由
+  `tests/i18n-locale-parity.test.ts` 与 pre-push 钩子强制）。
+  `diagnosis.subtitle` 点名 V4 细则；模式卡片使用 `modeLabel` /
+  `modeExclusiveHint` / 三对 `mode*Title`+`mode*Desc` 与 `basicModeHint` /
+  `jdRequiredHint` / `modelRetry` 等键，`jdHint` 说明 JD 诊断与能力模型诊断
+  互斥；旧的 `modelNone` 键已随三模式改造移除。
 
 ## 测试
 
@@ -551,7 +626,18 @@ competencyModelKey?, templateSettings?, renderedLayout? })`（240 秒超时；�
   `tests/service/test_diagnosis_service.py`（LLM 打桩；始终 22/7、独立门控——
   无 JD 时第 17 项 na、意向可解析时无 JD 也评判 18–22、无模型才 na、有 JD 无
   标题时第 17 项评判而 18–22 为 na、Java 标题默认自动匹配 P4、显式 key 与
-  none 处理、未知 KeyError、自定义模型原地填充、#15 不足 5 年 na、缺失项默认、
+  none 处理、**`test_jd_suppresses_title_auto_match_so_competence_stays_na`
+  锁定带 JD 时标题自动匹配被抑制（18–22 恒 na）**、
+  **`test_real_model_key_combined_with_jd_raises_mode_conflict` 锁定真实
+  key + JD 抛 `DiagnosisModeConflictError` 且 LLM 零调用**、
+  **`test_no_subjective_items_skips_the_llm_call_entirely` 锁定零主观项零
+  LLM 调用（真实 500 回归）**、
+  **`test_total_llm_content_failure_degrades_to_partial_warnings` 锁定模型
+  彻底返回空内容时降级为 partial + 人工复核 warning 而非 500**、
+  `test_prompt_size_error_propagates_instead_of_degrading` 与
+  `test_transport_error_propagates_instead_of_degrading` 锁定降级只吞内容
+  质量类 `ValueError`、未知 KeyError、
+  自定义模型原地填充、#15 不足 5 年 na、缺失项默认、
   验证器宽容（数字字符串 id、丢弃坏/越界条目、零可用条目拒绝）、丢弃
   reasoning-effort、LLM 与客观结论的符合行沉默、客观问题行带信号专属修复且不
   建议已通过的子检查、两层事实依据（逐字区块与规则 8 的内容/模块分层框架进入
@@ -561,7 +647,11 @@ competencyModelKey?, templateSettings?, renderedLayout? })`（240 秒超时；�
   保密测试），
   `tests/integration/test_diagnosis_endpoint.py`（diagnose 200/400/404、两个
   独立门控含"有 JD 无标题"、目录 GET 列表/自动匹配、显式 key、none 退出、
-  JSON 无 criterion/qc、评判植根于存储的原始 markdown），
+  `test_diagnose_endpoint_jd_suppresses_title_model_match` 锁定 JD 抑制
+  自动匹配（报告 `competency_model` 为 null、18–22 为 na）、
+  `test_diagnose_endpoint_400_when_model_and_jd_combined` 锁定模式冲突
+  返回 400 且 LLM 零调用、JSON 无 criterion/qc、评判植根于存储的原始
+  markdown），
   `tests/integration/test_diagnosis_document_endpoint.py`（HTTP 200 + 合法
   docx + 候选人姓名 + topic 附录；404），
   `tests/unit/test_diagnosis_layout_checks.py`（实测优先：4 页快照 → #2 判
@@ -572,11 +662,18 @@ competencyModelKey?, templateSettings?, renderedLayout? })`（240 秒超时；�
   提示词、待评编号不含 1/2、无快照无块、12KB 截断保 facts），
   `tests/integration/test_diagnosis_rendered_layout_endpoint.py`（带快照的
   200 客观判定、128KB → 413、page_count 越界 → 422、`{}` 仍 200）。
-- 前端：`tests/diagnosis-modal.test.tsx`（0/1/多个意向的目标选择器、目录
-  预选/手动确认/退出/加载失败、计数渲染、唯一 #16 红线的通过/失败横幅、
+- 前端：`tests/diagnosis-modal.test.tsx`（「three mutually exclusive
+  diagnosis modes」组：三张模式卡片默认基础模式、无意向载荷、单/多意向目标
+  选择器、JD 模式空白门控且发送 none + JD、JD 文本域不在其他模式挂载；
+  「competency model picker」组：目录自动匹配预选模型模式、无匹配停留基础
+  模式且可手动进入、切回基础模式、目录 pending 门控与加载失败重试（重试后
+  不强制降级模式）；以及 0/1/多个意向的目标选择器、计数渲染、唯一 #16
+  红线的通过/失败横幅、
   topic 而非标准的渲染、过滤、错误重试、Word 下载成功/失败、离屏测量成功时
   成对透传两字段、测量中文案、测量失败仍诊断且无字段并显示 layoutSkipped、
-  无 resumeData 不测量），
+  无 resumeData 不测量；「report navigation and session reset」组：报告页
+  返回保留模式/JD 输入且目录不重新请求、关闭重开回到默认表单（旧报告与输入
+  不残留）、重开后才落地的在途结果按会话 id 丢弃），
   `tests/diagnosis-api.test.ts`（POST 体含 `competency_model_key`、none
   哨兵、目录 GET URL/编码/错误映射、排版两字段成对透传/单边省略），
   `tests/layout-snapshot.test.ts`（要点枚举与后端遍历逐字一致、对齐三级路径、
@@ -589,9 +686,12 @@ competencyModelKey?, templateSettings?, renderedLayout? })`（240 秒超时；�
   DOM 抛 `LayoutMeasurementError`），
   `tests/resume-viewer-template-layout.test.tsx`（查看页 `<Resume>`/PDF
   下载/诊断弹窗跟随 localStorage 模板设置与 uiLanguage，缺省回退默认），
-  `tests/job-intentions.test.ts`（切分/去重），以及 Dashboard 工作区套件
-  （`tests/diagnosis-workspace.test.tsx` 及相关规格），覆盖
-  上传→解析→测量→自动诊断（模型预先解析）、测量成功/失败两条路径、
-  JD 重诊（再次测量）门控与 Word 导出。
+  `tests/job-intentions.test.ts`（切分/去重），以及 Dashboard 导入工作区套件
+  `tests/resume-import-workspace.test.tsx`（MIME/大小本地拦截、422 错误面板
+  只渲染一次、导入→解析→结构化简历预览且诊断 API 零调用、主简历缓存、
+  StrictMode 单次成功、解析失败重试/删除、关闭不删除、完成、
+  主简历删除、重置后第二次导入、上传/解析期间关闭门控）与
+  `tests/dashboard-import-entry.test.tsx`（Dashboard 入口卡片、键盘打开、
+  页脚分组、定制按钮启用门控、变更后刷新列表）。
 
 没有任何测试发起真实 LLM 调用。

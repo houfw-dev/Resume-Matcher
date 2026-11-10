@@ -199,9 +199,23 @@ _STACK_CONFORM_RATIO = 0.75
 # Tech vocabulary used to spot a "tech stack" bullet inside project text.
 _TECH_VOCAB_RE = re.compile(
     r"java|spring|mysql|redis|rocketmq|rabbitmq|kafka|\bmq\b|jvm|微服务|分布式|"
-    r"docker|k8s|kubernetes|elasticsearch|nginx|linux|python|langchain",
+    r"docker|k8s|kubernetes|elasticsearch|nginx|linux|python|langchain|"
+    # Data engineering / big-data stack (Hadoop ecosystem, streaming, MPP...)
+    r"hadoop|hive|hbase|spark|flink|scala|flume|sqoop|oozie|azkaban|"
+    r"airflow|dolphinscheduler|controlm|phoenix|presto|trino|clickhouse|"
+    r"doris|postgresql|oracle|mongodb|nosql|maxcompute|dataworks",
     re.IGNORECASE,
 )
+# Explicit tech-stack sub-label produced by the parser (canonical 技术栈 plus
+# the aliases older stored documents may still carry).
+_STACK_LABEL_RE = re.compile(
+    r"^\s*(?:技术栈|技术架构|技术选型|技术列表|技术清单|所用技术|使用技术|"
+    r"技术框架|技术环境|软件环境|开发环境)\s*[:：]?\s*(.*)$"
+)
+# A row that opens with another short sub-label, e.g. "项目背景：多系统…" —
+# used to tell an empty stacked label apart from a split "label row + content
+# row" pair (the following row may be bare or glued to its own content).
+_ANY_LABEL_LINE_RE = re.compile(r"^[一-鿿\w/]{2,10}\s*[:：]")
 _METRIC_RE = re.compile(
     r"\d+(?:\.\d+)?\s*(?:%|‰|倍|万|亿|个|人|台|条|次|笔|ms|毫秒|秒|分钟|小时|天|"
     r"qps|tps|rt)|提升|提高|降低|减少|缩短|节省|增长|优化了?|下降|节约",
@@ -803,6 +817,7 @@ def _timeline_facts(intervals: list[tuple[str, Interval]]) -> dict[str, Any]:
         current_gap = max(0, today - max(ends) - 1)
 
     historical_gap = 0
+    gap_segments: list[int] = []
     overlaps: list[dict[str, str]] = []
     sorted_iv = sorted(parsed, key=lambda iv: _month_index(*iv.start))
     for previous, current in zip(sorted_iv, sorted_iv[1:]):
@@ -811,8 +826,15 @@ def _timeline_facts(intervals: list[tuple[str, Interval]]) -> dict[str, Any]:
         gap = cur_start - prev_end - 1
         if gap >= 0:
             historical_gap += gap
+            if gap > 0:
+                gap_segments.append(gap)
         elif gap < -1:
             overlaps.append({"from": previous.raw, "to": current.raw, "months": str(-gap)})
+
+    # Item 14's rubric thresholds apply to a SINGLE gap segment (单段空窗); the
+    # cumulative historical total is an auxiliary hint only, so separate short
+    # gaps must never combine into a finding.
+    largest_gap = max([current_gap, *gap_segments], default=0)
 
     # Item 14 only counts ENDED full-time jobs; the current open-ended job is
     # excluded from short-stint statistics.
@@ -836,6 +858,7 @@ def _timeline_facts(intervals: list[tuple[str, Interval]]) -> dict[str, Any]:
         ],
         "current_gap_months": current_gap,
         "historical_gap_months": historical_gap,
+        "largest_gap_months": largest_gap,
         "open_ended": open_ended,
         "overlaps": overlaps,
         "short_stints": short_stints,
@@ -1476,6 +1499,31 @@ def _check_work_elements(
     return _join_findings(findings)
 
 
+def _project_has_tech_stack(bullets: list[str]) -> bool:
+    """Detect a project's tech stack, explicit labeled row first.
+
+    The parser stores stacks either as a glued row (``技术栈：Spring、Redis``)
+    or split rows (a ``技术栈：`` label followed by its content row); aliases
+    like 技术架构/技术选型 survive in older stored documents. An empty label
+    immediately followed by another label row means the field is genuinely
+    missing. Only when no label exists do we fall back to counting distinct
+    tech-vocabulary mentions (>= 2).
+    """
+    for index, bullet in enumerate(bullets):
+        match = _STACK_LABEL_RE.match(bullet)
+        if not match:
+            continue
+        if match.group(1).strip():
+            return True
+        # Split label row: the parser writes the content as the next row.
+        next_row = bullets[index + 1].strip() if index + 1 < len(bullets) else ""
+        if next_row and not _ANY_LABEL_LINE_RE.match(next_row):
+            return True
+    joined = "\n".join(bullets)
+    tech_hits = {m.group(0).lower() for m in _TECH_VOCAB_RE.finditer(joined)}
+    return len(tech_hits) >= 2
+
+
 def _check_projects(resume: dict[str, Any]) -> Finding:
     """Item 9: six required fields per project + project count (2–4).
 
@@ -1514,8 +1562,7 @@ def _check_projects(resume: dict[str, Any]) -> Finding:
         joined = "\n".join(bullets)
         has_duty = bool(_DUTY_RE.search(joined))
         has_metric = bool(_METRIC_RE.search(joined))
-        tech_hits = len(set(m.group(0).lower() for m in _TECH_VOCAB_RE.finditer(joined)))
-        has_stack = tech_hits >= 2
+        has_stack = _project_has_tech_stack(bullets)
         has_background = bool(_BACKGROUND_RE.search(joined))
         missing: list[str] = []
         if not name:
@@ -1819,15 +1866,19 @@ _VERDICT_RANK = {
 def _check_gaps(facts: dict[str, Any]) -> Finding:
     current_gap = facts["current_gap_months"]
     historical_gap = facts["historical_gap_months"]
-    worst = max(current_gap, historical_gap)
+    # Rubric item 14 rates a SINGLE gap segment: >3 and <=6 months is a
+    # warning, >6 months is a red line. A gap of exactly 3 months (or less)
+    # conforms. The cumulative historical total stays in the evidence text as
+    # an auxiliary hint only and never drives the rating.
+    largest_gap = facts["largest_gap_months"]
     detail = f"本次空窗 {current_gap} 个月，历史空窗累计 {historical_gap} 个月"
-    if worst > 6:
+    if largest_gap > 6:
         return _finding(
             RATING_NONCONFORM,
             detail + "，存在较长空窗，简历中未见安排说明",
             "在简历中说明空窗期安排（如业务调整、项目到期、学习或家庭安排）。",
         )
-    if worst >= 3:
+    if largest_gap > 3:
         return _finding(
             RATING_PARTIAL,
             detail + "，存在空窗且简历未见说明",

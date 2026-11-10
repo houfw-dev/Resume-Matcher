@@ -50,9 +50,6 @@ async def direct_case(
         "refine_resume",
         AsyncMock(side_effect=RuntimeError("Synthetic unavailable refinement")),
     )
-    monkeypatch.setattr(
-        resumes, "generate_resume_title", AsyncMock(return_value="Synthetic engineer")
-    )
     async with AsyncClient(
         transport=ASGITransport(app=app, raise_app_exceptions=False),
         base_url="http://test",
@@ -183,7 +180,9 @@ async def test_direct_success_links_required_records_and_keeps_tracker_best_effo
     assert relation["request_id"] == result["request_id"] == result["data"]["request_id"]
     assert relation["improvements"] == result["data"]["improvements"]
     saved = await isolated_db.get_resume(result["data"]["resume_id"])
-    assert saved is not None and saved["title"] == "Synthetic engineer"
+    # The mocked keyword extraction carries no role, so the title falls back
+    # to the resume's own 求职意向: 姓名-岗位名称.
+    assert saved is not None and saved["title"] == "Jane Doe-Senior Backend Engineer"
     assert saved["processed_data"] == result["data"]["resume_preview"]
     cards = await isolated_db.list_applications()
     if tracker_fails:

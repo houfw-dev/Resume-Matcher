@@ -133,6 +133,24 @@ export type DefaultSectionKey = (typeof DEFAULT_SECTION_KEYS)[number];
 
 const DEFAULT_KEY_SET: ReadonlySet<string> = new Set(DEFAULT_SECTION_KEYS);
 
+/** DOM id prefix for builder section anchors (the `?section=` deep-link target). */
+export const SECTION_ANCHOR_PREFIX = 'builder-section-';
+
+/** DOM id of a builder section's scroll anchor. */
+export function sectionAnchorId(key: string): string {
+  return `${SECTION_ANCHOR_PREFIX}${key}`;
+}
+
+/**
+ * Validate a `?section=` search-param value against the six canonical meta
+ * keys. Returns null for absent/unknown values so a stale link never focuses
+ * a custom block or a render-only late module.
+ */
+export function parseSectionKeyParam(value: string | null): DefaultSectionKey | null {
+  if (!value) return null;
+  return DEFAULT_KEY_SET.has(value) ? (value as DefaultSectionKey) : null;
+}
+
 const CANONICAL_SEQUENCE_FORMAL: readonly string[] = [
   'personalInfo',
   'education',
