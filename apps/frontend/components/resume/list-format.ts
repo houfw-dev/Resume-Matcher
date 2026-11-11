@@ -333,6 +333,10 @@ export const TECH_STACK_CATEGORY_RE = /^[一-鿿A-Za-z][一-鿿A-Za-z0-9/（）(
 const CATEGORY_SENTENCE_RE = /[。；！？!?;]/;
 
 export function isTechStackCategoryRow(row: string): boolean {
+  // A standalone "http(s)://…" URL matches the short-colon shape by accident
+  // (prefix "https" + colon); a link is never a 分类：… row. Mirrors the URL
+  // guards in parser._is_tech_stack_category_row / resume_docx — keep in sync.
+  if (/^(?:https?:\/\/|www\.)/i.test(row.trim())) return false;
   if (!TECH_STACK_CATEGORY_RE.test(row) || CATEGORY_SENTENCE_RE.test(row)) return false;
   // A glued known sub-module ("技术难点及亮点：实时时延<50ms", no period) stays
   // prose even though it has the same short-colon shape as a category row.

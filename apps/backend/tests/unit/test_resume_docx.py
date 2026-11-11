@@ -21,6 +21,7 @@ from app.schemas.models import DEFAULT_SECTION_META
 from app.services.resume_docx import (
     DOCX_MEDIA_TYPE,
     _META_COLOR,
+    _is_tech_stack_category_row,
     build_resume_docx,
     resume_docx_headers,
 )
@@ -477,6 +478,37 @@ def test_tech_stack_category_rows_render_as_ordered_list() -> None:
     ]
     # Category rows are regular weight (only sub-module heads are bold).
     assert not _paragraph_bold(document, "1. 后端：Java 8、Spring Boot、Spring Cloud")
+
+
+def test_tech_stack_url_row_does_not_become_ordered_list() -> None:
+    # Legacy stored data (pre repair_project_tech_stack_rows) may still carry a
+    # standalone URL inside a tech-stack region. The "https:" prefix matches the
+    # category shape by accident; without the URL guard the whole region would
+    # render as a numbered list. It must instead stay stacked, unnumbered, with
+    # every row (including the link) preserved.
+    data = _full_resume_data()
+    data["personalProjects"][0]["description"] = [
+        "技术栈：",
+        "Java",
+        "Kotlin",
+        "https://forest.dtflyx.com",
+    ]
+    data["personalProjects"][0]["descriptionStyles"] = ["label"] + ["plain"] * 3
+    texts = _paragraph_texts(_build_doc(data))
+
+    i_stack = texts.index("技术栈：")
+    region = texts[i_stack + 1 : i_stack + 4]
+    assert region == ["Java", "Kotlin", "https://forest.dtflyx.com"]
+    assert not any(row.startswith(("1.", "2.", "3.")) for row in region)
+
+
+def test_tech_stack_category_predicate_rejects_standalone_urls() -> None:
+    assert _is_tech_stack_category_row("https://github.com/org/repo") is False
+    assert _is_tech_stack_category_row("http://example.com/docs") is False
+    assert _is_tech_stack_category_row("www.example.com") is False
+    # Real category rows must still be recognized.
+    assert _is_tech_stack_category_row("后端：Java 17、Spring Boot") is True
+    assert _is_tech_stack_category_row("数据库：MySQL、Redis") is True
 
 
 def test_nested_highlight_heads_hierarchical_numbering_plain_vs_bullet() -> None:

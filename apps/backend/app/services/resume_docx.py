@@ -388,6 +388,11 @@ _CATEGORY_SENTENCE_RE = re.compile(r"[。；！？!?;]")
 
 def _is_tech_stack_category_row(row: str) -> bool:
     """Mirror isTechStackCategoryRow(): category enumeration, not prose."""
+    # A standalone "http(s)://…" URL matches the short-colon shape by accident
+    # (prefix "https" + colon); a link is never a 分类：… row. Mirrors the
+    # parser's _is_tech_stack_category_row URL guard — keep the three in sync.
+    if re.match(r"^(?:https?://|www\.)", row.strip(), re.IGNORECASE):
+        return False
     if not _TECH_STACK_CATEGORY_RE.search(row) or _CATEGORY_SENTENCE_RE.search(row):
         return False
     # A glued known sub-module ("技术难点及亮点：实时时延<50ms", no period)

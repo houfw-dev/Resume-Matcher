@@ -6,6 +6,7 @@ import {
   canonicalizeProjectSubLabelPrefix,
   isProjectDescriptiveLabel,
   isProjectPlainPrefixRow,
+  isTechStackCategoryRow,
   joinInlineBodyRows,
   looksLikeNestedGroupHead,
   looksLikeSubLabel,
@@ -408,6 +409,24 @@ describe('buildDescriptionBlocks', () => {
     });
   });
 
+  it('keeps a standalone URL row under tech stack stacked, not a numbered list', () => {
+    // Legacy stored data may still carry a standalone project URL inside the
+    // tech-stack region; "https:" matches the category shape by accident and
+    // must not convert the whole region into an ordered list. Rows (including
+    // the link) are preserved and the block stays an unnumbered body block.
+    const blocks = buildDescriptionBlocks(
+      ['技术栈：', 'Java', 'Kotlin', 'https://forest.dtflyx.com'],
+      ['label', 'plain', 'plain', 'plain'],
+      { canonicalizeLabels: true }
+    );
+    expect(blocks.map((b) => b.kind)).toEqual(['label', 'body']);
+    expect(blocks[1]).toEqual({
+      kind: 'body',
+      rows: ['Java', 'Kotlin', 'https://forest.dtflyx.com'],
+      inline: false,
+    });
+  });
+
   it('keeps a glued known sub-module row without sentence punctuation stacked', () => {
     const blocks = buildDescriptionBlocks(
       ['技术栈：', 'Spring Boot、MySQL', '技术难点及亮点：实时时延<50ms'],
@@ -680,6 +699,19 @@ describe('joinInlineBodyRows', () => {
   it('joins all-ASCII stacks with ", " and CJK stacks with 、', () => {
     expect(joinInlineBodyRows(['Spring Boot', 'Nacos', 'Kafka'])).toBe('Spring Boot, Nacos, Kafka');
     expect(joinInlineBodyRows(['Java', 'Redis 缓存'])).toBe('Java、Redis 缓存');
+  });
+});
+
+describe('isTechStackCategoryRow', () => {
+  it('rejects standalone URL rows whose "https:" prefix fakes the category shape', () => {
+    expect(isTechStackCategoryRow('https://github.com/org/repo')).toBe(false);
+    expect(isTechStackCategoryRow('http://example.com/docs')).toBe(false);
+    expect(isTechStackCategoryRow('www.example.com')).toBe(false);
+  });
+
+  it('still recognizes real category rows', () => {
+    expect(isTechStackCategoryRow('后端：Java 17、Spring Boot')).toBe(true);
+    expect(isTechStackCategoryRow('数据库：MySQL、Redis')).toBe(true);
   });
 });
 

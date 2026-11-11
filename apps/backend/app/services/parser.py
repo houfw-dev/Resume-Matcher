@@ -2741,6 +2741,274 @@ def repair_project_label_regions(parsed_data: dict[str, Any]) -> dict[str, Any]:
     return parsed_data
 
 
+# --- Project tech-stack region repair ----------------------------------
+
+# A whole description row that is ONLY a URL: a bare link ("https://…",
+# "www.…") or a single Markdown link ("[Forest](https://…)"). Rows that merely
+# contain a URL alongside prose fail the full-row gate and stay in the body.
+def _extract_standalone_url_row(row: Any) -> str | None:
+    """Return the URL when a tech-stack row is a standalone link, else None."""
+    if not isinstance(row, str):
+        return None
+    text = row.strip()
+    if not text:
+        return None
+    markdown_match = _MARKDOWN_INLINE_LINK_RE.fullmatch(text)
+    if markdown_match:
+        target = markdown_match.group(1).strip()
+        return target or None
+    bare_match = _BARE_URL_RE.fullmatch(text)
+    if bare_match:
+        return bare_match.group(0).rstrip(".,;)）】]、，。；;：:!?！？")
+    return None
+
+
+# github.com hosts (incl. subdomains such as gist.github.com) map to the
+# project github field; every other standalone URL is the project website.
+_GITHUB_HOST_RE = re.compile(r"(?:^|\.)github\.com$", re.IGNORECASE)
+
+
+def _project_url_target_field(url: str) -> str:
+    """Pick the project header field ("github"/"website") for a standalone URL."""
+    rest = url.strip()
+    if "://" in rest:
+        rest = rest.split("://", 1)[1]
+    elif rest.lower().startswith("www."):
+        rest = rest[4:]
+    host = rest.split("/", 1)[0].split(":", 1)[0]
+    return "github" if _GITHUB_HOST_RE.match(host.lower()) else "website"
+
+
+def _is_tech_stack_label_row(row: Any) -> bool:
+    """True for a standalone 技术栈 heading row, with or without a trailing colon."""
+    if not isinstance(row, str):
+        return False
+    text = row.strip()
+    core = text[:-1].strip() if text.endswith(("：", ":")) else text
+    return core == "技术栈"
+
+
+# Structured tech-stack category row ("后端：Java 8、Spring Boot",
+# "数据库：MySQL、Redis"): a short category prefix, a colon and non-empty
+# content. Mirrors TECH_STACK_CATEGORY_RE in resume_docx.py and
+# components/resume/list-format.ts — keep the three in sync. A region with
+# such rows renders as an ordered list (one number per category row), so its
+# rows must stay separate; pure-name stacks are the ones we join.
+_TECH_STACK_CATEGORY_RE = re.compile(
+    r"^[一-鿿A-Za-z][一-鿿A-Za-z0-9/（）() -]{0,10}[：:]\s*\S"
+)
+_CATEGORY_SENTENCE_RE = re.compile(r"[。；！？!?;]")
+
+
+def _is_tech_stack_category_row(row: str) -> bool:
+    """Whether a tech-stack row is a structured category enumeration.
+
+    Mirrors resume_docx._is_tech_stack_category_row / the frontend
+    isTechStackCategoryRow(): the short-colon shape minus sentence punctuation
+    and glued known sub-module names.
+    """
+    # A standalone URL matches the short-colon shape by accident ("https://…"
+    # parses as the prefix "https" + a colon); it is a link, never a
+    # 分类：… enumeration row — URL rows are classified separately (lifted to
+    # the website/github header fields, or joined into a flat stack when they
+    # cannot be routed). Mirrored by the scheme-prefix guards in the two render
+    # predicates — keep the three in sync.
+    if _extract_standalone_url_row(row) is not None:
+        return False
+    if not _TECH_STACK_CATEGORY_RE.search(row) or _CATEGORY_SENTENCE_RE.search(row):
+        return False
+    core = re.sub(r"[：:].*$", "", row).strip()
+    return core not in _PROJECT_KNOWN_LABEL_CORES
+
+
+def repair_project_tech_stack_rows(parsed_data: dict[str, Any]) -> dict[str, Any]:
+    """Join split 技术栈 enumeration rows and lift standalone URL rows.
+
+    Weak models split one source line ("技术栈：Java、Kotlin、…") into one plain
+    row per token and file a standalone project URL line ("https://…") as the
+    last tech-stack row instead of the project's website/github header field.
+    The split rows also defeat the renderer's inline join: an "https:" row
+    matches its inline-disqualifier shape, so the whole stack prints one token
+    per line. Runs after region repair (the 技术栈 label is canonical and its
+    followers are plain) and after source-number stripping, so rows carry no
+    list markers anymore:
+
+    * a follower row that IS a standalone URL is moved into an EMPTY github
+      (github.com hosts) or website field. Existing field values and fields
+      filled by an earlier URL row are never overwritten — an unroutable URL
+      stays in the body;
+    * a FLAT name stack (no structured "分类：…" category rows) is joined into
+      ONE plain row with the Chinese enumeration comma 、 — the recognized
+      技术栈 label is Chinese-context, so even all-ASCII token stacks follow
+      zh typography (the user-visible expectation for Chinese resumes);
+    * a structured category stack keeps one row per category — its ordered
+      per-category list rendering depends on the row boundaries.
+
+    Only 技术栈 regions are touched; a region whose followers are all URLs is
+    left verbatim (no orphan label, no dropped information), and an
+    already-repaired stack is a no-op, so the pass is idempotent. Mutates and
+    returns ``parsed_data``.
+    """
+    projects = parsed_data.get("personalProjects")
+    if not isinstance(projects, list):
+        return parsed_data
+
+    for project in projects:
+        if not isinstance(project, dict) or not isinstance(
+            project.get("description"), list
+        ):
+            continue
+        description: list[Any] = project["description"]
+        styles_in = project.get("descriptionStyles")
+        styles: list[Any] = styles_in if isinstance(styles_in, list) else []
+
+        new_rows: list[Any] = []
+        new_styles: list[str] = []
+        # Fields filled by THIS pass, so a second URL targeting the same field
+        # is kept in the body instead of overwriting the first winner.
+        filled_fields: set[str] = set()
+        changed = False
+        pos = 0
+        total = len(description)
+
+        while pos < total:
+            row = description[pos]
+            style = styles[pos] if pos < len(styles) else "bullet"
+            if not _is_tech_stack_label_row(row):
+                new_rows.append(row)
+                new_styles.append(style if style in _VALID_DESCRIPTION_STYLES else "bullet")
+                pos += 1
+                continue
+
+            # The region ends at the next heading row (known sub-label or any
+            # label-styled row); everything before it belongs to 技术栈.
+            region_end = pos + 1
+            while region_end < total:
+                candidate = description[region_end]
+                candidate_style = (
+                    styles[region_end] if region_end < len(styles) else "bullet"
+                )
+                if candidate_style == "label" or _project_heading_kind(candidate) is not None:
+                    break
+                region_end += 1
+
+            # Surviving body rows as (original position, stripped text); URL
+            # rows routed to a header field are consumed instead.
+            body_sources: list[tuple[int, str]] = []
+            url_fills: list[tuple[str, str]] = []
+            for follower_pos in range(pos + 1, region_end):
+                follower = description[follower_pos]
+                url = _extract_standalone_url_row(follower)
+                if url is None:
+                    body_sources.append(
+                        (
+                            follower_pos,
+                            follower.strip() if isinstance(follower, str) else str(follower),
+                        )
+                    )
+                    continue
+                field = _project_url_target_field(url)
+                current = project.get(field)
+                field_occupied = field in filled_fields or (
+                    isinstance(current, str) and bool(current.strip())
+                )
+                if field_occupied:
+                    # Never overwrite: the URL stays visible inside the stack.
+                    body_sources.append(
+                        (
+                            follower_pos,
+                            follower.strip() if isinstance(follower, str) else str(follower),
+                        )
+                    )
+                else:
+                    url_fills.append((field, url))
+                    # Reserve the field for the rest of THIS scan so a second
+                    # URL targeting the same field stays in the body instead
+                    # of overwriting the first winner when fills are applied.
+                    filled_fields.add(field)
+
+            # A recognized 技术栈 heading keeps its explicit stored style; a
+            # missing or invalid entry synthesizes the canonical "label" style
+            # rather than the body-row "bullet" default used below.
+            label_style = (
+                style
+                if pos < len(styles) and style in _VALID_DESCRIPTION_STYLES
+                else "label"
+            )
+
+            if not body_sources:
+                # Degenerate all-URL region: keep every row verbatim so the
+                # 技术栈 heading is never orphaned and no data is dropped.
+                for keep_pos in range(pos, region_end):
+                    new_rows.append(description[keep_pos])
+                    if keep_pos == pos:
+                        new_styles.append(label_style)
+                        continue
+                    keep_style = styles[keep_pos] if keep_pos < len(styles) else "bullet"
+                    new_styles.append(
+                        keep_style if keep_style in _VALID_DESCRIPTION_STYLES else "bullet"
+                    )
+                pos = region_end
+                continue
+
+            body_rows = [text for _, text in body_sources]
+            structured = any(_is_tech_stack_category_row(text) for text in body_rows)
+
+            if structured:
+                # Category enumeration: keep one plain row per category; only
+                # the consumed URL rows disappear.
+                emitted_rows: list[Any] = [row]
+                emitted_styles = [label_style]
+                for source_pos, text in body_sources:
+                    source_style = (
+                        styles[source_pos] if source_pos < len(styles) else "plain"
+                    )
+                    emitted_rows.append(text)
+                    emitted_styles.append(
+                        source_style if source_style in _VALID_DESCRIPTION_STYLES else "plain"
+                    )
+            elif len(body_rows) >= 2:
+                # Flat name stack: merge into one inline-wrapped plain line.
+                # The recognized 技术栈 label is Chinese-context, so Chinese
+                # enumeration typography applies even when every token is an
+                # ASCII tech name ("Java、Kotlin") — this is the zh-resume
+                # expectation. The render-time joinInlineBodyRows() / DOCX
+                # _join_inline_body_rows() helpers instead pick ", " for
+                # all-ASCII bodies because they have no label context; the
+                # single stored row produced here already carries its
+                # separator verbatim, so their fallback never re-joins it.
+                emitted_rows = [row, "、".join(body_rows)]
+                emitted_styles = [label_style, "plain"]
+            else:
+                # One surviving body row (URL rows may still have been
+                # consumed): tech-stack content is always unnumbered body.
+                emitted_rows = [row, body_rows[0]]
+                emitted_styles = [label_style, "plain"]
+
+            original_rows = description[pos:region_end]
+            original_styles = [
+                styles[index] if index < len(styles) else "bullet"
+                for index in range(pos, region_end)
+            ]
+            if url_fills or emitted_rows != original_rows or emitted_styles != original_styles:
+                changed = True
+            new_rows.extend(emitted_rows)
+            new_styles.extend(emitted_styles)
+
+            for field, url in url_fills:
+                # Occupancy was reserved during the scan, so each field appears
+                # at most once here and this write only fills an empty field.
+                project[field] = url
+
+            pos = region_end
+
+        if changed:
+            project["description"] = new_rows
+            project["descriptionStyles"] = new_styles
+
+    return parsed_data
+
+
 # --- Inline credentials inside education descriptions ------------------
 # Chinese resumes frequently print awards and certificates INSIDE the
 # education block, e.g.
@@ -3863,6 +4131,11 @@ async def parse_resume_to_json(markdown_text: str) -> dict[str, Any]:
     # Strip source-carried list numbering ("1、"/"①"/"•"): the renderer owns
     # list numbers, so keeping them would double-number every list.
     result = strip_source_point_numbering(result)
+
+    # Join per-token 技术栈 rows back into one plain line and lift standalone
+    # project URL rows into the empty website/github header fields. Runs after
+    # region repair and marker stripping so followers are plain, marker-free.
+    result = repair_project_tech_stack_rows(result)
 
     # Repair custom sections whose content landed in the wrong container
     # (stringList entries stored as items, or vice versa): the render layer

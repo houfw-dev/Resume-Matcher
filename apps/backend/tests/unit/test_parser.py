@@ -16,6 +16,7 @@ from app.services.parser import (
     _MD_NUMERIC_DATE_RE,
     _canonical_numeric_date,
     _extract_markdown_dates,
+    _is_tech_stack_category_row,
     _recover_glyph_loss,
     _shows_glyph_loss,
     backfill_personal_info_from_markdown,
@@ -34,6 +35,7 @@ from app.services.parser import (
     parse_resume_to_json,
     reconcile_custom_section_shapes,
     repair_project_label_regions,
+    repair_project_tech_stack_rows,
     restore_dates_from_markdown,
     sort_timeline_sections_newest_first,
     split_blob_text_sections,
@@ -1142,6 +1144,348 @@ class TestExtractProjectHeaderFields:
         assert item["scale"] == "10人"
         assert item["description"] == ["完成需求评审。"]
         assert item["descriptionStyles"] == ["bullet"]
+
+
+class TestRepairProjectTechStackRows:
+    """Split per-token 技术栈 rows join back into one plain line and standalone
+    URL rows lift into the project website/github header fields."""
+
+    def test_split_flat_stack_joins_and_lifts_website_url(self) -> None:
+        # The real Forest upload: one inline 技术栈 line plus a standalone URL
+        # line, stored by the weak model as seven separate plain rows.
+        parsed = {
+            "personalProjects": [
+                {
+                    "name": "Forest",
+                    "description": [
+                        "技术栈：",
+                        "Java",
+                        "Kotlin",
+                        "Spring Boot",
+                        "Solon",
+                        "OkHttp",
+                        "HttpClient",
+                        "https://forest.dtflyx.com",
+                        "项目职责：",
+                        "负责核心框架设计。",
+                    ],
+                    "descriptionStyles": [
+                        "label",
+                        "plain",
+                        "plain",
+                        "plain",
+                        "plain",
+                        "plain",
+                        "plain",
+                        "plain",
+                        "label",
+                        "bullet",
+                    ],
+                }
+            ]
+        }
+        result = repair_project_tech_stack_rows(parsed)
+        project = result["personalProjects"][0]
+        assert project["website"] == "https://forest.dtflyx.com"
+        assert project.get("github") is None
+        assert project["description"] == [
+            "技术栈：",
+            "Java、Kotlin、Spring Boot、Solon、OkHttp、HttpClient",
+            "项目职责：",
+            "负责核心框架设计。",
+        ]
+        assert project["descriptionStyles"] == ["label", "plain", "label", "bullet"]
+
+    def test_github_url_routes_to_github_field(self) -> None:
+        parsed = {
+            "personalProjects": [
+                {
+                    "name": "ShakeInk",
+                    "description": [
+                        "技术栈：",
+                        "Kotlin",
+                        "Compose Desktop",
+                        "https://github.com/mySingleLive/shakeink-desktop",
+                    ],
+                    "descriptionStyles": ["label", "plain", "plain", "plain"],
+                }
+            ]
+        }
+        project = repair_project_tech_stack_rows(parsed)["personalProjects"][0]
+        assert project["github"] == (
+            "https://github.com/mySingleLive/shakeink-desktop"
+        )
+        assert project.get("website") is None
+        assert project["description"] == [
+            "技术栈：",
+            "Kotlin、Compose Desktop",
+        ]
+        assert project["descriptionStyles"] == ["label", "plain"]
+
+    def test_markdown_link_row_collapses_to_url_target(self) -> None:
+        parsed = {
+            "personalProjects": [
+                {
+                    "name": "P",
+                    "description": [
+                        "技术栈：",
+                        "Java",
+                        "[Forest 官网](https://forest.dtflyx.com)",
+                    ],
+                    "descriptionStyles": ["label", "plain", "plain"],
+                }
+            ]
+        }
+        project = repair_project_tech_stack_rows(parsed)["personalProjects"][0]
+        assert project["website"] == "https://forest.dtflyx.com"
+        assert project["description"] == ["技术栈：", "Java"]
+        assert project["descriptionStyles"] == ["label", "plain"]
+
+    def test_trailing_punctuation_on_bare_url_is_trimmed(self) -> None:
+        parsed = {
+            "personalProjects": [
+                {
+                    "name": "P",
+                    "description": ["技术栈：", "Java", "https://forest.dtflyx.com。"],
+                    "descriptionStyles": ["label", "plain", "plain"],
+                }
+            ]
+        }
+        project = repair_project_tech_stack_rows(parsed)["personalProjects"][0]
+        assert project["website"] == "https://forest.dtflyx.com"
+
+    def test_existing_header_field_is_never_overwritten(self) -> None:
+        parsed = {
+            "personalProjects": [
+                {
+                    "name": "P",
+                    "github": "https://github.com/keep/existing",
+                    "description": [
+                        "技术栈：",
+                        "Java",
+                        "https://github.com/another/repo",
+                    ],
+                    "descriptionStyles": ["label", "plain", "plain"],
+                }
+            ]
+        }
+        project = repair_project_tech_stack_rows(parsed)["personalProjects"][0]
+        assert project["github"] == "https://github.com/keep/existing"
+        # The unroutable URL stays visible inside the joined tech-stack body.
+        assert project["description"] == [
+            "技术栈：",
+            "Java、https://github.com/another/repo",
+        ]
+
+    def test_second_url_targeting_same_field_stays_in_body(self) -> None:
+        parsed = {
+            "personalProjects": [
+                {
+                    "name": "P",
+                    "description": [
+                        "技术栈：",
+                        "Java",
+                        "https://github.com/org/first",
+                        "https://github.com/org/second",
+                    ],
+                    "descriptionStyles": ["label", "plain", "plain", "plain"],
+                }
+            ]
+        }
+        project = repair_project_tech_stack_rows(parsed)["personalProjects"][0]
+        assert project["github"] == "https://github.com/org/first"
+        assert project["description"] == [
+            "技术栈：",
+            "Java、https://github.com/org/second",
+        ]
+
+    def test_structured_category_stack_keeps_row_boundaries(self) -> None:
+        # "后端：…" is a structured category row: the renderer/DOCX exporter
+        # number one row per category, so joining would destroy that layout.
+        parsed = {
+            "personalProjects": [
+                {
+                    "name": "P",
+                    "description": [
+                        "技术栈：",
+                        "后端：Java 17、Spring Boot",
+                        "Redis",
+                        "https://example.com/docs",
+                        "项目职责：",
+                        "负责架构。",
+                    ],
+                    "descriptionStyles": [
+                        "label",
+                        "plain",
+                        "plain",
+                        "plain",
+                        "label",
+                        "bullet",
+                    ],
+                }
+            ]
+        }
+        project = repair_project_tech_stack_rows(parsed)["personalProjects"][0]
+        assert project["website"] == "https://example.com/docs"
+        assert project["description"] == [
+            "技术栈：",
+            "后端：Java 17、Spring Boot",
+            "Redis",
+            "项目职责：",
+            "负责架构。",
+        ]
+        assert project["descriptionStyles"] == [
+            "label",
+            "plain",
+            "plain",
+            "label",
+            "bullet",
+        ]
+
+    def test_standalone_url_rows_never_count_as_category(self) -> None:
+        # "https://…" matches the short-colon shape by accident (prefix
+        # "https" + colon): a URL is a link, never a 分类：… enumeration row.
+        # Without the guard the unroutable URL would force the structured
+        # (no-join) branch and break the flat-stack merge.
+        assert _is_tech_stack_category_row("https://github.com/org/repo") is False
+        assert _is_tech_stack_category_row("http://example.com/docs") is False
+        assert _is_tech_stack_category_row("www.example.com") is False
+        assert _is_tech_stack_category_row("[Forest](https://forest.dtflyx.com)") is False
+        # The guard must not blunt real category detection.
+        assert _is_tech_stack_category_row("后端：Java 17、Spring Boot") is True
+        assert _is_tech_stack_category_row("数据库：MySQL、Redis") is True
+
+    def test_ascii_token_stack_under_chinese_label_uses_enumeration_comma(self) -> None:
+        # The 技术栈 label is Chinese-context: even all-ASCII token names join
+        # with 、 (zh typography), not the render helper's ", " fallback.
+        parsed = {
+            "personalProjects": [
+                {
+                    "name": "P",
+                    "description": ["技术栈：", "Spring Boot", "Nacos", "Kafka"],
+                    "descriptionStyles": ["label", "plain", "plain", "plain"],
+                }
+            ]
+        }
+        project = repair_project_tech_stack_rows(parsed)["personalProjects"][0]
+        assert project["description"] == ["技术栈：", "Spring Boot、Nacos、Kafka"]
+        assert project["descriptionStyles"] == ["label", "plain"]
+
+    def test_all_url_region_is_left_verbatim(self) -> None:
+        # A region whose only follower is a URL would orphan the 技术栈 label
+        # if lifted: skip the whole region and leave fields empty.
+        parsed = {
+            "personalProjects": [
+                {
+                    "name": "P",
+                    "description": ["技术栈：", "https://example.com"],
+                    "descriptionStyles": ["label", "plain"],
+                }
+            ]
+        }
+        result = repair_project_tech_stack_rows(copy.deepcopy(parsed))
+        project = result["personalProjects"][0]
+        assert project.get("website") is None
+        assert project.get("github") is None
+        assert project["description"] == parsed["personalProjects"][0]["description"]
+        assert project["descriptionStyles"] == ["label", "plain"]
+
+    def test_bare_colon_less_label_is_recognized(self) -> None:
+        parsed = {
+            "personalProjects": [
+                {
+                    "name": "P",
+                    "description": ["技术栈", "Java", "Kotlin", "项目职责：", "开发"],
+                    "descriptionStyles": ["label", "plain", "plain", "label", "bullet"],
+                }
+            ]
+        }
+        project = repair_project_tech_stack_rows(parsed)["personalProjects"][0]
+        assert project["description"] == [
+            "技术栈",
+            "Java、Kotlin",
+            "项目职责：",
+            "开发",
+        ]
+        assert project["descriptionStyles"] == ["label", "plain", "label", "bullet"]
+
+    def test_running_twice_is_idempotent(self) -> None:
+        parsed = {
+            "personalProjects": [
+                {
+                    "name": "Forest",
+                    "description": [
+                        "技术栈：",
+                        "Java",
+                        "Kotlin",
+                        "https://forest.dtflyx.com",
+                        "项目职责：",
+                        "负责设计。",
+                    ],
+                    "descriptionStyles": [
+                        "label",
+                        "plain",
+                        "plain",
+                        "plain",
+                        "label",
+                        "bullet",
+                    ],
+                },
+                {
+                    "name": "Structured",
+                    "description": ["技术栈：", "后端：Java", "Redis"],
+                    "descriptionStyles": ["label", "plain", "plain"],
+                },
+            ]
+        }
+        once = repair_project_tech_stack_rows(copy.deepcopy(parsed))
+        twice = repair_project_tech_stack_rows(copy.deepcopy(once))
+        assert twice == once
+
+    def test_work_entries_and_non_tech_rows_are_untouched(self) -> None:
+        parsed = {
+            "workExperience": [
+                {
+                    "company": "C",
+                    "description": ["技术栈：", "Java", "Kotlin"],
+                    "descriptionStyles": ["label", "plain", "plain"],
+                }
+            ],
+            "personalProjects": [
+                {
+                    "name": "P",
+                    "description": ["项目背景：", "某业务系统。", "JDK 21"],
+                    "descriptionStyles": ["label", "plain", "plain"],
+                }
+            ],
+        }
+        result = repair_project_tech_stack_rows(parsed)
+        assert result["workExperience"][0]["description"] == [
+            "技术栈：",
+            "Java",
+            "Kotlin",
+        ]
+        assert result["personalProjects"][0]["description"] == [
+            "项目背景：",
+            "某业务系统。",
+            "JDK 21",
+        ]
+
+    def test_missing_styles_and_non_list_inputs_are_tolerated(self) -> None:
+        parsed = {
+            "personalProjects": [
+                {"name": "NoStyles", "description": ["技术栈：", "Java", "Kotlin"]},
+                {"name": "NoDescription"},
+            ]
+        }
+        project = repair_project_tech_stack_rows(parsed)["personalProjects"][0]
+        assert project["description"] == ["技术栈：", "Java、Kotlin"]
+        assert project["descriptionStyles"] == ["label", "plain"]
+
+        assert repair_project_tech_stack_rows({}) == {}
+        assert repair_project_tech_stack_rows({"personalProjects": None}) == {
+            "personalProjects": None
+        }
 
 
 class TestStripSourcePointNumbering:
