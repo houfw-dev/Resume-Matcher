@@ -29,9 +29,11 @@ describe('ResumeVivid', () => {
     expect(screen.getByText('Lead client demos.')).toBeInTheDocument();
   });
 
-  it('renders skills joined with bullet separators in the sidebar', () => {
+  it('renders each skill on its own line in the sidebar, never bullet-joined', () => {
     render(<ResumeVivid data={data} />);
-    expect(screen.getByText('Python • TypeScript')).toBeInTheDocument();
+    expect(screen.getByText('Python')).toBeInTheDocument();
+    expect(screen.getByText('TypeScript')).toBeInTheDocument();
+    expect(screen.queryByText('Python • TypeScript')).toBeNull();
   });
 
   it('does not render an orphaned leading pipe when years is missing but location exists', () => {

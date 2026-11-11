@@ -30,8 +30,12 @@ describe('ResumeLatex', () => {
     expect(screen.getByText('Lead client demos.')).toBeInTheDocument();
   });
 
-  it('drops blank additional entries (issue #763 parity)', () => {
+  it('drops blank additional entries and keeps each skill on its own line (issue #763 parity)', () => {
     render(<ResumeLatex data={data} />);
-    expect(screen.getByText(/Python, TypeScript/)).toBeInTheDocument();
+    // The blank entry is dropped; each surviving skill is its own element,
+    // never comma-joined onto a single line.
+    expect(screen.getByText('Python')).toBeInTheDocument();
+    expect(screen.getByText('TypeScript')).toBeInTheDocument();
+    expect(screen.queryByText(/Python, TypeScript/)).toBeNull();
   });
 });

@@ -194,3 +194,73 @@ describe.each(TEMPLATES)('%s canonicalizes project sub-labels only', (_name, Tem
     expect(workList?.className).toContain('resume-list-indented');
   });
 });
+
+// Technical skills render one entry per line in EVERY template: the group-head
+// planner (list-format.ts) may insert bold head lines, but individual skills
+// must never be comma/bullet-joined onto one text line or flow side-by-side as
+// wrapping pills. Reverting any template to `.join(', ')` / `.join(' • ')` /
+// flex-wrap pills makes these exact-text lookups throw, because a joined
+// element's text no longer equals the bare skill name.
+describe.each(TEMPLATES)('%s renders technical skills one entry per line', (_name, Template) => {
+  const flatSkills: ResumeData = {
+    personalInfo: { name: 'Ada Lovelace', email: 'ada@example.com' },
+    additional: { technicalSkills: ['Python', 'TypeScript'] },
+  } as ResumeData;
+
+  it('never joins a flat skill list onto one line', () => {
+    const { container } = render(<Template data={flatSkills} />);
+    expect(within(container).getByText('Python')).toBeInTheDocument();
+    expect(within(container).getByText('TypeScript')).toBeInTheDocument();
+    expect(container.textContent).not.toContain('Python, TypeScript');
+    expect(container.textContent).not.toContain('Python • TypeScript');
+  });
+
+  // Two short punctuation-free heads, each followed by a long detail-shaped
+  // successor: planSkillGroupHeaders qualifies both (>= SKILL_GROUP_MIN_HEADS).
+  const groupedSkills: ResumeData = {
+    personalInfo: { name: 'Ada Lovelace', email: 'ada@example.com' },
+    additional: {
+      technicalSkills: [
+        '后端开发',
+        '熟悉 Java 与 Spring Boot 生态，具备高并发系统设计经验',
+        '数据存储',
+        '熟悉 MySQL、Redis 与消息队列的选型和调优',
+      ],
+    },
+  } as ResumeData;
+
+  it('keeps each group head on its own line with every detail entry on a separate line', () => {
+    const { container } = render(<Template data={groupedSkills} />);
+    expect(within(container).getByText('后端开发')).toBeInTheDocument();
+    expect(within(container).getByText('数据存储')).toBeInTheDocument();
+    expect(
+      within(container).getByText('熟悉 Java 与 Spring Boot 生态，具备高并发系统设计经验')
+    ).toBeInTheDocument();
+    expect(
+      within(container).getByText('熟悉 MySQL、Redis 与消息队列的选型和调优')
+    ).toBeInTheDocument();
+  });
+});
+
+// jsdom performs no layout, so the one-pill-per-row contract of the two
+// sidebar templates is locked at the container's flex direction: each skill
+// was already its own element under the old flex-wrap design, so text
+// assertions alone cannot catch a visual side-by-side reflow. A revert to
+// flex-wrap must turn this red.
+const PILL_TEMPLATES: [string, React.ComponentType<{ data: ResumeData }>][] = [
+  ['ResumeTwoColumn', ResumeTwoColumn],
+  ['ResumeModernTwoColumn', ResumeModernTwoColumn],
+];
+
+describe.each(PILL_TEMPLATES)('%s stacks skill pills one per row', (_name, Template) => {
+  it('uses a column flex container, never flex-wrap side-by-side pills', () => {
+    const data: ResumeData = {
+      personalInfo: { name: 'Ada Lovelace', email: 'ada@example.com' },
+      additional: { technicalSkills: ['Python', 'TypeScript', 'Go'] },
+    } as ResumeData;
+    const { container } = render(<Template data={data} />);
+    const skillsContainer = within(container).getByText('Python').parentElement!;
+    expect(skillsContainer.className).toContain('flex-col');
+    expect(skillsContainer.className).not.toContain('flex-wrap');
+  });
+});

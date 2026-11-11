@@ -344,15 +344,12 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
             <div className={baseStyles['resume-section']}>
               <h3 className={styles.sectionTitleSm}>{headingFallbacks.skills}</h3>
               {groupSkillEntries(technicalSkills).map((group, groupIndex) => (
-                <p key={groupIndex} className={baseStyles['resume-text-xs']}>
-                  {group.head && (
-                    <>
-                      <strong>{stripPointMarker(group.head)}</strong>
-                      <br />
-                    </>
-                  )}
-                  {group.items.map(stripPointMarker).join(' • ')}
-                </p>
+                <div key={groupIndex} className={baseStyles['resume-text-xs']}>
+                  {group.head && <strong>{stripPointMarker(group.head)}</strong>}
+                  {group.items.map((skill, index) => (
+                    <div key={index}>{stripPointMarker(skill)}</div>
+                  ))}
+                </div>
               ))}
             </div>
           )}

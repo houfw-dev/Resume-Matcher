@@ -356,9 +356,10 @@ const nonBlankStrings = (items?: string[]): string[] =>
 
 /**
  * The early `additional` slot renders ONLY the skills block (technical skills
- * + languages, inline label + comma-joined items). Cert/award lists are
- * projected to the back of the resume by getRenderSections and rendered via
- * <LateAdditionalModule>.
+ * + languages). Technical skills render one entry per line, with each group
+ * head on its own bold line; languages keep their inline label +
+ * comma-joined line. Cert/award lists are projected to the back of the
+ * resume by getRenderSections and rendered via <LateAdditionalModule>.
  */
 const AdditionalSkillsSection: React.FC<{
   additional: ResumeData['additional'];
@@ -389,13 +390,13 @@ const AdditionalSkillsSection: React.FC<{
           group.items.length > 0 ? (
             <div key={groupIndex}>
               {group.head !== null ? (
-                <span className={styles.skillLabel}>{stripPointMarker(group.head)}</span>
+                <div className={styles.skillLabel}>{stripPointMarker(group.head)}</div>
               ) : (
-                groupIndex === 0 && (
-                  <span className={styles.skillLabel}>{technicalSkillsLabel}</span>
-                )
-              )}{' '}
-              {group.items.map(stripPointMarker).join(', ')}
+                groupIndex === 0 && <div className={styles.skillLabel}>{technicalSkillsLabel}</div>
+              )}
+              {group.items.map((skill, index) => (
+                <div key={index}>{stripPointMarker(skill)}</div>
+              ))}
             </div>
           ) : null
         )}

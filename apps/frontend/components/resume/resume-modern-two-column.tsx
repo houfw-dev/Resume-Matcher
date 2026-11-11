@@ -400,7 +400,9 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
               >
                 {headingFallbacks.skills}
               </h3>
-              <div className="flex flex-wrap gap-1">
+              {/* One skill per row: column stacking keeps the pill look while
+                  never flowing two skills onto the same line. */}
+              <div className="flex flex-col items-start gap-1">
                 {groupSkillEntries(technicalSkills).map((group, groupIndex) => (
                   <React.Fragment key={groupIndex}>
                     {group.head && (
