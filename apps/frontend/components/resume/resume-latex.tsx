@@ -19,7 +19,7 @@ import {
 } from '@/lib/utils/resume-headings';
 import { formatDateRange } from '@/lib/utils';
 import { DescriptionList } from './description-list';
-import { stripPointMarker } from './list-format';
+import { groupSkillEntries, stripPointMarker } from './list-format';
 import { OrderedStringList, PointTextList } from './point-text-list';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/latex.module.css';
@@ -387,7 +387,20 @@ const AdditionalSkillsSection: React.FC<{
     <div className={baseStyles['resume-section']}>
       <h3 className={styles.sectionTitle}>{displayName}</h3>
       <div className={`${baseStyles['resume-stack']} ${baseStyles['resume-text-sm']}`}>
-        {line(technicalSkillsLabel, technicalSkills)}
+        {groupSkillEntries(technicalSkills).map((group, groupIndex) =>
+          group.items.length > 0 ? (
+            <div key={groupIndex}>
+              <span className="font-bold">
+                {group.head !== null
+                  ? stripPointMarker(group.head)
+                  : groupIndex === 0
+                    ? technicalSkillsLabel
+                    : ''}
+              </span>{' '}
+              {group.items.map(stripPointMarker).join(', ')}
+            </div>
+          ) : null
+        )}
         {line(languagesLabel, languages)}
       </div>
     </div>

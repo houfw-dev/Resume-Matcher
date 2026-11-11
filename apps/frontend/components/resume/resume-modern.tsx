@@ -19,7 +19,7 @@ import {
 } from '@/lib/utils/resume-headings';
 import { formatDateRange } from '@/lib/utils';
 import { DescriptionList } from './description-list';
-import { stripPointMarker } from './list-format';
+import { groupSkillEntries, stripPointMarker } from './list-format';
 import { OrderedStringList, PointTextList } from './point-text-list';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/modern.module.css';
@@ -404,12 +404,15 @@ const AdditionalSkillsSection: React.FC<{
     <div className={baseStyles['resume-section']}>
       <h3 className={styles['section-title-accent']}>{displayName}</h3>
       <div className={`${baseStyles['resume-stack']} ${baseStyles['resume-text-sm']}`}>
-        {technicalSkills.length > 0 && (
-          <div className="flex">
-            <span className="font-bold w-32 shrink-0">{technicalSkillsLabel}</span>
-            <span>{technicalSkills.map(stripPointMarker).join(', ')}</span>
-          </div>
-        )}
+        {technicalSkills.length > 0 &&
+          groupSkillEntries(technicalSkills).map((group, groupIndex) => (
+            <div className="flex" key={groupIndex}>
+              <span className="font-bold w-32 shrink-0">
+                {group.head ?? (groupIndex === 0 ? technicalSkillsLabel : '')}
+              </span>
+              <span>{group.items.map(stripPointMarker).join(', ')}</span>
+            </div>
+          ))}
         {languages.length > 0 && (
           <div className="flex">
             <span className="font-bold w-32 shrink-0">{languagesLabel}</span>

@@ -33,6 +33,7 @@ from app.services.parser import (
     normalize_header_link_value,
     sanitize_header_fact_value,
     parse_resume_to_json,
+    plan_skill_group_heads,
     reconcile_custom_section_shapes,
     repair_project_label_regions,
     repair_project_tech_stack_rows,
@@ -1486,6 +1487,137 @@ class TestRepairProjectTechStackRows:
         assert repair_project_tech_stack_rows({"personalProjects": None}) == {
             "personalProjects": None
         }
+
+
+class TestPlanSkillGroupHeads:
+    """Render-time planner for standalone 专业技能 group headers.
+
+    Storage stays flat (builder/fine-tune/diff index contracts are untouched);
+    these tests lock the structural gates that let resumes whose skills are
+    grouped under bold headers (e.g. "AI大模型" / "Java工程落地能力") render
+    hierarchically while ordinary flat skill lists stay byte-identical.
+    """
+
+    def _grouped_skills(self) -> list[str]:
+        # Same shape as resume 4d85f471: heads at index 0 and 7, long detail
+        # sentences between them.
+        return [
+            "AI大模型",
+            "精通 RAG 全链路架构设计与检索增强生成落地",
+            "熟悉大模型微调、Prompt 工程与评测体系建设",
+            "掌握向量数据库与 Embedding 召回链路优化",
+            "负责智能问答系统的多轮对话与意图识别",
+            "具备 Agent 工具调用与工作流编排实战经验",
+            "主导模型服务化部署与推理性能调优工作",
+            "Java工程落地能力",
+            "熟练掌握 Spring Boot 微服务架构与中间件集成",
+            "具备高并发系统设计与线上稳定性治理经验",
+        ]
+
+    def test_target_resume_shape_plans_both_heads(self) -> None:
+        assert plan_skill_group_heads(self._grouped_skills()) == {0, 7}
+
+    def test_flat_short_name_list_stays_ungrouped(self) -> None:
+        # Every row is head-shaped, so no row has a detail-shaped successor.
+        assert plan_skill_group_heads(["Java 并发", "Spring 框架", "JVM 调优"]) == set()
+
+    def test_single_head_amid_details_falls_back_to_flat(self) -> None:
+        skills = [
+            "AI大模型",
+            "精通 RAG 全链路架构设计与检索增强生成落地",
+            "熟悉大模型微调、Prompt 工程与评测体系建设",
+            "掌握向量数据库与 Embedding 召回链路优化",
+        ]
+        assert plan_skill_group_heads(skills) == set()
+
+    def test_adjacent_heads_are_peers_and_never_qualify(self) -> None:
+        skills = [
+            "AI大模型",
+            "Java工程落地能力",
+            "熟练掌握 Spring Boot 微服务架构与中间件集成",
+            "具备高并发系统设计与线上稳定性治理经验",
+        ]
+        # Head 0 lacks a detail successor; head 1 has a head-shaped predecessor.
+        assert plan_skill_group_heads(skills) == set()
+
+    def test_tail_head_without_successor_stays_flat(self) -> None:
+        skills = [
+            "AI大模型",
+            "精通 RAG 全链路架构设计与检索增强生成落地",
+            "熟悉大模型微调、Prompt 工程与评测体系建设",
+            "Java工程落地能力",
+        ]
+        assert plan_skill_group_heads(skills) == set()
+
+    def test_adjacent_head_pair_keeps_the_whole_list_flat(self) -> None:
+        # A head directly next to another head is a peer; even when a second
+        # real group exists later, the predecessor gate must reject the pair.
+        skills = [
+            "AI大模型",
+            "Java工程落地能力",
+            "熟练掌握 Spring Boot 微服务架构与中间件集成",
+            "具备高并发系统设计与线上稳定性治理经验",
+            "前端工程能力",
+            "熟悉 React 组件设计与状态管理工程化实践",
+        ]
+        assert plan_skill_group_heads(skills) == set()
+
+    def test_trailing_colon_and_source_marker_are_tolerated(self) -> None:
+        skills = self._grouped_skills()
+        skills[0] = "AI大模型："
+        skills[7] = "1. Java工程落地能力"
+        assert plan_skill_group_heads(skills) == {0, 7}
+
+    def test_punctuated_head_shape_is_disqualified(self) -> None:
+        skills = self._grouped_skills()
+        skills[0] = "AI，大模型"
+        skills[7] = "Java、工程"
+        assert plan_skill_group_heads(skills) == set()
+
+    def test_overlong_head_shape_is_disqualified(self) -> None:
+        # Short punctuated details stay detail-shaped at any length cap, so
+        # the 14-char head cap is the deciding gate here.
+        skills = [
+            "AI大模型",
+            "精通 RAG：实战",
+            "Java工程落地能力综合提升实战",  # 15 chars, exceeds the 14 cap
+            "熟悉 Spring：实战",
+        ]
+        assert plan_skill_group_heads(skills) == set()
+        # Same shape with a ≤14-char head qualifies: the cap is what mattered.
+        skills[2] = "Java工程落地能力"
+        assert plan_skill_group_heads(skills) == {0, 2}
+
+    def test_short_punctuated_detail_still_opens_a_group(self) -> None:
+        # Detail rows under the 16-char cap still count when they carry
+        # sentence/colon punctuation.
+        skills = [
+            "AI大模型",
+            "精通 RAG：实战",
+            "Java工程落地能力",
+            "熟悉 Spring：实战",
+        ]
+        assert plan_skill_group_heads(skills) == {0, 2}
+
+    def test_url_row_never_counts_as_a_head(self) -> None:
+        skills = self._grouped_skills()
+        # A short www URL is head-shaped by every other gate (≤14 chars, no
+        # sentence punctuation), so the dedicated URL guard must reject it.
+        skills[0] = "www.a.co/x"
+        # Only the index-7 head remains, below the two-head minimum.
+        assert plan_skill_group_heads(skills) == set()
+
+    def test_non_list_input_returns_empty_set(self) -> None:
+        for value in (None, ("a", "b"), {"0": "x"}, 42, "AI大模型"):
+            assert plan_skill_group_heads(value) == set()
+
+    def test_planner_is_pure_and_idempotent(self) -> None:
+        skills = self._grouped_skills()
+        snapshot = copy.deepcopy(skills)
+        first = plan_skill_group_heads(skills)
+        second = plan_skill_group_heads(skills)
+        assert first == second == {0, 7}
+        assert skills == snapshot
 
 
 class TestStripSourcePointNumbering:

@@ -901,6 +901,37 @@ def test_source_numbering_stripped_from_skills_and_single_points_unnumbered() ->
     assert "1. 只有一项" not in texts_single
 
 
+def test_grouped_skills_render_bold_heads_with_restarting_numbers() -> None:
+    data = copy.deepcopy(_full_resume_data())
+    data["additional"]["technicalSkills"] = [
+        "AI大模型：",
+        "精通 RAG 全链路架构设计与检索增强生成落地",
+        "熟悉大模型微调、Prompt 工程与评测体系建设",
+        "Java工程落地能力",
+        "熟练掌握 Spring Boot 微服务架构与中间件集成",
+    ]
+    document = _build_doc(data)
+    texts = _paragraph_texts(document)
+    i_skills = _heading_index(texts, "专业技能")
+
+    # Heads are bold standalone paragraphs; the trailing colon is trimmed and
+    # no head ever carries a list number.
+    i_head_one = texts.index("AI大模型", i_skills)
+    i_head_two = texts.index("Java工程落地能力", i_head_one)
+    assert "1. AI大模型" not in texts
+    assert _paragraph_bold(document, "AI大模型")
+    assert _paragraph_bold(document, "Java工程落地能力")
+
+    # Group 1 numbers its items from 1.
+    assert texts[i_head_one + 1] == "1. 精通 RAG 全链路架构设计与检索增强生成落地"
+    assert texts[i_head_one + 2] == "2. 熟悉大模型微调、Prompt 工程与评测体系建设"
+
+    # Group 2 restarts at 1 — even though it holds a single item,
+    # force_numbers keeps the marker (a plain paragraph would break the
+    # project sub-module look this renderer mirrors).
+    assert texts[i_head_two + 1] == "1. 熟练掌握 Spring Boot 微服务架构与中间件集成"
+
+
 def test_custom_sections_keep_source_shape_and_verbatim_titles() -> None:
     document = _build_doc(_full_resume_data())
     texts = _paragraph_texts(document)

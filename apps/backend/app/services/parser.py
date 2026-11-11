@@ -1830,6 +1830,99 @@ def dedupe_resume_lists(parsed_data: dict[str, Any]) -> dict[str, Any]:
     return parsed_data
 
 
+# --- Skill group headers (additional.technicalSkills) ------------------
+
+# Some sources organize 专业技能 as standalone bold group names
+# ("AI 大模型", "Java 工程落地能力") followed by detail bullets. Weak models
+# keep every source line as one flat technicalSkills string, so the group
+# names render as ordinary numbered entries mixed with the details. Storage
+# STAYS a flat string list (builder per-row editing, fine-tune region indices
+# and diff paths keep their contract); the hierarchy is planned structurally
+# at render time. Mirrored by planSkillGroupHeaders() in
+# components/resume/list-format.ts and consumed by the DOCX exporter — keep
+# the three in sync.
+_SKILL_GROUP_HEAD_MAX_LEN = 14
+_SKILL_GROUP_HEAD_PUNCT_RE = re.compile(r"[，。；！？、,.!?;：:]")
+_SKILL_GROUP_MIN_HEADS = 2
+_SKILL_DETAIL_MIN_LEN = 16
+_SKILL_DETAIL_PUNCT_RE = re.compile(r"[。；！？!?;：:]")
+
+
+def _is_skill_group_head(row: Any) -> bool:
+    """Shape-only test for a standalone skill group heading row.
+
+    A head is a SHORT line without sentence/enumeration/colon punctuation:
+    "AI 大模型" / "Java 工程落地能力" qualify, while detail sentences
+    ("精通 RAG 全链路：…") do not. An optional TRAILING colon is tolerated
+    (the render layer trims it); a colon followed by content disqualifies the
+    row, as do enumeration commas, sentence punctuation, URLs and source list
+    markers. Whether a head-shaped row actually OPENS a group is decided
+    structurally by :func:`plan_skill_group_heads`.
+    """
+    if not isinstance(row, str):
+        return False
+    text = strip_source_point_marker(row).strip()
+    if text.endswith(("：", ":")):
+        text = text[:-1].strip()
+    if not text or len(text) > _SKILL_GROUP_HEAD_MAX_LEN:
+        return False
+    if _SKILL_GROUP_HEAD_PUNCT_RE.search(text):
+        return False
+    if _BARE_URL_RE.fullmatch(text):
+        return False
+    return True
+
+
+def _is_skill_detail_row(row: Any) -> bool:
+    """A skill detail entry: long prose, or any line carrying colon/sentence
+    punctuation — everything a short group heading is not."""
+    if not isinstance(row, str):
+        return False
+    text = row.strip()
+    if not text or _is_skill_group_head(text):
+        return False
+    return len(text) >= _SKILL_DETAIL_MIN_LEN or bool(
+        _SKILL_DETAIL_PUNCT_RE.search(text)
+    )
+
+
+def plan_skill_group_heads(skills: Any) -> set[int]:
+    """Return the indices of standalone skill group heading rows.
+
+    Structural gates, mirroring the project nested-head planner:
+
+    * a head must be followed by a detail-shaped row, so flat bare-name lists
+      such as ``["Java", "Kotlin", "Spring Boot"]`` never qualify (every
+      successor is itself head-shaped);
+    * two heads cannot be adjacent — a head next to another head is a peer;
+    * at least :data:`_SKILL_GROUP_MIN_HEADS` heads must qualify across the
+      whole list, so an isolated short row amid detail entries keeps its
+      ordinary numbering.
+
+    An empty set means "ungrouped": renderers fall back to their existing
+    flat behavior, so ungrouped resumes render byte-identically. Tolerates
+    non-list input (returns an empty set).
+    """
+    if not isinstance(skills, list):
+        return set()
+    texts = [skill.strip() if isinstance(skill, str) else "" for skill in skills]
+    total = len(texts)
+    qualified: set[int] = set()
+    for index, text in enumerate(texts):
+        if not _is_skill_group_head(text):
+            continue
+        next_index = index + 1
+        if next_index >= total or not _is_skill_detail_row(texts[next_index]):
+            continue
+        prev_index = index - 1
+        if prev_index >= 0 and _is_skill_group_head(texts[prev_index]):
+            continue
+        qualified.add(index)
+    if len(qualified) < _SKILL_GROUP_MIN_HEADS:
+        return set()
+    return qualified
+
+
 def strip_markdown_formatting(parsed_data: dict[str, Any]) -> dict[str, Any]:
     """Deterministic pass: strip leaked Markdown modifiers from every field.
 

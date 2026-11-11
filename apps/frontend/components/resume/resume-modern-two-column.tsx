@@ -10,7 +10,7 @@ import { DEFAULT_PERSONAL_INFO_LABELS, type PersonalInfoLabels } from '@/lib/uti
 import { formatDateRange } from '@/lib/utils';
 import { DynamicResumeSection } from './dynamic-resume-section';
 import { DescriptionList } from './description-list';
-import { stripPointMarker } from './list-format';
+import { groupSkillEntries, stripPointMarker } from './list-format';
 import { PointTextList } from './point-text-list';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/modern-two-column.module.css';
@@ -401,10 +401,22 @@ export const ResumeModernTwoColumn: React.FC<ResumeModernTwoColumnProps> = ({
                 {headingFallbacks.skills}
               </h3>
               <div className="flex flex-wrap gap-1">
-                {technicalSkills.map((skill, index) => (
-                  <span key={index} className={baseStyles['resume-skill-pill']}>
-                    {stripPointMarker(skill)}
-                  </span>
+                {groupSkillEntries(technicalSkills).map((group, groupIndex) => (
+                  <React.Fragment key={groupIndex}>
+                    {group.head && (
+                      <span
+                        className={`w-full font-bold ${baseStyles['resume-text-sm']}`}
+                        data-skill-group=""
+                      >
+                        {stripPointMarker(group.head)}
+                      </span>
+                    )}
+                    {group.items.map((skill, index) => (
+                      <span key={index} className={baseStyles['resume-skill-pill']}>
+                        {stripPointMarker(skill)}
+                      </span>
+                    ))}
+                  </React.Fragment>
                 ))}
               </div>
             </div>

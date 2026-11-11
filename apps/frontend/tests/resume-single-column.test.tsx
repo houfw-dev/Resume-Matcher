@@ -107,6 +107,52 @@ describe('ResumeSingleColumn', () => {
     expect(screen.queryByText('Java 并发, Spring 框架')).toBeNull();
   });
 
+  it('renders grouped skills with bold heads and per-group restarting numbers', () => {
+    const grouped: ResumeData = {
+      ...(data as object),
+      additional: {
+        technicalSkills: [
+          'AI大模型：',
+          '精通 RAG 全链路架构设计与检索增强生成落地',
+          '熟悉大模型微调、Prompt 工程与评测体系建设',
+          'Java工程落地能力',
+          '熟练掌握 Spring Boot 微服务架构与中间件集成',
+        ],
+      },
+    } as ResumeData;
+
+    const { container } = render(<ResumeSingleColumn data={grouped} />);
+    const skillsBlock = screen.getByRole('heading', {
+      level: 3,
+      name: '专业技能',
+    }).parentElement!;
+
+    // Two bold, unnumbered group headers; the trailing colon is trimmed and
+    // they carry the data-skill-group hook used for style/QA selection.
+    const headElements = container.querySelectorAll('[data-skill-group]');
+    expect(headElements).toHaveLength(2);
+    expect(within(skillsBlock).getByText('AI大模型')).toBeInTheDocument();
+    expect(within(skillsBlock).getByText('Java工程落地能力')).toBeInTheDocument();
+    expect(skillsBlock.textContent).not.toContain('AI大模型：');
+
+    // Each group owns its own <ol> restarting at 1; heads are never list items.
+    const lists = skillsBlock.querySelectorAll('ol');
+    expect(lists).toHaveLength(2);
+    const firstItems = lists[0].querySelectorAll('li');
+    const secondItems = lists[1].querySelectorAll('li');
+    expect(firstItems).toHaveLength(2);
+    expect(secondItems).toHaveLength(1);
+    expect(firstItems[0].textContent).toMatch(/^1\./);
+    expect(firstItems[1].textContent).toMatch(/^2\./);
+    expect(secondItems[0].textContent).toMatch(/^1\./);
+    expect(skillsBlock.querySelectorAll('li')).toHaveLength(3);
+  });
+
+  it('emits no group-head markers for a flat short-name skill list', () => {
+    const { container } = render(<ResumeSingleColumn data={data} />);
+    expect(container.querySelectorAll('[data-skill-group]')).toHaveLength(0);
+  });
+
   it('lays education out as four left-aligned columns: time | university | major | degree', () => {
     render(<ResumeSingleColumn data={data} />);
 
