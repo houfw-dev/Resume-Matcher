@@ -315,13 +315,15 @@ export const ResumeSingleColumn: React.FC<ResumeSingleColumnProps> = ({
             </div>
           )}
 
-          {/* Website / social links stay on their own row */}
+          {/* Website / social links stay on their own row but share the
+              facts grid's three column tracks, so a two-link row keeps the
+              second link (GitHub) aligned under column 2. */}
           {linkItems.length > 0 && (
-            <div
-              className={`flex flex-wrap gap-x-3 gap-y-1 ${baseStyles['resume-meta']} ${styles.infoLinks}`}
-            >
+            <div className={`${baseStyles['resume-meta']} ${styles.infoLinkRow}`}>
               {linkItems.map((item, index) => (
-                <React.Fragment key={index}>{item}</React.Fragment>
+                <div key={index} className={styles.infoLinkCell}>
+                  {item}
+                </div>
               ))}
             </div>
           )}
