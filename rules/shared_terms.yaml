@@ -1,0 +1,102 @@
+# Shared cross-stack technical term tables — the single human-maintained
+# source for terms with MORE THAN ONE backend/frontend consumer.
+#
+# Export chain (PyYAML is export-time-only; nothing reads YAML at runtime):
+#   1. scripts/export_parser_rules.py merges `canonical_tech_terms` into
+#      apps/backend/app/services/parser_rules.json (the backend's only runtime
+#      artifact; app/services/tech_terms.py binds through its Pydantic loader).
+#   2. scripts/generate_frontend_rules.py emits
+#      apps/frontend/lib/generated/tech-terms.generated.ts (committed; the
+#      frontend build has no uv/PyYAML).
+#   3. scripts/check_generated_rules.py (stdlib only) verifies the generated
+#      TypeScript still matches the shipped JSON and blocks pushes on drift.
+#
+# Only PUBLIC, non-confidential word lists belong here. Diagnosis criterion/QC
+# text and the mainstream-stack equivalence notes never leave the backend.
+#
+# Regenerate after editing:
+#   uv run --with pyyaml python -I scripts/export_parser_rules.py
+#   uv run --with pyyaml python -I scripts/generate_frontend_rules.py
+spec_version: "1.0"
+
+# Canonical casing table for technical English terms. Casing-only fixes
+# ("java" -> "Java"); order is irrelevant because every consumer rebuilds the
+# alternation longest-first. Keep entries unique and non-blank.
+canonical_tech_terms:
+  - "Spring Cloud Alibaba"
+  - "Spring AI Alibaba"
+  - "Spring Framework"
+  - "Spring Boot"
+  - "Spring Cloud"
+  - "Spring MVC"
+  - "Spring AI"
+  - "MyBatis-Plus"
+  - "LangChain4j"
+  - "Elasticsearch"
+  - "Kubernetes"
+  - "JavaScript"
+  - "TypeScript"
+  - "Element UI"
+  - "PostgreSQL"
+  - "ActiveMQ"
+  - "RabbitMQ"
+  - "RocketMQ"
+  - "LangChain"
+  - "Next.js"
+  - "Node.js"
+  - "Nuxt.js"
+  - "Vue.js"
+  - "FastAPI"
+  - "Hibernate"
+  - "MongoDB"
+  - "MyBatis"
+  - "Tailwind CSS"
+  - "Sentinel"
+  - "SQL Server"
+  - "DevOps"
+  - "Docker"
+  - "Dubbo"
+  - "Flask"
+  - "GitLab"
+  - "Gradle"
+  - "GraalVM"
+  - "GraphQL"
+  - "Hadoop"
+  - "Nacos"
+  - "Nginx"
+  - "React"
+  - "Redis"
+  - "Seata"
+  - "Spock"
+  - "Kafka"
+  - "Linux"
+  - "Maven"
+  - "MySQL"
+  - "NumPy"
+  - "Pandas"
+  - "Pulsar"
+  - "Python"
+  - "Quartz"
+  - "Spring"
+  - "SVN"
+  - "Thymeleaf"
+  - "Tomcat"
+  - "Vert.x"
+  - "Webpack"
+  - "Golang"
+  - "JUnit"
+  - "Java"
+  - "JVM"
+  - "JDK"
+  - "JRE"
+  - "CSS"
+  - "Git"
+  - "HTML"
+  - "JSON"
+  - "K8s"
+  - "AWS"
+  - "gRPC"
+  - "CI/CD"
+  - "SQL"
+  - ".NET"
+  - "C++"

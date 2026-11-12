@@ -1,10 +1,14 @@
 // Deterministic canonical casing for technical English terms.
 //
-// KEEP IN SYNC with apps/backend/app/services/tech_terms.py (same table, same
-// regex boundaries, same field coverage): one case-insensitive pass fixes
+// Same table, same regex boundaries, same field coverage as
+// apps/backend/app/services/tech_terms.py: one case-insensitive pass fixes
 // casing only ("java" -> "Java", "SPRING BOOT" -> "Spring Boot",
 // "mysql集群" -> "MySQL集群"). It never adds/removes/translates anything;
-// OCR/typo spelling correction stays the LLM's job.
+// OCR/typo spelling correction stays the LLM's job. The term table itself is
+// not hand-kept here — it is generated from rules/shared_terms.yaml into
+// @/lib/generated/tech-terms.generated (drift gated by
+// scripts/check_generated_rules.py); only the ES2017-specific matching logic
+// lives in this file.
 //
 // Boundary semantics: a non-ASCII-alphanumeric boundary (or string start) on
 // each side means adjacency to CJK, punctuation or whitespace matches
@@ -14,89 +18,9 @@
 // so the leading boundary is consumed as a capture group and re-emitted by
 // the replace callback — semantically identical to `(?<![A-Za-z0-9])`.
 import type { ResumeData } from '@/components/dashboard/resume-component';
+import { CANONICAL_TERMS } from '@/lib/generated/tech-terms.generated';
 
-// Curated mainstream-stack table, canonical casing. Order is irrelevant —
-// the alternation is rebuilt longest-first.
-export const CANONICAL_TERMS = [
-  // JVM ecosystem (longest compound names first)
-  'Spring Cloud Alibaba',
-  'Spring AI Alibaba',
-  'Spring Framework',
-  'Spring Boot',
-  'Spring Cloud',
-  'Spring MVC',
-  'Spring AI',
-  'MyBatis-Plus',
-  'LangChain4j',
-  'Elasticsearch',
-  'Kubernetes',
-  'JavaScript',
-  'TypeScript',
-  'Element UI',
-  'PostgreSQL',
-  'ActiveMQ',
-  'RabbitMQ',
-  'RocketMQ',
-  'LangChain',
-  'Next.js',
-  'Node.js',
-  'Nuxt.js',
-  'Vue.js',
-  'FastAPI',
-  'Hibernate',
-  'MongoDB',
-  'MyBatis',
-  'Tailwind CSS',
-  'Sentinel',
-  'SQL Server',
-  'DevOps',
-  'Docker',
-  'Dubbo',
-  'Flask',
-  'GitLab',
-  'Gradle',
-  'GraalVM',
-  'GraphQL',
-  'Hadoop',
-  'Nacos',
-  'Nginx',
-  'React',
-  'Redis',
-  'Seata',
-  'Spock',
-  'Kafka',
-  'Linux',
-  'Maven',
-  'MySQL',
-  'NumPy',
-  'Pandas',
-  'Pulsar',
-  'Python',
-  'Quartz',
-  'Spring',
-  'SVN',
-  'Thymeleaf',
-  'Tomcat',
-  'Vert.x',
-  'Webpack',
-  'Golang',
-  'JUnit',
-  'Java',
-  'JVM',
-  'JDK',
-  'JRE',
-  'CSS',
-  'Git',
-  'HTML',
-  'JSON',
-  'K8s',
-  'AWS',
-  'gRPC',
-  'CI/CD',
-  'SQL',
-  '.NET',
-  'C++',
-] as const;
+export { CANONICAL_TERMS };
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

@@ -26,88 +26,15 @@ import copy
 import re
 from typing import Any
 
+from app.services.parser_rules import get_parser_rules
+
 #: Curated mainstream-stack table, canonical casing. Order is irrelevant —
-#: the alternation is rebuilt longest-first. KEEP IN SYNC with the mirror
-#: table in apps/frontend/lib/utils/tech-terms.ts.
-CANONICAL_TERMS: tuple[str, ...] = (
-    # JVM ecosystem (longest compound names first)
-    "Spring Cloud Alibaba",
-    "Spring AI Alibaba",
-    "Spring Framework",
-    "Spring Boot",
-    "Spring Cloud",
-    "Spring MVC",
-    "Spring AI",
-    "MyBatis-Plus",
-    "LangChain4j",
-    "Elasticsearch",
-    "Kubernetes",
-    "JavaScript",
-    "TypeScript",
-    "Element UI",
-    "PostgreSQL",
-    "ActiveMQ",
-    "RabbitMQ",
-    "RocketMQ",
-    "LangChain",
-    "Next.js",
-    "Node.js",
-    "Nuxt.js",
-    "Vue.js",
-    "FastAPI",
-    "Hibernate",
-    "MongoDB",
-    "MyBatis",
-    "Tailwind CSS",
-    "Sentinel",
-    "SQL Server",
-    "DevOps",
-    "Docker",
-    "Dubbo",
-    "Flask",
-    "GitLab",
-    "Gradle",
-    "GraalVM",
-    "GraphQL",
-    "Hadoop",
-    "Nacos",
-    "Nginx",
-    "React",
-    "Redis",
-    "Seata",
-    "Spock",
-    "Kafka",
-    "Linux",
-    "Maven",
-    "MySQL",
-    "NumPy",
-    "Pandas",
-    "Pulsar",
-    "Python",
-    "Quartz",
-    "Spring",
-    "SVN",
-    "Thymeleaf",
-    "Tomcat",
-    "Vert.x",
-    "Webpack",
-    "Golang",
-    "JUnit",
-    "Java",
-    "JVM",
-    "JDK",
-    "JRE",
-    "CSS",
-    "Git",
-    "HTML",
-    "JSON",
-    "K8s",
-    "AWS",
-    "gRPC",
-    "CI/CD",
-    "SQL",
-    ".NET",
-    "C++",
+#: the alternation is rebuilt longest-first. The words themselves are data and
+#: ship in parser_rules.json (vocabulary ``canonical_tech_terms``, human source
+#: rules/shared_terms.yaml); the frontend binds the same YAML through its
+#: generated lib/generated/tech-terms.generated.ts module.
+CANONICAL_TERMS: tuple[str, ...] = tuple(
+    get_parser_rules().vocabulary_list("canonical_tech_terms")
 )
 
 # Build the alternation longest-first so compounds win over their prefixes;

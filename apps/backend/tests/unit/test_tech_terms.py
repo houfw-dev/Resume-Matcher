@@ -5,10 +5,21 @@ in the read-time self-heal chain ``normalize_resume_data``.
 """
 
 import copy
+from pathlib import Path
 from typing import Any
 
 from app.schemas.models import normalize_resume_data
-from app.services.tech_terms import canonicalize_tech_terms, canonicalize_terms_in_text
+from app.services.parser_rules import get_parser_rules
+from app.services.tech_terms import (
+    CANONICAL_TERMS,
+    canonicalize_tech_terms,
+    canonicalize_terms_in_text,
+)
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
+GENERATED_TECH_TERMS = (
+    REPO_ROOT / "apps" / "frontend" / "lib" / "generated" / "tech-terms.generated.ts"
+)
 
 
 def test_lowercase_term_gets_canonical_casing() -> None:
@@ -185,3 +196,33 @@ def test_read_time_heal_chain_canonicalizes_terms() -> None:
 
     # Casing is unified and the later dedupe pass collapses casing duplicates.
     assert normalized["additional"]["technicalSkills"] == ["Java", "Spring Boot"]
+
+
+# ---------------------------------------------------------------------------
+# Artifact binding (configuration externalization): the term table used to be
+# a hard-coded tuple; it now ships via parser_rules.json, whose source is the
+# same rules/shared_terms.yaml that feeds the frontend generated module.
+# ---------------------------------------------------------------------------
+
+
+def test_canonical_terms_bind_to_the_shipped_artifact() -> None:
+    artifact_terms = get_parser_rules().vocabulary_list("canonical_tech_terms")
+    assert isinstance(CANONICAL_TERMS, tuple)
+    assert CANONICAL_TERMS == tuple(artifact_terms)
+    # The alternation relies on uniqueness; the loader's list validator plus
+    # this lock keep a duplicate from silently changing longest-first order.
+    assert len(CANONICAL_TERMS) == len(set(CANONICAL_TERMS))
+
+
+def test_generated_frontend_module_carries_the_same_table_in_order() -> None:
+    # Cross-runtime golden lock: the committed TypeScript module is generated
+    # from the same YAML as the backend artifact. The pre-push drift gate runs
+    # the scripted equivalent; this test fails if either side is hand-edited.
+    text = GENERATED_TECH_TERMS.read_text(encoding="utf-8")
+    assert "DO NOT EDIT" in text
+    generated = [
+        line.strip().rstrip(",").strip("'")
+        for line in text.splitlines()
+        if line.strip().startswith("'")
+    ]
+    assert generated == list(CANONICAL_TERMS)
