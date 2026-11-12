@@ -2,9 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_TEMPLATE_SETTINGS, type TemplateSettings } from '@/lib/types/template-settings';
 import {
+  RESUME_TEMPLATE_SETTINGS_PREFIX,
   TEMPLATE_SETTINGS_STORAGE_KEY,
+  getResumeTemplateSettingsStorageKey,
+  loadScopedTemplateSettings,
   loadTemplateSettings,
   sanitizeTemplateSettings,
+  storeScopedTemplateSettings,
   storeTemplateSettings,
 } from '@/lib/utils/template-settings-storage';
 
@@ -106,5 +110,87 @@ describe('loadTemplateSettings / storeTemplateSettings', () => {
       throw new Error('blocked');
     });
     expect(storeTemplateSettings(DEFAULT_TEMPLATE_SETTINGS)).toBe(false);
+  });
+});
+
+describe('per-resume scoped template settings', () => {
+  const withTemplate = (template: TemplateSettings['template']): TemplateSettings => ({
+    ...DEFAULT_TEMPLATE_SETTINGS,
+    template,
+  });
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('builds a namespaced per-resume key, never the bare global key', () => {
+    const key = getResumeTemplateSettingsStorageKey('resume-xyz');
+    expect(key).toBe(`${RESUME_TEMPLATE_SETTINGS_PREFIX}resume-xyz`);
+    expect(key.startsWith(TEMPLATE_SETTINGS_STORAGE_KEY)).toBe(true);
+    expect(key).not.toBe(TEMPLATE_SETTINGS_STORAGE_KEY);
+  });
+
+  it('isolates two resumes: writing one never changes the other or the global key', () => {
+    storeTemplateSettings(withTemplate('clean'));
+    storeScopedTemplateSettings('resume-1', withTemplate('modern'));
+    storeScopedTemplateSettings('resume-2', withTemplate('latex'));
+
+    expect(loadScopedTemplateSettings('resume-1').template).toBe('modern');
+    expect(loadScopedTemplateSettings('resume-2').template).toBe('latex');
+    // The legacy global choice is untouched by scoped writes.
+    expect(loadTemplateSettings().template).toBe('clean');
+  });
+
+  it('inherits the global choice once when a resume has no scoped settings yet', () => {
+    storeTemplateSettings(withTemplate('vivid'));
+    expect(loadScopedTemplateSettings('resume-fresh').template).toBe('vivid');
+    // And still resolves to defaults (not a thrown error) when nothing exists.
+    localStorage.clear();
+    expect(loadScopedTemplateSettings('resume-fresh')).toEqual(DEFAULT_TEMPLATE_SETTINGS);
+  });
+
+  it('routes no-id / empty-id / malformed-id sessions to the global key', () => {
+    for (const badId of [null, undefined, '', '../escape', 'resume id', 'a'.repeat(129)]) {
+      storeTemplateSettings(withTemplate('clean'));
+      // A rejected scope reads exactly the global choice.
+      expect(loadScopedTemplateSettings(badId).template).toBe(loadTemplateSettings().template);
+      storeScopedTemplateSettings(badId, withTemplate('vivid'));
+      // Every rejected id writes the GLOBAL key, never an injected key.
+      expect(loadTemplateSettings().template).toBe('vivid');
+      expect(localStorage.length).toBe(1);
+      expect(localStorage.getItem(TEMPLATE_SETTINGS_STORAGE_KEY)).not.toBeNull();
+    }
+  });
+
+  it('falls back to defaults when the scoped JSON is corrupt', () => {
+    localStorage.setItem(getResumeTemplateSettingsStorageKey('resume-1'), '{broken');
+    expect(loadScopedTemplateSettings('resume-1')).toEqual(DEFAULT_TEMPLATE_SETTINGS);
+  });
+
+  it('sanitizes malformed scoped fields field by field', () => {
+    localStorage.setItem(
+      getResumeTemplateSettingsStorageKey('resume-1'),
+      JSON.stringify({ template: 'nope', pageSize: 'A3', compactMode: true })
+    );
+    const settings = loadScopedTemplateSettings('resume-1');
+    expect(settings.template).toBe(DEFAULT_TEMPLATE_SETTINGS.template);
+    expect(settings.pageSize).toBe(DEFAULT_TEMPLATE_SETTINGS.pageSize);
+    expect(settings.compactMode).toBe(true);
+  });
+
+  it('never throws when storage access is blocked', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    expect(loadScopedTemplateSettings('resume-1')).toEqual(DEFAULT_TEMPLATE_SETTINGS);
+
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    expect(storeScopedTemplateSettings('resume-1', DEFAULT_TEMPLATE_SETTINGS)).toBe(false);
   });
 });

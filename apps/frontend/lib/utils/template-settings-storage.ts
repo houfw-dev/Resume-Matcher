@@ -1,10 +1,14 @@
 /**
  * Persisted reader/writer for the builder's template & typography settings.
  *
- * The settings live under a single global localStorage key (they are not
- * per-resume and never sync to the backend). Both the builder and the
- * diagnosis flow read the *current* choice at action time, so the viewer,
- * PDF export and diagnosis all honour what the user picked in the editor.
+ * Each saved resume keeps its OWN settings under a per-resume localStorage
+ * key ({@link RESUME_TEMPLATE_SETTINGS_PREFIX}`<resumeId>`), so customizing
+ * one resume's template never changes the others. The legacy single global
+ * key ({@link TEMPLATE_SETTINGS_STORAGE_KEY}) stays as the fallback for
+ * brand-new documents (no id yet) and as the one-time inherited choice for
+ * resumes that have never been customized. Nothing here syncs to the
+ * backend; the builder, viewer, PDF export and diagnosis all read the same
+ * scoped choice at action time.
  *
  * Every function here is total: SSR, blocked storage and corrupt JSON all
  * fall back to {@link DEFAULT_TEMPLATE_SETTINGS} instead of throwing.
@@ -143,4 +147,53 @@ export function loadTemplateSettings(): TemplateSettings {
 export function storeTemplateSettings(settings: TemplateSettings): boolean {
   if (typeof window === 'undefined') return false;
   return safeStorage.set(TEMPLATE_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+}
+
+export const RESUME_TEMPLATE_SETTINGS_PREFIX = `${TEMPLATE_SETTINGS_STORAGE_KEY}:`;
+
+// Resume ids are opaque server strings; only this conservative shape is used
+// to build a storage key, so a malformed/hostile id can never inject an
+// arbitrary localStorage key (such input routes to the global scope instead).
+const SCOPED_RESUME_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
+function hasScopedResumeId(resumeId: string | null | undefined): resumeId is string {
+  return typeof resumeId === 'string' && SCOPED_RESUME_ID_RE.test(resumeId);
+}
+
+/** localStorage key holding one resume's own template/typography settings. */
+export function getResumeTemplateSettingsStorageKey(resumeId: string | null | undefined): string {
+  return `${RESUME_TEMPLATE_SETTINGS_PREFIX}${resumeId ?? ''}`;
+}
+
+/**
+ * Read the template settings scoped to one resume. Resumes without a usable
+ * id (brand-new documents, malformed ids) use the legacy global key; a saved
+ * resume that has never been customized inherits the current global choice
+ * as a one-time fallback, so its existing look does not snap back to defaults.
+ */
+export function loadScopedTemplateSettings(resumeId: string | null | undefined): TemplateSettings {
+  if (typeof window === 'undefined' || !hasScopedResumeId(resumeId)) {
+    return loadTemplateSettings();
+  }
+  const raw = safeStorage.get(getResumeTemplateSettingsStorageKey(resumeId));
+  if (!raw) return loadTemplateSettings();
+  try {
+    return sanitizeTemplateSettings(JSON.parse(raw));
+  } catch {
+    return cloneDefaultSettings();
+  }
+}
+
+/**
+ * Persist template settings for one resume. Writes never touch the global
+ * key once a resume has an id; no-id / malformed-id sessions keep writing
+ * the legacy global key (their document is not a saved resume yet).
+ */
+export function storeScopedTemplateSettings(
+  resumeId: string | null | undefined,
+  settings: TemplateSettings
+): boolean {
+  if (typeof window === 'undefined') return false;
+  if (!hasScopedResumeId(resumeId)) return storeTemplateSettings(settings);
+  return safeStorage.set(getResumeTemplateSettingsStorageKey(resumeId), JSON.stringify(settings));
 }

@@ -36,7 +36,7 @@ import { countApplications } from '@/lib/utils/tracker-resume-filter';
 import { useTranslations } from '@/lib/i18n';
 import { withLocalizedDefaultSections } from '@/lib/utils/section-helpers';
 import { buildResumeHeadingProps } from '@/lib/utils/resume-headings';
-import { loadTemplateSettings } from '@/lib/utils/template-settings-storage';
+import { loadScopedTemplateSettings } from '@/lib/utils/template-settings-storage';
 import { useLanguage } from '@/lib/context/language-context';
 import { buildResumeFactFilename, downloadBlobAsFile, openUrlInNewTab } from '@/lib/utils/download';
 import { useOperationOwner } from '@/hooks/use-operation-owner';
@@ -99,10 +99,11 @@ export default function ResumeViewerPage() {
     return withLocalizedDefaultSections(resumeData, t);
   }, [resumeData, t]);
 
-  // The builder's template/typography choice is a single global setting.
-  // Screen preview, PDF and diagnosis all read the same snapshot so the
-  // rendered result the user sees is exactly what gets diagnosed.
-  const templateSettings = useMemo(() => loadTemplateSettings(), []);
+  // Template/typography settings are scoped per resume: screen preview, PDF
+  // and diagnosis all read this resume's own snapshot (with the legacy global
+  // choice as the one-time fallback), so another resume's template never
+  // leaks into this one.
+  const templateSettings = useMemo(() => loadScopedTemplateSettings(resumeId), [resumeId]);
 
   useEffect(() => {
     if (!resumeId) return;

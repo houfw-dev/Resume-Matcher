@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResumeViewerPage from '@/app/(default)/resumes/[id]/page';
 import { fetchResume, downloadResumePdf } from '@/lib/api/resume';
 import { DEFAULT_TEMPLATE_SETTINGS, type TemplateSettings } from '@/lib/types/template-settings';
-import { storeTemplateSettings } from '@/lib/utils/template-settings-storage';
+import {
+  getResumeTemplateSettingsStorageKey,
+  storeTemplateSettings,
+} from '@/lib/utils/template-settings-storage';
 import type { ResumeData } from '@/components/dashboard/resume-component';
 
 const route = vi.hoisted(() => ({ resumeId: 'resume-xyz' }));
@@ -142,5 +145,48 @@ describe('resume viewer follows the builder template settings', () => {
     };
     expect(props.template).toBe(DEFAULT_TEMPLATE_SETTINGS.template);
     expect(props.settings).toEqual(DEFAULT_TEMPLATE_SETTINGS);
+  });
+
+  it('prefers this resume’s scoped settings over the global choice', async () => {
+    // A different global choice must lose against the resume's own settings.
+    storeTemplateSettings({ ...DEFAULT_TEMPLATE_SETTINGS, template: 'clean' });
+    const scoped: TemplateSettings = {
+      ...DEFAULT_TEMPLATE_SETTINGS,
+      template: 'vivid',
+      pageSize: 'LETTER',
+    };
+    localStorage.setItem(
+      getResumeTemplateSettingsStorageKey(route.resumeId),
+      JSON.stringify(scoped)
+    );
+
+    render(<ResumeViewerPage />);
+
+    await screen.findByTestId('viewer-resume');
+    const props = resumePropsMock.mock.calls.at(-1)?.[0] as {
+      template: string;
+      settings: TemplateSettings;
+    };
+    expect(props.template).toBe('vivid');
+    expect(props.settings).toEqual(scoped);
+  });
+
+  it('keeps each resume on its own scoped settings when the route id changes', async () => {
+    localStorage.setItem(
+      getResumeTemplateSettingsStorageKey('resume-xyz'),
+      JSON.stringify({ ...DEFAULT_TEMPLATE_SETTINGS, template: 'vivid' })
+    );
+    localStorage.setItem(
+      getResumeTemplateSettingsStorageKey('resume-abc'),
+      JSON.stringify({ ...DEFAULT_TEMPLATE_SETTINGS, template: 'latex' })
+    );
+
+    route.resumeId = 'resume-abc';
+    render(<ResumeViewerPage />);
+
+    await screen.findByTestId('viewer-resume');
+    const props = resumePropsMock.mock.calls.at(-1)?.[0] as { template: string };
+    // The other resume's vivid choice never leaks into this one.
+    expect(props.template).toBe('latex');
   });
 });

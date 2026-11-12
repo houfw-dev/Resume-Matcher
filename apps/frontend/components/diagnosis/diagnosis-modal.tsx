@@ -28,7 +28,7 @@ import {
 import type { ResumeData } from '@/components/dashboard/resume-component';
 import type { TemplateSettings } from '@/lib/types/template-settings';
 import type { RenderedLayout } from '@/lib/types/rendered-layout';
-import { loadTemplateSettings } from '@/lib/utils/template-settings-storage';
+import { loadScopedTemplateSettings } from '@/lib/utils/template-settings-storage';
 import { buildResumeHeadingProps } from '@/lib/utils/resume-headings';
 import { LayoutMeasurementError, measureResumeLayout } from '@/lib/utils/measure-resume-layout';
 import { useAbortController } from '@/hooks/use-abort-controller';
@@ -203,7 +203,7 @@ export function DiagnosisModal({
     setLayoutSkipped(false);
     setDownloadError(false);
 
-    // Stage 1: render the resume with the builder's current template and
+    // Stage 1: render the resume with this resume's own template choice and
     // measure real pagination/wrapping. Failure here must never block a
     // diagnosis — without a snapshot the backend uses its text estimates.
     let templateSettings: TemplateSettings | undefined;
@@ -211,7 +211,7 @@ export function DiagnosisModal({
     if (resumeData) {
       setMeasuring(true);
       try {
-        const settings = loadTemplateSettings();
+        const settings = loadScopedTemplateSettings(resumeId);
         const layout = await measureResumeLayout({
           resumeData,
           settings,
