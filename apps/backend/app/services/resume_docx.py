@@ -67,6 +67,7 @@ from app.services.parser import (
     normalize_cjk_compat_deep,
     normalize_date_periods,
     normalize_text_hygiene,
+    plan_skill_group_heads,
     promote_work_departments,
     reconcile_custom_section_shapes,
     repair_project_label_regions,
@@ -388,6 +389,11 @@ _CATEGORY_SENTENCE_RE = re.compile(r"[。；！？!?;]")
 
 def _is_tech_stack_category_row(row: str) -> bool:
     """Mirror isTechStackCategoryRow(): category enumeration, not prose."""
+    # A standalone "http(s)://…" URL matches the short-colon shape by accident
+    # (prefix "https" + colon); a link is never a 分类：… row. Mirrors the
+    # parser's _is_tech_stack_category_row URL guard — keep the three in sync.
+    if re.match(r"^(?:https?://|www\.)", row.strip(), re.IGNORECASE):
+        return False
     if not _TECH_STACK_CATEGORY_RE.search(row) or _CATEGORY_SENTENCE_RE.search(row):
         return False
     # A glued known sub-module ("技术难点及亮点：实时时延<50ms", no period)
@@ -902,12 +908,20 @@ def _split_points(text: str) -> list[str]:
 
 
 def _add_ordered_points(
-    document: Document, points: list[str], *, base_size: float = 10.5
+    document: Document,
+    points: list[str],
+    *,
+    base_size: float = 10.5,
+    force_numbers: bool = False,
 ) -> None:
-    """Hanging-indent ordered list; a single point renders as a paragraph."""
+    """Hanging-indent ordered list; a single point renders as a paragraph.
+
+    ``force_numbers`` keeps the "1." marker even for a one-point group, used by
+    the grouped skills renderer so every group's items stay numbered.
+    """
     if not points:
         return
-    if len(points) == 1:
+    if len(points) == 1 and not force_numbers:
         paragraph = document.add_paragraph()
         run = paragraph.add_run(str(strip_source_point_marker(points[0])))
         _style_run(run, size=base_size)
@@ -1288,10 +1302,36 @@ def _render_additional_skills(
     if not skills:
         return
     _section_heading(document, chrome["additional"])
-    _add_ordered_points(
-        document,
-        [str(strip_source_point_marker(skill)) for skill in skills],
-    )
+    head_indices = plan_skill_group_heads(skills)
+    if not head_indices:
+        _add_ordered_points(
+            document,
+            [str(strip_source_point_marker(skill)) for skill in skills],
+        )
+        return
+    # Grouped skills mirror the project sub-module layout: a bold unnumbered
+    # group heading, then its items numbered from 1, restarting per group.
+    group_points: list[str] = []
+    for index, skill in enumerate(skills):
+        if index in head_indices:
+            if group_points:
+                _add_ordered_points(
+                    document, group_points, force_numbers=True
+                )
+                group_points = []
+            paragraph = document.add_paragraph()
+            pf = paragraph.paragraph_format
+            pf.space_before = Pt(2)
+            pf.space_after = Pt(1)
+            pf.keep_with_next = True
+            head_text = str(strip_source_point_marker(skill)).rstrip("：:").strip()
+            run = paragraph.add_run(head_text)
+            run.bold = True
+            _style_run(run, size=10.5)
+            continue
+        group_points.append(str(skill))
+    if group_points:
+        _add_ordered_points(document, group_points, force_numbers=True)
 
 
 def _render_late_modules(

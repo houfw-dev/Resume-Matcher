@@ -1,10 +1,12 @@
 import React from 'react';
-import { Mail, Phone, Globe, Linkedin, Github, ExternalLink } from 'lucide-react';
+import { Globe, Linkedin, Github, ExternalLink } from 'lucide-react';
 import type {
   ResumeData,
   SectionMeta,
   AdditionalSectionLabels,
   ResumeSectionHeadings,
+  Experience,
+  Education,
 } from '@/components/dashboard/resume-component';
 import {
   getRenderSections,
@@ -19,7 +21,10 @@ import {
 } from '@/lib/utils/resume-headings';
 import { formatDateRange } from '@/lib/utils';
 import { DescriptionList } from './description-list';
+import { buildHeaderFactCells, HeaderFactGrid } from './header-fact-grid';
 import { stripPointMarker } from './list-format';
+import { SkillGroupList } from './skill-list';
+import { promoteWorkDepartment } from './work-department';
 import { OrderedStringList, PointTextList } from './point-text-list';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/latex.module.css';
@@ -62,10 +67,9 @@ export const ResumeLatex: React.FC<ResumeLatexProps> = ({
   // 培训与证书 / 荣誉奖项 (projected to the back by getRenderSections).
   const renderSections = getRenderSections(data);
 
-  // LaTeX renders location as its own centered line, so it is not a contact-row item.
+  // Only the social-link row remains in the header; phone/email/location are
+  // facts in HeaderFactGrid and carry no icons.
   const contactIcons: Record<string, React.ReactNode> = {
-    Email: <Mail size={12} />,
-    Phone: <Phone size={12} />,
     Website: <Globe size={12} />,
     LinkedIn: <Linkedin size={12} />,
     GitHub: <Github size={12} />,
@@ -119,35 +123,24 @@ export const ResumeLatex: React.FC<ResumeLatexProps> = ({
     );
   };
 
-  // Build the contact row (phone, email, linkedin, github, website) joined by middots.
+  // Basic-info facts （性别/年龄/学历/工作年限/求职意向/意向城市/电话/邮箱/
+  // 外语水平） render in the centered fact grid, mirroring swiss-single's
+  // header contract. The contact row therefore keeps only the labeled social
+  // links (location/phone/email — including LaTeX's old standalone location
+  // line — live as facts above it).
+  const factCells = buildHeaderFactCells({
+    personalInfo,
+    education,
+    languages: additional?.languages,
+    labels: infoLabels,
+  });
+
+  // Social-link row (linkedin, github, website) joined by middots.
   const contactItems = [
-    renderContactDetail('Phone', personalInfo?.phone),
-    renderContactDetail('Email', personalInfo?.email, 'mailto:'),
     renderContactDetail('LinkedIn', personalInfo?.linkedin, '', infoLabels.linkedin),
     renderContactDetail('GitHub', personalInfo?.github, '', infoLabels.github),
     renderContactDetail('Website', personalInfo?.website, '', infoLabels.website),
   ].filter(Boolean);
-
-  // Company-first entry header: bold company / bold dates, then italic role / italic location.
-  const renderEntryHeader = (
-    primary?: string,
-    dates?: string,
-    secondary?: string,
-    location?: string
-  ) => (
-    <>
-      <div className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}>
-        <span className={styles.entryPrimary}>{primary}</span>
-        {dates && <span className={`${styles.entryDates} ml-4`}>{formatDateRange(dates)}</span>}
-      </div>
-      {(secondary || location) && (
-        <div className={`flex justify-between items-baseline ${baseStyles['resume-row']}`}>
-          {secondary && <span className={styles.entrySecondary}>{secondary}</span>}
-          {location && <span className={`${styles.entrySecondary} ml-4`}>{location}</span>}
-        </div>
-      )}
-    </>
-  );
 
   const renderBullets = (
     items?: string[],
@@ -182,12 +175,17 @@ export const ResumeLatex: React.FC<ResumeLatexProps> = ({
           <div key={section.id} className={baseStyles['resume-section']}>
             <h3 className={styles.sectionTitle}>{section.displayName}</h3>
             <div className={baseStyles['resume-items']}>
-              {workExperience.map((exp) => (
-                <div key={exp.id} className={baseStyles['resume-item']}>
-                  {renderEntryHeader(exp.company, exp.years, exp.title, exp.location)}
-                  {renderBullets(exp.description, exp.descriptionStyles)}
-                </div>
-              ))}
+              {workExperience.map((exp) => {
+                // A legacy plain department line ("全球资金部") is lifted into
+                // the department column and removed from the bullet list.
+                const promoted = promoteWorkDepartment(exp);
+                return (
+                  <div key={exp.id} className={baseStyles['resume-item']}>
+                    <WorkEntryRow exp={exp} department={promoted.department} />
+                    {renderBullets(promoted.description, promoted.descriptionStyles)}
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
@@ -272,10 +270,7 @@ export const ResumeLatex: React.FC<ResumeLatexProps> = ({
             <div className={baseStyles['resume-items']}>
               {education.map((edu) => (
                 <div key={edu.id} className={baseStyles['resume-item']}>
-                  {renderEntryHeader(edu.institution, edu.years, edu.degree)}
-                  {edu.description && (
-                    <p className={baseStyles['resume-text-sm']}>{edu.description}</p>
-                  )}
+                  <EducationEntryRow edu={edu} />
                 </div>
               ))}
             </div>
@@ -289,7 +284,6 @@ export const ResumeLatex: React.FC<ResumeLatexProps> = ({
             key={section.id}
             additional={additional}
             displayName={section.displayName}
-            labels={additionalSectionLabels}
           />
         );
 
@@ -313,15 +307,12 @@ export const ResumeLatex: React.FC<ResumeLatexProps> = ({
       {personalInfo && (
         <header className={`text-center ${baseStyles['resume-header']}`}>
           {personalInfo.name && <h1 className={`${styles.name} mb-1`}>{personalInfo.name}</h1>}
-          {personalInfo.title && (
-            <div className={`${styles.tagline} mb-1`}>{personalInfo.title}</div>
-          )}
-          {personalInfo.location && (
-            <div className={`${styles.locationLine} mb-1`}>{personalInfo.location}</div>
-          )}
+          {/* 求职意向（title）/ 意向城市（location， formerly the standalone
+              location line）/ 电话 / 邮箱 join the labeled fact grid. */}
+          <HeaderFactGrid cells={factCells} />
           {contactItems.length > 0 && (
             <div
-              className={`flex flex-wrap justify-center items-center gap-x-2 gap-y-1 ${styles.contactRow}`}
+              className={`flex flex-wrap justify-center items-center gap-x-2 gap-y-1 mt-2 ${styles.contactRow}`}
             >
               {contactItems.map((item, index) => (
                 <React.Fragment key={index}>
@@ -357,38 +348,87 @@ const nonBlankStrings = (items?: string[]): string[] =>
   (items ?? []).filter((item): item is string => typeof item === 'string' && item.trim() !== '');
 
 /**
- * The early `additional` slot renders ONLY the skills block (technical skills
- * + languages, bold inline label + comma-joined items). Cert/award lists are
- * projected to the back of the resume by getRenderSections and rendered via
- * <LateAdditionalModule>.
+ * Work entry header as one justified serif row — time | company · location |
+ * department | role — mirroring the swiss-single contract. Bold date/company
+ * on the left, italic role flush right （两端对齐）. With a department it uses
+ * four tracks; without one, three tracks (time | company | role). The date
+ * never wraps and long values wrap inside their own minmax(0, …) cell.
+ */
+const WorkEntryRow: React.FC<{ exp: Experience; department?: string }> = ({
+  exp,
+  department: departmentProp,
+}) => {
+  const date = formatDateRange(exp.years ?? '').trim();
+  const company = exp.company?.trim() ?? '';
+  const location = exp.location?.trim() ?? '';
+  const department = (departmentProp ?? '').trim();
+  const role = exp.title?.trim() ?? '';
+
+  if (!date && !company && !department && !location && !role) return null;
+
+  const gridClass = department ? styles.entryGrid : styles.entryGridThree;
+
+  return (
+    <div className={`${gridClass} ${baseStyles['resume-row-tight']}`}>
+      <span className={styles.entryDate}>{date}</span>
+      <span className={styles.entryPrimary}>
+        {company}
+        {location && <span className={baseStyles['resume-meta-sm']}> · {location}</span>}
+      </span>
+      {department && <span className={styles.entryDepartment}>{department}</span>}
+      <span className={styles.entryRoleEnd}>{role}</span>
+    </div>
+  );
+};
+
+/**
+ * Education entry header as one four-column row — time | university | major |
+ * degree. The optional education.description field is the major column (same
+ * convention as swiss-single), so it no longer renders as a separate
+ * paragraph. Empty cells still reserve their track, keeping column edges
+ * aligned across work and education entries.
+ */
+const EducationEntryRow: React.FC<{ edu: Education }> = ({ edu }) => {
+  const date = formatDateRange(edu.years ?? '').trim();
+  const institution = edu.institution?.trim() ?? '';
+  const major = edu.description?.trim() ?? '';
+  const degree = edu.degree?.trim() ?? '';
+
+  if (!date && !institution && !major && !degree) return null;
+
+  return (
+    <div className={`${styles.entryGrid} ${baseStyles['resume-row-tight']}`}>
+      <span className={styles.entryDate}>{date}</span>
+      <span className={styles.entryPrimary}>{institution}</span>
+      <span className={styles.entryDepartment}>{major}</span>
+      <span className={styles.entryRoleEnd}>{degree}</span>
+    </div>
+  );
+};
+
+/**
+ * The early `additional` slot renders ONLY the technical-skills block, as an
+ * ordered numbered list — group heads are bold unnumbered labels and each
+ * group restarts numbering at 1 — with no inline "Technical Skills:" label
+ * (the section title already names the block). Languages never render here:
+ * per the parsing-rules spec they live only in the header fact grid as the
+ * 外语水平 fact. Cert/award lists are projected to the back of the resume by
+ * getRenderSections and rendered via <LateAdditionalModule>.
  */
 const AdditionalSkillsSection: React.FC<{
   additional: ResumeData['additional'];
   displayName?: string;
-  labels?: Partial<AdditionalSectionLabels>;
-}> = ({ additional, displayName = 'Skills', labels }) => {
+}> = ({ additional, displayName = 'Skills' }) => {
   if (!additional) return null;
 
   const technicalSkills = nonBlankStrings(additional.technicalSkills);
-  const languages = nonBlankStrings(additional.languages);
-  if (technicalSkills.length === 0 && languages.length === 0) return null;
-
-  const technicalSkillsLabel = labels?.technicalSkills ?? 'Technical Skills:';
-  const languagesLabel = labels?.languages ?? 'Languages:';
-
-  const line = (label: string, items: string[]) =>
-    items.length > 0 ? (
-      <div>
-        <span className="font-bold">{label}</span> {items.map(stripPointMarker).join(', ')}
-      </div>
-    ) : null;
+  if (technicalSkills.length === 0) return null;
 
   return (
     <div className={baseStyles['resume-section']}>
       <h3 className={styles.sectionTitle}>{displayName}</h3>
       <div className={`${baseStyles['resume-stack']} ${baseStyles['resume-text-sm']}`}>
-        {line(technicalSkillsLabel, technicalSkills)}
-        {line(languagesLabel, languages)}
+        <SkillGroupList entries={technicalSkills} />
       </div>
     </div>
   );
@@ -458,20 +498,20 @@ const DynamicResumeSectionLatex: React.FC<{
         <div className={baseStyles['resume-items']}>
           {customSection.items.map((item) => (
             <div key={item.id} className={baseStyles['resume-item']}>
-              <div
-                className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}
-              >
+              <div className={`${styles.entryLineGrid} ${baseStyles['resume-row-tight']}`}>
                 <span className={styles.entryPrimary}>{item.title}</span>
                 {item.years && (
-                  <span className={`${styles.entryDates} ml-4`}>{formatDateRange(item.years)}</span>
+                  <span className={styles.entryDates}>{formatDateRange(item.years)}</span>
                 )}
               </div>
               {(item.subtitle || item.location) && (
-                <div className={`flex justify-between items-baseline ${baseStyles['resume-row']}`}>
-                  {item.subtitle && <span className={styles.entrySecondary}>{item.subtitle}</span>}
-                  {item.location && (
-                    <span className={`${styles.entrySecondary} ml-4`}>{item.location}</span>
+                <div className={`${styles.entryLineGrid} ${baseStyles['resume-row']}`}>
+                  {item.subtitle ? (
+                    <span className={styles.entrySecondary}>{item.subtitle}</span>
+                  ) : (
+                    <span />
                   )}
+                  {item.location && <span className={styles.entryLocation}>{item.location}</span>}
                 </div>
               )}
               {renderBullets(item.description, item.descriptionStyles)}

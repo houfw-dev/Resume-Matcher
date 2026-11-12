@@ -25,7 +25,7 @@ import { DynamicResumeSection } from './dynamic-resume-section';
 import { promoteWorkDepartment } from './work-department';
 import { DescriptionList } from './description-list';
 import { PointTextList } from './point-text-list';
-import { stripPointMarker } from './list-format';
+import { groupSkillEntries, stripPointMarker } from './list-format';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/swiss-single.module.css';
 
@@ -315,13 +315,15 @@ export const ResumeSingleColumn: React.FC<ResumeSingleColumnProps> = ({
             </div>
           )}
 
-          {/* Website / social links stay on their own row */}
+          {/* Website / social links stay on their own row but share the
+              facts grid's three column tracks, so a two-link row keeps the
+              second link (GitHub) aligned under column 2. */}
           {linkItems.length > 0 && (
-            <div
-              className={`flex flex-wrap gap-x-3 gap-y-1 ${baseStyles['resume-meta']} ${styles.infoLinks}`}
-            >
+            <div className={`${baseStyles['resume-meta']} ${styles.infoLinkRow}`}>
               {linkItems.map((item, index) => (
-                <React.Fragment key={index}>{item}</React.Fragment>
+                <div key={index} className={styles.infoLinkCell}>
+                  {item}
+                </div>
               ))}
             </div>
           )}
@@ -517,6 +519,51 @@ const OrderedEntryList: React.FC<{ entries: string[] }> = ({ entries }) => {
   );
 };
 
+/**
+ * Technical skills with standalone group headers ("AI 大模型" /
+ * "Java 工程落地能力"): a head renders as a bold unnumbered label — the same
+ * look as the project 项目职责 sub-module labels — and each group's items
+ * number from 1 in their own <ol>. Ungrouped lists (the planner finds fewer
+ * than two qualified heads) fall back to OrderedEntryList, so ordinary skill
+ * lists render byte-identically.
+ */
+const SkillGroupList: React.FC<{ entries: string[] }> = ({ entries }) => {
+  const groups = groupSkillEntries(entries);
+  if (groups.length === 1 && groups[0].head === null) {
+    return <OrderedEntryList entries={groups[0].items} />;
+  }
+  return (
+    <div className={baseStyles['resume-stack']}>
+      {groups.map((group, groupIndex) => (
+        <React.Fragment key={groupIndex}>
+          {group.head && (
+            <div
+              data-skill-group=""
+              className={`flex items-baseline gap-[0.5ch] text-left ${baseStyles['resume-sub-label']} ${baseStyles['resume-text-sm']}`}
+            >
+              {/* Reserve the same 3ch number gutter as item rows. */}
+              <span aria-hidden="true" className="w-[3ch] flex-none tabular-nums" />
+              <span className="min-w-0 flex-1 text-left">{stripPointMarker(group.head)}</span>
+            </div>
+          )}
+          {group.items.length > 0 && (
+            <ol className={styles.skillOrderedList}>
+              {group.items.map((entry, index) => (
+                <li key={index} className={styles.skillOrderedItem}>
+                  <span className={styles.skillNumber} aria-hidden="true">
+                    {index + 1}.
+                  </span>
+                  <span className={styles.skillText}>{stripPointMarker(entry)}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
+
 /** Drop blank/whitespace-only entries so empty builder lines never render (issue #763). */
 const nonBlankStrings = (items?: string[]): string[] =>
   (items ?? []).filter((item): item is string => typeof item === 'string' && item.trim() !== '');
@@ -536,7 +583,7 @@ const AdditionalSkillsSection: React.FC<{
   return (
     <div className={baseStyles['resume-section']}>
       <h3 className={baseStyles['resume-section-title']}>{displayName}</h3>
-      <OrderedEntryList entries={technicalSkills} />
+      <SkillGroupList entries={technicalSkills} />
     </div>
   );
 };

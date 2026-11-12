@@ -229,6 +229,14 @@ use these headings; map them exactly as specified:
      each category line as ONE entry with its category prefix and inline name
      list intact; never invent categories the source does not have, and keep
      bare (unprefixed) skill names as one entry per line.
+     When the source prints a STANDALONE bold category/group header on its own
+     line followed by longer detail bullets (e.g. a short line "AI 大模型"
+     above several descriptive skill bullets, then "Java 工程落地能力" above
+     its own bullets), keep that header as its OWN short technicalSkills entry
+     in source order — one entry per source line, do not merge it into the
+     following bullets, do not number or reword it, and never invent group
+     headers the source does not print. A deterministic render planner rebuilds
+     the header/details hierarchy from these entries.
    - 荣誉证书 / 荣誉/证书 / 荣誉 / 证书 / 获奖情况 / 资质荣誉 / 资格证书 / 奖项 /
      资质认证, whether presented as a DEDICATED section or found inside a
      combined skills block, go into additional, NEVER into customSections:

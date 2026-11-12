@@ -36,17 +36,6 @@
   color: var(--resume-text-primary);
 }
 
-.locationLine {
-  font-size: var(--font-size-base);
-  color: var(--resume-text-body);
-}
-
-.tagline {
-  font-style: italic;
-  font-size: calc(var(--font-size-base) * 1.05);
-  color: var(--resume-text-body);
-}
-
 .contactRow {
   font-size: calc(var(--font-size-base) * 0.95);
   color: var(--resume-text-body);
@@ -89,6 +78,74 @@
 .entrySecondary {
   font-style: italic;
   color: var(--resume-text-body);
+}
+
+/*
+  Time-first single-row entry headers shared by work and education:
+  time | company/school | department/major | role/degree. minmax(0, …) tracks
+  let long values wrap INSIDE their own cell instead of pushing neighbors
+  around; empty cells still reserve their track, so every entry shares
+  identical column edges (行列对齐）, with the date flush left and role/degree
+  flush right （两端对齐）, all on one line.
+*/
+.entryGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr) auto;
+  column-gap: 1rem;
+  align-items: baseline;
+  text-align: left;
+}
+
+/* No department: three real columns — time | company | role. */
+.entryGridThree {
+  display: grid;
+  grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr);
+  column-gap: 1rem;
+  align-items: baseline;
+  text-align: left;
+}
+
+/* Dynamic custom itemList sections keep the two-line two-track header. */
+.entryLineGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 1rem;
+  align-items: baseline;
+  text-align: left;
+}
+
+/* Time cell: bold like the old date line, flush left, never wraps. */
+.entryDate {
+  font-weight: 700;
+  color: var(--resume-text-primary);
+  white-space: nowrap;
+  text-align: left;
+}
+
+/* Department / major cell: italic metadata, wraps inside its own track. */
+.entryDepartment {
+  font-style: italic;
+  color: var(--resume-text-body);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+/* Role / degree cell: italic, flush with the right content edge （两端对齐）. */
+.entryRoleEnd {
+  font-style: italic;
+  color: var(--resume-text-body);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  justify-self: end;
+  text-align: right;
+}
+
+.entryLocation {
+  font-style: italic;
+  color: var(--resume-text-body);
+  white-space: nowrap;
+  text-align: right;
 }
 
 @media print {

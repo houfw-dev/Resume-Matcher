@@ -21,6 +21,7 @@ from app.schemas.models import DEFAULT_SECTION_META
 from app.services.resume_docx import (
     DOCX_MEDIA_TYPE,
     _META_COLOR,
+    _is_tech_stack_category_row,
     build_resume_docx,
     resume_docx_headers,
 )
@@ -479,6 +480,37 @@ def test_tech_stack_category_rows_render_as_ordered_list() -> None:
     assert not _paragraph_bold(document, "1. 后端：Java 8、Spring Boot、Spring Cloud")
 
 
+def test_tech_stack_url_row_does_not_become_ordered_list() -> None:
+    # Legacy stored data (pre repair_project_tech_stack_rows) may still carry a
+    # standalone URL inside a tech-stack region. The "https:" prefix matches the
+    # category shape by accident; without the URL guard the whole region would
+    # render as a numbered list. It must instead stay stacked, unnumbered, with
+    # every row (including the link) preserved.
+    data = _full_resume_data()
+    data["personalProjects"][0]["description"] = [
+        "技术栈：",
+        "Java",
+        "Kotlin",
+        "https://forest.dtflyx.com",
+    ]
+    data["personalProjects"][0]["descriptionStyles"] = ["label"] + ["plain"] * 3
+    texts = _paragraph_texts(_build_doc(data))
+
+    i_stack = texts.index("技术栈：")
+    region = texts[i_stack + 1 : i_stack + 4]
+    assert region == ["Java", "Kotlin", "https://forest.dtflyx.com"]
+    assert not any(row.startswith(("1.", "2.", "3.")) for row in region)
+
+
+def test_tech_stack_category_predicate_rejects_standalone_urls() -> None:
+    assert _is_tech_stack_category_row("https://github.com/org/repo") is False
+    assert _is_tech_stack_category_row("http://example.com/docs") is False
+    assert _is_tech_stack_category_row("www.example.com") is False
+    # Real category rows must still be recognized.
+    assert _is_tech_stack_category_row("后端：Java 17、Spring Boot") is True
+    assert _is_tech_stack_category_row("数据库：MySQL、Redis") is True
+
+
 def test_nested_highlight_heads_hierarchical_numbering_plain_vs_bullet() -> None:
     data = _full_resume_data()
     data["personalProjects"][0]["description"] = [
@@ -867,6 +899,37 @@ def test_source_numbering_stripped_from_skills_and_single_points_unnumbered() ->
     texts_single = _paragraph_texts(document_single)
     assert "只有一项" in texts_single
     assert "1. 只有一项" not in texts_single
+
+
+def test_grouped_skills_render_bold_heads_with_restarting_numbers() -> None:
+    data = copy.deepcopy(_full_resume_data())
+    data["additional"]["technicalSkills"] = [
+        "AI大模型：",
+        "精通 RAG 全链路架构设计与检索增强生成落地",
+        "熟悉大模型微调、Prompt 工程与评测体系建设",
+        "Java工程落地能力",
+        "熟练掌握 Spring Boot 微服务架构与中间件集成",
+    ]
+    document = _build_doc(data)
+    texts = _paragraph_texts(document)
+    i_skills = _heading_index(texts, "专业技能")
+
+    # Heads are bold standalone paragraphs; the trailing colon is trimmed and
+    # no head ever carries a list number.
+    i_head_one = texts.index("AI大模型", i_skills)
+    i_head_two = texts.index("Java工程落地能力", i_head_one)
+    assert "1. AI大模型" not in texts
+    assert _paragraph_bold(document, "AI大模型")
+    assert _paragraph_bold(document, "Java工程落地能力")
+
+    # Group 1 numbers its items from 1.
+    assert texts[i_head_one + 1] == "1. 精通 RAG 全链路架构设计与检索增强生成落地"
+    assert texts[i_head_one + 2] == "2. 熟悉大模型微调、Prompt 工程与评测体系建设"
+
+    # Group 2 restarts at 1 — even though it holds a single item,
+    # force_numbers keeps the marker (a plain paragraph would break the
+    # project sub-module look this renderer mirrors).
+    assert texts[i_head_two + 1] == "1. 熟练掌握 Spring Boot 微服务架构与中间件集成"
 
 
 def test_custom_sections_keep_source_shape_and_verbatim_titles() -> None:

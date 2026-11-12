@@ -10,7 +10,7 @@ import { getSortedSections, getSectionMeta } from '@/lib/utils/section-helpers';
 import { DEFAULT_PERSONAL_INFO_LABELS, type PersonalInfoLabels } from '@/lib/utils/resume-headings';
 import { formatDateRange } from '@/lib/utils';
 import { DescriptionList } from './description-list';
-import { stripPointMarker } from './list-format';
+import { groupSkillEntries, stripPointMarker } from './list-format';
 import { OrderedStringList, PointTextList } from './point-text-list';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/vivid.module.css';
@@ -343,9 +343,14 @@ export const ResumeVivid: React.FC<ResumeVividProps> = ({
           {isSectionVisible('additional') && technicalSkills.length > 0 && (
             <div className={baseStyles['resume-section']}>
               <h3 className={styles.sectionTitleSm}>{headingFallbacks.skills}</h3>
-              <p className={baseStyles['resume-text-xs']}>
-                {technicalSkills.map(stripPointMarker).join(' • ')}
-              </p>
+              {groupSkillEntries(technicalSkills).map((group, groupIndex) => (
+                <div key={groupIndex} className={baseStyles['resume-text-xs']}>
+                  {group.head && <strong>{stripPointMarker(group.head)}</strong>}
+                  {group.items.map((skill, index) => (
+                    <div key={index}>{stripPointMarker(skill)}</div>
+                  ))}
+                </div>
+              ))}
             </div>
           )}
 

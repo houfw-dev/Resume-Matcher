@@ -1,10 +1,12 @@
 import React from 'react';
-import { Mail, Phone, MapPin, Globe, Linkedin, Github, ExternalLink } from 'lucide-react';
+import { Globe, Linkedin, Github, ExternalLink } from 'lucide-react';
 import type {
   ResumeData,
   SectionMeta,
   AdditionalSectionLabels,
   ResumeSectionHeadings,
+  Experience,
+  Education,
 } from '@/components/dashboard/resume-component';
 import {
   getRenderSections,
@@ -19,7 +21,10 @@ import {
 } from '@/lib/utils/resume-headings';
 import { formatDateRange } from '@/lib/utils';
 import { DescriptionList } from './description-list';
+import { buildHeaderFactCells, HeaderFactGrid } from './header-fact-grid';
 import { stripPointMarker } from './list-format';
+import { SkillGroupList } from './skill-list';
+import { promoteWorkDepartment } from './work-department';
 import { OrderedStringList, PointTextList } from './point-text-list';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/modern.module.css';
@@ -59,15 +64,24 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
   // 培训与证书 / 荣誉奖项 (projected to the back by getRenderSections).
   const renderSections = getRenderSections(data);
 
-  // Icon mapping for contact types
+  // Only the social-link row remains in the header; phone/email/location are
+  // facts in HeaderFactGrid and carry no icons.
   const contactIcons: Record<string, React.ReactNode> = {
-    Email: <Mail size={12} />,
-    Phone: <Phone size={12} />,
-    Location: <MapPin size={12} />,
     Website: <Globe size={12} />,
     LinkedIn: <Linkedin size={12} />,
     GitHub: <Github size={12} />,
   };
+
+  // Basic-info facts （性别/年龄/学历/工作年限/求职意向/意向城市/电话/邮箱/
+  // 外语水平） render in the centered fact grid, mirroring swiss-single's
+  // header contract. The old uppercase title h2 / inline contact line are
+  // absorbed: title becomes the 求职意向 fact, location/phone/email join it.
+  const factCells = buildHeaderFactCells({
+    personalInfo,
+    education,
+    languages: additional?.languages,
+    labels: infoLabels,
+  });
 
   // Helper function to render contact details. `displayLabel` renders a muted
   // label before the value (e.g. 个人网站： https://…) for personal links.
@@ -118,6 +132,13 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
     );
   };
 
+  // Social links keep their own comma-separated row under the fact grid.
+  const socialItems = [
+    renderContactDetail('Website', personalInfo?.website, '', infoLabels.website),
+    renderContactDetail('LinkedIn', personalInfo?.linkedin, '', infoLabels.linkedin),
+    renderContactDetail('GitHub', personalInfo?.github, '', infoLabels.github),
+  ].filter(Boolean);
+
   // Render a section based on its key
   const renderSection = (section: SectionMeta) => {
     switch (section.key) {
@@ -140,25 +161,20 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
           <div key={section.id} className={baseStyles['resume-section']}>
             <h3 className={styles['section-title-accent']}>{section.displayName}</h3>
             <div className={baseStyles['resume-items']}>
-              {workExperience.map((exp) => (
-                <div key={exp.id} className={baseStyles['resume-item']}>
-                  <div
-                    className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}
-                  >
-                    <h4 className={baseStyles['resume-item-title']}>{exp.title}</h4>
-                    <span className={`${baseStyles['resume-date']} ml-4`}>
-                      {formatDateRange(exp.years)}
-                    </span>
+              {workExperience.map((exp) => {
+                // A legacy plain department line ("全球资金部") is lifted into
+                // the department column and removed from the bullet list.
+                const promoted = promoteWorkDepartment(exp);
+                return (
+                  <div key={exp.id} className={baseStyles['resume-item']}>
+                    <WorkEntryRow exp={exp} department={promoted.department} />
+                    <DescriptionList
+                      items={promoted.description}
+                      styles={promoted.descriptionStyles}
+                    />
                   </div>
-                  <div
-                    className={`flex justify-between items-center ${baseStyles['resume-row']} ${baseStyles['resume-item-subtitle']}`}
-                  >
-                    <span>{exp.company}</span>
-                    {exp.location && <span>{exp.location}</span>}
-                  </div>
-                  <DescriptionList items={exp.description} styles={exp.descriptionStyles} />
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         );
@@ -250,22 +266,7 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
             <div className={baseStyles['resume-items']}>
               {education.map((edu) => (
                 <div key={edu.id} className={baseStyles['resume-item']}>
-                  <div
-                    className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}
-                  >
-                    <h4 className={baseStyles['resume-item-title']}>{edu.institution}</h4>
-                    <span className={`${baseStyles['resume-date']} ml-4`}>
-                      {formatDateRange(edu.years)}
-                    </span>
-                  </div>
-                  <div
-                    className={`flex justify-between ${baseStyles['resume-item-subtitle']} ${baseStyles['resume-row-tight']}`}
-                  >
-                    <span>{edu.degree}</span>
-                  </div>
-                  {edu.description && (
-                    <p className={baseStyles['resume-text-sm']}>{edu.description}</p>
-                  )}
+                  <EducationEntryRow edu={edu} />
                 </div>
               ))}
             </div>
@@ -279,7 +280,6 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
             key={section.id}
             additional={additional}
             displayName={section.displayName}
-            labels={additionalSectionLabels}
           />
         );
 
@@ -309,51 +309,23 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
           {/* Decorative accent underline under name */}
           <div className={styles['name-underline']} aria-hidden="true" />
 
-          {/* Title - Centered, below name */}
-          {personalInfo.title && (
-            <h2
-              className={`${baseStyles['resume-title']} ${baseStyles['resume-meta']} tracking-wide uppercase mt-3 mb-3`}
-            >
-              {personalInfo.title}
-            </h2>
-          )}
+          {/* Labeled basic-info facts: the former uppercase title h2 becomes
+              the 求职意向 cell; location/phone/email join the same grid. */}
+          <HeaderFactGrid cells={factCells} />
 
-          {/* Contact - Own line, centered */}
-          <div
-            className={`flex flex-wrap justify-center gap-x-1 gap-y-1 ${baseStyles['resume-meta']}`}
-          >
-            {renderContactDetail('Email', personalInfo.email, 'mailto:')}
-            {personalInfo.phone && (
-              <>
-                <span className={baseStyles['text-muted']}>,</span>
-                {renderContactDetail('Phone', personalInfo.phone)}
-              </>
-            )}
-            {personalInfo.location && (
-              <>
-                <span className={baseStyles['text-muted']}>,</span>
-                {renderContactDetail('Location', personalInfo.location)}
-              </>
-            )}
-            {personalInfo.website && (
-              <>
-                <span className={baseStyles['text-muted']}>,</span>
-                {renderContactDetail('Website', personalInfo.website, '', infoLabels.website)}
-              </>
-            )}
-            {personalInfo.linkedin && (
-              <>
-                <span className={baseStyles['text-muted']}>,</span>
-                {renderContactDetail('LinkedIn', personalInfo.linkedin, '', infoLabels.linkedin)}
-              </>
-            )}
-            {personalInfo.github && (
-              <>
-                <span className={baseStyles['text-muted']}>,</span>
-                {renderContactDetail('GitHub', personalInfo.github, '', infoLabels.github)}
-              </>
-            )}
-          </div>
+          {/* Social links - own comma-separated centered row */}
+          {socialItems.length > 0 && (
+            <div
+              className={`flex flex-wrap justify-center items-center gap-x-1 gap-y-1 mt-2 ${baseStyles['resume-meta']}`}
+            >
+              {socialItems.map((item, index) => (
+                <React.Fragment key={index}>
+                  {index > 0 && <span className={baseStyles['text-muted']}>,</span>}
+                  {item}
+                </React.Fragment>
+              ))}
+            </div>
+          )}
         </header>
       )}
 
@@ -382,40 +354,89 @@ const nonBlankStrings = (items?: string[]): string[] =>
   (items ?? []).filter((item): item is string => typeof item === 'string' && item.trim() !== '');
 
 /**
- * The early `additional` slot renders ONLY the skills block (technical skills
- * + languages). Cert/award lists are projected to the back of the resume by
+ * Work entry header as one justified row — time | company · location |
+ * department | role — mirroring the swiss-single contract. The title stays an
+ * h4 but sits flush right （两端对齐）; with a department the row uses four
+ * tracks, without one, three tracks (time | company | role). The date never
+ * wraps and long values wrap inside their own minmax(0, …) cell.
+ */
+const WorkEntryRow: React.FC<{ exp: Experience; department?: string }> = ({
+  exp,
+  department: departmentProp,
+}) => {
+  const date = formatDateRange(exp.years ?? '').trim();
+  const company = exp.company?.trim() ?? '';
+  const location = exp.location?.trim() ?? '';
+  const department = (departmentProp ?? '').trim();
+  const role = exp.title?.trim() ?? '';
+
+  if (!date && !company && !department && !location && !role) return null;
+
+  const gridClass = department ? styles.entryGrid : styles.entryGridThree;
+
+  return (
+    <div className={`${gridClass} ${baseStyles['resume-row-tight']}`}>
+      <span className={styles.entryDate}>{date}</span>
+      <span className={baseStyles['resume-item-subtitle']}>
+        {company}
+        {location && <span className={baseStyles['resume-meta-sm']}> · {location}</span>}
+      </span>
+      {department && <span className={styles.entryDepartment}>{department}</span>}
+      <h4 className={`${baseStyles['resume-item-title']} ${styles.entryRoleEnd}`}>{role}</h4>
+    </div>
+  );
+};
+
+/**
+ * Education entry header as one four-column row — time | university | major |
+ * degree. The optional education.description field is the major column (same
+ * convention as swiss-single), so it no longer renders as a separate
+ * paragraph. Empty cells still reserve their track, keeping column edges
+ * aligned across work and education entries.
+ */
+const EducationEntryRow: React.FC<{ edu: Education }> = ({ edu }) => {
+  const date = formatDateRange(edu.years ?? '').trim();
+  const institution = edu.institution?.trim() ?? '';
+  const major = edu.description?.trim() ?? '';
+  const degree = edu.degree?.trim() ?? '';
+
+  if (!date && !institution && !major && !degree) return null;
+
+  return (
+    <div className={`${styles.entryGrid} ${baseStyles['resume-row-tight']}`}>
+      <span className={styles.entryDate}>{date}</span>
+      <h4 className={baseStyles['resume-item-title']}>{institution}</h4>
+      <span className={styles.entryDepartment}>{major}</span>
+      <span className={`${baseStyles['resume-item-subtitle']} ${styles.entryRoleEnd}`}>
+        {degree}
+      </span>
+    </div>
+  );
+};
+
+/**
+ * The early `additional` slot renders ONLY the technical-skills block, as an
+ * ordered numbered list — group heads are bold unnumbered labels and each
+ * group restarts numbering at 1 — with no inline "Technical Skills:" label
+ * (the section title already names the block). Languages never render here:
+ * per the parsing-rules spec they live only in the header fact grid as the
+ * 外语水平 fact. Cert/award lists are projected to the back of the resume by
  * getRenderSections and rendered via <LateAdditionalModule>.
  */
 const AdditionalSkillsSection: React.FC<{
   additional: ResumeData['additional'];
   displayName?: string;
-  labels?: Partial<AdditionalSectionLabels>;
-}> = ({ additional, displayName = 'Skills', labels }) => {
+}> = ({ additional, displayName = 'Skills' }) => {
   if (!additional) return null;
 
   const technicalSkills = nonBlankStrings(additional.technicalSkills);
-  const languages = nonBlankStrings(additional.languages);
-  if (technicalSkills.length === 0 && languages.length === 0) return null;
-
-  const technicalSkillsLabel = labels?.technicalSkills ?? 'Technical Skills:';
-  const languagesLabel = labels?.languages ?? 'Languages:';
+  if (technicalSkills.length === 0) return null;
 
   return (
     <div className={baseStyles['resume-section']}>
       <h3 className={styles['section-title-accent']}>{displayName}</h3>
       <div className={`${baseStyles['resume-stack']} ${baseStyles['resume-text-sm']}`}>
-        {technicalSkills.length > 0 && (
-          <div className="flex">
-            <span className="font-bold w-32 shrink-0">{technicalSkillsLabel}</span>
-            <span>{technicalSkills.map(stripPointMarker).join(', ')}</span>
-          </div>
-        )}
-        {languages.length > 0 && (
-          <div className="flex">
-            <span className="font-bold w-32 shrink-0">{languagesLabel}</span>
-            <span>{languages.join(', ')}</span>
-          </div>
-        )}
+        <SkillGroupList entries={technicalSkills} />
       </div>
     </div>
   );
@@ -501,22 +522,20 @@ function renderDynamicContent(
         <div className={baseStyles['resume-items']}>
           {customSection.items.map((item) => (
             <div key={item.id} className={baseStyles['resume-item']}>
-              <div
-                className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}
-              >
+              <div className={`${styles.entryLineGrid} ${baseStyles['resume-row-tight']}`}>
                 <h4 className={baseStyles['resume-item-title']}>{item.title}</h4>
                 {item.years && (
-                  <span className={`${baseStyles['resume-meta-sm']} shrink-0 ml-4`}>
+                  <span className={baseStyles['resume-meta-sm']}>
                     {formatDateRange(item.years)}
                   </span>
                 )}
               </div>
               {(item.subtitle || item.location) && (
                 <div
-                  className={`flex justify-between items-center ${baseStyles['resume-row']} ${baseStyles['resume-meta']}`}
+                  className={`${styles.entryLineGrid} ${baseStyles['resume-row']} ${baseStyles['resume-meta']}`}
                 >
-                  {item.subtitle && <span>{item.subtitle}</span>}
-                  {item.location && <span>{item.location}</span>}
+                  {item.subtitle ? <span>{item.subtitle}</span> : <span />}
+                  {item.location && <span className={styles.entryLocation}>{item.location}</span>}
                 </div>
               )}
               <DescriptionList items={item.description} styles={item.descriptionStyles} />

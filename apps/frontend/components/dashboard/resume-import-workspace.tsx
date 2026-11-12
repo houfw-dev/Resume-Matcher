@@ -54,8 +54,10 @@ export function ResumeImportWorkspace({
   const { t } = useTranslations();
   const { uiLanguage } = useLanguage();
   const headingProps = React.useMemo(() => buildResumeHeadingProps(t), [t]);
-  // Builder template choice is a single global setting; snapshot it for the
-  // lifetime of this workspace so the preview never drifts mid-session.
+  // The imported resume has no per-resume settings yet, so the preview uses
+  // the legacy global choice — the same value the viewer/builder fall back to
+  // until the new resume is customized. Snapshot it for the lifetime of this
+  // workspace so the preview never drifts mid-session.
   const templateSettings = React.useState(() => loadTemplateSettings())[0];
   const { incrementResumes, decrementResumes, setHasMasterResume } = useStatusCache();
 

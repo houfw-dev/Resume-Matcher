@@ -65,7 +65,10 @@ import { useFineTuneWizard } from '@/hooks/use-fine-tune-wizard';
 import type { FineTuneCustomModule, FineTuneEntryOption } from './fine-tune/fine-tune-dialog';
 import { useTranslations } from '@/lib/i18n';
 import { type TemplateSettings } from '@/lib/types/template-settings';
-import { loadTemplateSettings, storeTemplateSettings } from '@/lib/utils/template-settings-storage';
+import {
+  loadScopedTemplateSettings,
+  storeScopedTemplateSettings,
+} from '@/lib/utils/template-settings-storage';
 import { withLocalizedDefaultSections } from '@/lib/utils/section-helpers';
 import { useLanguage } from '@/lib/context/language-context';
 import {
@@ -236,15 +239,20 @@ const ResumeBuilderContent = () => {
   const [hasCurrentLocalDraft, setHasCurrentLocalDraft] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [loadingState, setLoadingState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
-  const [templateSettings, setTemplateSettings] = useState<TemplateSettings>(loadTemplateSettings);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const resumeId = searchParams.get('id');
+  // Each saved resume owns its template/typography settings under a
+  // per-resume localStorage scope; a document without an id yet (new resume)
+  // reads/writes the legacy global key instead.
+  const [templateSettings, setTemplateSettings] = useState<TemplateSettings>(() =>
+    loadScopedTemplateSettings(resumeId)
+  );
   const { improvedData } = useResumePreview();
   const improvedPreview = improvedData?.data?.resume_preview;
   const improvedCoverLetter = improvedData?.data?.cover_letter;
   const improvedOutreach = improvedData?.data?.outreach_message;
   const improvedInterviewPrep = improvedData?.data?.interview_prep ?? null;
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const resumeId = searchParams.get('id');
   // Monotonic edit counter. It is deliberately never reset: two savers can be
   // in flight (a queued manual flush behind an autosave), and resetting it to 0
   // on whichever finishes first invalidated the other's captured baseline, so a
@@ -541,10 +549,16 @@ const ResumeBuilderContent = () => {
     [canonicalResumeDataForPreview, t]
   );
 
-  // Save template settings to localStorage when they change
+  // Persist template/typography edits under the ACTIVE resume's own key, so
+  // customizing one resume never changes the template of the others. The
+  // editor remounts at the document boundary (ResumeBuilderDocument keys
+  // ResumeBuilderContent by resume id), which makes resumeId constant for the
+  // lifetime of this instance — the per-resume load happens once in the
+  // useState initializer above; resumes without a scoped choice inherit the
+  // legacy global choice through the scoped reader's fallback.
   useEffect(() => {
-    storeTemplateSettings(templateSettings);
-  }, [templateSettings]);
+    storeScopedTemplateSettings(resumeId, templateSettings);
+  }, [resumeId, templateSettings]);
 
   // Warn user before leaving with unsaved changes
   useEffect(() => {

@@ -4,12 +4,17 @@ import {
   buildDescriptionBlocks,
   canonicalizeProjectSubLabel,
   canonicalizeProjectSubLabelPrefix,
+  groupSkillEntries,
   isProjectDescriptiveLabel,
   isProjectPlainPrefixRow,
+  isSkillDetailRow,
+  isSkillGroupHead,
+  isTechStackCategoryRow,
   joinInlineBodyRows,
   looksLikeNestedGroupHead,
   looksLikeSubLabel,
   planNestedGroupHeads,
+  planSkillGroupHeaders,
   splitProjectPlainPrefix,
   stripPointMarker,
   type DescriptionRowStyle,
@@ -408,6 +413,24 @@ describe('buildDescriptionBlocks', () => {
     });
   });
 
+  it('keeps a standalone URL row under tech stack stacked, not a numbered list', () => {
+    // Legacy stored data may still carry a standalone project URL inside the
+    // tech-stack region; "https:" matches the category shape by accident and
+    // must not convert the whole region into an ordered list. Rows (including
+    // the link) are preserved and the block stays an unnumbered body block.
+    const blocks = buildDescriptionBlocks(
+      ['技术栈：', 'Java', 'Kotlin', 'https://forest.dtflyx.com'],
+      ['label', 'plain', 'plain', 'plain'],
+      { canonicalizeLabels: true }
+    );
+    expect(blocks.map((b) => b.kind)).toEqual(['label', 'body']);
+    expect(blocks[1]).toEqual({
+      kind: 'body',
+      rows: ['Java', 'Kotlin', 'https://forest.dtflyx.com'],
+      inline: false,
+    });
+  });
+
   it('keeps a glued known sub-module row without sentence punctuation stacked', () => {
     const blocks = buildDescriptionBlocks(
       ['技术栈：', 'Spring Boot、MySQL', '技术难点及亮点：实时时延<50ms'],
@@ -680,6 +703,19 @@ describe('joinInlineBodyRows', () => {
   it('joins all-ASCII stacks with ", " and CJK stacks with 、', () => {
     expect(joinInlineBodyRows(['Spring Boot', 'Nacos', 'Kafka'])).toBe('Spring Boot, Nacos, Kafka');
     expect(joinInlineBodyRows(['Java', 'Redis 缓存'])).toBe('Java、Redis 缓存');
+  });
+});
+
+describe('isTechStackCategoryRow', () => {
+  it('rejects standalone URL rows whose "https:" prefix fakes the category shape', () => {
+    expect(isTechStackCategoryRow('https://github.com/org/repo')).toBe(false);
+    expect(isTechStackCategoryRow('http://example.com/docs')).toBe(false);
+    expect(isTechStackCategoryRow('www.example.com')).toBe(false);
+  });
+
+  it('still recognizes real category rows', () => {
+    expect(isTechStackCategoryRow('后端：Java 17、Spring Boot')).toBe(true);
+    expect(isTechStackCategoryRow('数据库：MySQL、Redis')).toBe(true);
   });
 });
 
@@ -1056,5 +1092,175 @@ describe('nested heads inside duty/highlight modules', () => {
     );
     if (workBlocks[1].kind !== 'list') throw new Error('expected work list');
     expect(workBlocks[1].flush).toBe(false);
+  });
+});
+
+describe('skill group head predicates', () => {
+  it('accepts short punctuation-free head rows, with or without a trailing colon', () => {
+    expect(isSkillGroupHead('AI大模型')).toBe(true);
+    expect(isSkillGroupHead('Java工程落地能力')).toBe(true);
+    expect(isSkillGroupHead('AI 大模型：')).toBe(true);
+    expect(isSkillGroupHead('2. Java 工程落地能力:')).toBe(true);
+  });
+
+  it('rejects detail sentences, punctuated rows, URLs and overlong rows', () => {
+    expect(isSkillGroupHead('精通 RAG 全链路：检索增强与微调落地')).toBe(false);
+    expect(isSkillGroupHead('AI，大模型')).toBe(false);
+    expect(isSkillGroupHead('https://example.com/notes')).toBe(false);
+    // Short enough to pass every other gate — the scheme guard alone rejects it.
+    expect(isSkillGroupHead('www.a.co/x')).toBe(false);
+    expect(isSkillGroupHead('Java工程落地能力综合提升实战指南')).toBe(false);
+  });
+
+  it('classifies long or sentence-punctuated rows as details', () => {
+    expect(isSkillDetailRow('精通 RAG 全链路架构设计与检索增强生成落地')).toBe(true);
+    expect(isSkillDetailRow('熟悉 Spring：实战')).toBe(true);
+    expect(isSkillDetailRow('Java 并发')).toBe(false);
+  });
+});
+
+describe('planSkillGroupHeaders', () => {
+  // Same shape as resume 4d85f471: heads at index 0 and 7, detail prose between.
+  const grouped = [
+    'AI大模型',
+    '精通 RAG 全链路架构设计与检索增强生成落地',
+    '熟悉大模型微调、Prompt 工程与评测体系建设',
+    '掌握向量数据库与 Embedding 召回链路优化',
+    '负责智能问答系统的多轮对话与意图识别',
+    '具备 Agent 工具调用与工作流编排实战经验',
+    '主导模型服务化部署与推理性能调优工作',
+    'Java工程落地能力',
+    '熟练掌握 Spring Boot 微服务架构与中间件集成',
+    '具备高并发系统设计与线上稳定性治理经验',
+  ];
+
+  it('plans both standalone heads of the target-resume shape', () => {
+    expect([...planSkillGroupHeaders(grouped)]).toEqual([0, 7]);
+  });
+
+  it('leaves flat short-name skill lists ungrouped', () => {
+    expect(planSkillGroupHeaders(['Java 并发', 'Spring 框架', 'JVM 调优']).size).toBe(0);
+  });
+
+  it('falls back to flat when only one head qualifies', () => {
+    expect(
+      planSkillGroupHeaders([
+        'AI大模型',
+        '精通 RAG 全链路架构设计与检索增强生成落地',
+        '熟悉大模型微调、Prompt 工程与评测体系建设',
+      ]).size
+    ).toBe(0);
+  });
+
+  it('never qualifies adjacent head-shaped rows', () => {
+    expect(
+      planSkillGroupHeaders([
+        'AI大模型',
+        'Java工程落地能力',
+        '熟练掌握 Spring Boot 微服务架构与中间件集成',
+        '具备高并发系统设计与线上稳定性治理经验',
+      ]).size
+    ).toBe(0);
+  });
+
+  it('ignores a trailing head that has no successor row', () => {
+    expect(
+      planSkillGroupHeaders([
+        'AI大模型',
+        '精通 RAG 全链路架构设计与检索增强生成落地',
+        '熟悉大模型微调、Prompt 工程与评测体系建设',
+        'Java工程落地能力',
+      ]).size
+    ).toBe(0);
+  });
+
+  it('rejects an adjacent head pair even when another group qualifies later', () => {
+    expect(
+      planSkillGroupHeaders([
+        'AI大模型',
+        'Java工程落地能力',
+        '熟练掌握 Spring Boot 微服务架构与中间件集成',
+        '具备高并发系统设计与线上稳定性治理经验',
+        '前端工程能力',
+        '熟悉 React 组件设计与状态管理工程化实践',
+      ]).size
+    ).toBe(0);
+  });
+
+  it('tolerates trailing colons and source list markers on heads', () => {
+    const skills = [...grouped];
+    skills[0] = 'AI大模型：';
+    skills[7] = '1. Java工程落地能力';
+    expect([...planSkillGroupHeaders(skills)]).toEqual([0, 7]);
+  });
+
+  it('disqualifies punctuated and overlong head-shaped rows', () => {
+    const punctuated = [...grouped];
+    punctuated[0] = 'AI，大模型';
+    punctuated[7] = 'Java、工程';
+    expect(planSkillGroupHeaders(punctuated).size).toBe(0);
+
+    const overlong = [...grouped];
+    overlong[7] = 'Java工程落地能力综合提升实战';
+    expect(planSkillGroupHeaders(overlong).size).toBe(0);
+  });
+
+  it('accepts short punctuated detail rows as group openers', () => {
+    expect([
+      ...planSkillGroupHeaders([
+        'AI大模型',
+        '精通 RAG：实战',
+        'Java工程落地能力',
+        '熟悉 Spring：实战',
+      ]),
+    ]).toEqual([0, 2]);
+  });
+
+  it('never treats a URL row as a head', () => {
+    const withUrl = [...grouped];
+    withUrl[0] = 'www.a.co/x';
+    expect(planSkillGroupHeaders(withUrl).size).toBe(0);
+  });
+});
+
+describe('groupSkillEntries', () => {
+  const grouped = [
+    'AI大模型：',
+    '精通 RAG 全链路架构设计与检索增强生成落地',
+    '熟悉大模型微调、Prompt 工程与评测体系建设',
+    '掌握向量数据库与 Embedding 召回链路优化',
+    '负责智能问答系统的多轮对话与意图识别',
+    '具备 Agent 工具调用与工作流编排实战经验',
+    '主导模型服务化部署与推理性能调优工作',
+    'Java工程落地能力',
+    '熟练掌握 Spring Boot 微服务架构与中间件集成',
+    '具备高并发系统设计与线上稳定性治理经验',
+  ];
+
+  it('returns one head-less group for an ungrouped list', () => {
+    const skills = ['Java 并发', 'Spring 框架', 'JVM 调优'];
+    expect(groupSkillEntries(skills)).toEqual([{ head: null, items: [...skills] }]);
+  });
+
+  it('partitions grouped entries, trims head colons and keeps every item once', () => {
+    const groups = groupSkillEntries(grouped);
+    expect(groups).toHaveLength(2);
+    expect(groups[0].head).toBe('AI大模型');
+    expect(groups[0].items).toEqual(grouped.slice(1, 7));
+    expect(groups[1].head).toBe('Java工程落地能力');
+    expect(groups[1].items).toEqual(grouped.slice(8));
+    // No entry is lost or duplicated across groups.
+    expect(
+      groups.flatMap((group) => (group.head ? [group.head, ...group.items] : group.items))
+    ).toHaveLength(grouped.length);
+  });
+
+  it('keeps leading ungrouped entries in a head-less first group', () => {
+    const skills = ['综合能力扎实，熟悉完整研发流程与线上治理。', ...grouped];
+    const groups = groupSkillEntries(skills);
+    expect(groups).toHaveLength(3);
+    expect(groups[0]).toEqual({ head: null, items: [skills[0]] });
+    expect(groups[1].head).toBe('AI大模型');
+    expect(groups[2].head).toBe('Java工程落地能力');
   });
 });

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ResumeSingleColumn } from '@/components/resume/resume-single-column';
 import gridStyles from '@/components/resume/styles/swiss-single.module.css';
 import type { ResumeData, SectionMeta } from '@/components/dashboard/resume-component';
@@ -103,6 +105,52 @@ describe('ResumeSingleColumn', () => {
     expect(screen.getByText('Java 并发')).toBeInTheDocument();
     // The old comma-joined paragraph is gone.
     expect(screen.queryByText('Java 并发, Spring 框架')).toBeNull();
+  });
+
+  it('renders grouped skills with bold heads and per-group restarting numbers', () => {
+    const grouped: ResumeData = {
+      ...(data as object),
+      additional: {
+        technicalSkills: [
+          'AI大模型：',
+          '精通 RAG 全链路架构设计与检索增强生成落地',
+          '熟悉大模型微调、Prompt 工程与评测体系建设',
+          'Java工程落地能力',
+          '熟练掌握 Spring Boot 微服务架构与中间件集成',
+        ],
+      },
+    } as ResumeData;
+
+    const { container } = render(<ResumeSingleColumn data={grouped} />);
+    const skillsBlock = screen.getByRole('heading', {
+      level: 3,
+      name: '专业技能',
+    }).parentElement!;
+
+    // Two bold, unnumbered group headers; the trailing colon is trimmed and
+    // they carry the data-skill-group hook used for style/QA selection.
+    const headElements = container.querySelectorAll('[data-skill-group]');
+    expect(headElements).toHaveLength(2);
+    expect(within(skillsBlock).getByText('AI大模型')).toBeInTheDocument();
+    expect(within(skillsBlock).getByText('Java工程落地能力')).toBeInTheDocument();
+    expect(skillsBlock.textContent).not.toContain('AI大模型：');
+
+    // Each group owns its own <ol> restarting at 1; heads are never list items.
+    const lists = skillsBlock.querySelectorAll('ol');
+    expect(lists).toHaveLength(2);
+    const firstItems = lists[0].querySelectorAll('li');
+    const secondItems = lists[1].querySelectorAll('li');
+    expect(firstItems).toHaveLength(2);
+    expect(secondItems).toHaveLength(1);
+    expect(firstItems[0].textContent).toMatch(/^1\./);
+    expect(firstItems[1].textContent).toMatch(/^2\./);
+    expect(secondItems[0].textContent).toMatch(/^1\./);
+    expect(skillsBlock.querySelectorAll('li')).toHaveLength(3);
+  });
+
+  it('emits no group-head markers for a flat short-name skill list', () => {
+    const { container } = render(<ResumeSingleColumn data={data} />);
+    expect(container.querySelectorAll('[data-skill-group]')).toHaveLength(0);
   });
 
   it('lays education out as four left-aligned columns: time | university | major | degree', () => {
@@ -463,6 +511,82 @@ describe('ResumeSingleColumn', () => {
     // stretching across the full row; full-row cells stretch.
     expect(rows[0].children[0]).not.toHaveClass(gridStyles.infoCellSparse);
     expect(rows[2].children[0]).toHaveClass(gridStyles.infoCellSparse);
+  });
+
+  it('aligns the website/github link row with the facts-grid column tracks', () => {
+    const linkOnlyData: ResumeData = {
+      ...(data as object),
+      personalInfo: {
+        name: '龚骏',
+        website: 'forest.dtflyx.com',
+        github: 'github.com/dromara/forest',
+      },
+    } as ResumeData;
+
+    const { container } = render(
+      <ResumeSingleColumn data={linkOnlyData} personalInfoLabels={zhLabels} />
+    );
+
+    const row = container.querySelector(`.${gridStyles.infoLinkRow}`);
+    expect(row).not.toBeNull();
+    // The old content-width flex-wrap row is gone: links live on fixed tracks.
+    expect(row).not.toHaveClass(gridStyles.infoLinks);
+    const cells = Array.from(row!.children);
+    expect(cells).toHaveLength(2);
+    for (const cell of cells) {
+      expect(cell).toHaveClass(gridStyles.infoLinkCell);
+    }
+    // Website owns track 1, GitHub track 2 — directly under the 年龄/求职意向
+    // column rather than trailing the website text by a content-width gap.
+    expect(cells[0].textContent).toContain('个人网站');
+    expect(cells[0].querySelector('a')?.getAttribute('href')).toBe('https://forest.dtflyx.com');
+    expect(cells[1].textContent).toContain('GitHub');
+    expect(cells[1].querySelector('a')?.textContent).toBe('github.com/dromara/forest');
+    expect(within(row as HTMLElement).getAllByRole('link')).toHaveLength(2);
+  });
+
+  it('renders exactly one fixed track cell per present link (one or three links)', () => {
+    const threeLinks: ResumeData = {
+      ...(data as object),
+      personalInfo: {
+        name: '王浩',
+        website: 'wanghao.dev',
+        linkedin: 'in/wanghao',
+        github: 'wanghao',
+      },
+    } as ResumeData;
+    const { container, unmount } = render(
+      <ResumeSingleColumn data={threeLinks} personalInfoLabels={zhLabels} />
+    );
+    let row = container.querySelector(`.${gridStyles.infoLinkRow}`)!;
+    expect(row.children).toHaveLength(3);
+    expect(Array.from(row.children).map((cell) => cell.textContent)).toEqual([
+      expect.stringContaining('个人网站'),
+      expect.stringContaining('领英'),
+      expect.stringContaining('GitHub'),
+    ]);
+    unmount();
+
+    const oneLink: ResumeData = {
+      ...(data as object),
+      personalInfo: { name: '王浩', website: 'wanghao.dev' },
+    } as ResumeData;
+    const second = render(<ResumeSingleColumn data={oneLink} personalInfoLabels={zhLabels} />);
+    row = second.container.querySelector(`.${gridStyles.infoLinkRow}`)!;
+    expect(row.children).toHaveLength(1);
+    expect(row.children[0]).toHaveClass(gridStyles.infoLinkCell);
+  });
+
+  it('gives link cells the same fixed 1/3 track basis as sparse facts-grid cells', () => {
+    const css = readFileSync(
+      resolve(process.cwd(), 'components/resume/styles/swiss-single.module.css'),
+      'utf8'
+    );
+    // The old content-width wrapper must not linger in the stylesheet.
+    expect(css).not.toContain('.infoLinks');
+    const trackBasis = 'calc((100% - 2.5rem) / 3)';
+    expect(css.slice(css.indexOf('.infoCellSparse'))).toContain(trackBasis);
+    expect(css.slice(css.indexOf('.infoLinkCell'))).toContain(trackBasis);
   });
 
   it('keeps language proficiency out of 专业技能: it appears only in the header 外语水平 cell', () => {

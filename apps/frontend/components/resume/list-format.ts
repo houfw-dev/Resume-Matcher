@@ -315,6 +315,92 @@ export function planNestedGroupHeads(
   return qualified;
 }
 
+// --- Skill group headers (additional.technicalSkills) ---------------------
+// Sources sometimes organize 专业技能 as standalone bold group names
+// ("AI 大模型", "Java 工程落地能力") above detail bullets; the model stores
+// every line as one flat technicalSkills string. Storage stays flat (builder
+// editing, fine-tune indices and diffs keep their contract) and the render
+// layer plans the hierarchy here. Mirrors parser.plan_skill_group_heads / the
+// DOCX exporter — keep the three in sync.
+export const SKILL_GROUP_HEAD_MAX_LEN = 14;
+const SKILL_GROUP_HEAD_PUNCT_RE = /[，。；！？、,.!?;：:]/;
+const SKILL_GROUP_MIN_HEADS = 2;
+const SKILL_DETAIL_MIN_LEN = 16;
+const SKILL_DETAIL_PUNCT_RE = /[。；！？!?;：:]/;
+
+/** Shape-only test for a standalone skill group heading row. */
+export function isSkillGroupHead(row: string): boolean {
+  let text = stripPointMarker(row).trim();
+  // An optional trailing colon is tolerated; render trims it. A colon followed
+  // by content (a "前缀：明细" detail sentence) disqualifies the row.
+  if (/[：:]$/.test(text)) text = text.slice(0, -1).trim();
+  if (!text || text.length > SKILL_GROUP_HEAD_MAX_LEN) return false;
+  if (SKILL_GROUP_HEAD_PUNCT_RE.test(text)) return false;
+  if (/^(?:https?:\/\/|www\.)/i.test(text)) return false;
+  return true;
+}
+
+/** A skill detail entry: long prose, or a line with colon/sentence punctuation. */
+export function isSkillDetailRow(row: string): boolean {
+  const text = row.trim();
+  if (!text || isSkillGroupHead(text)) return false;
+  return text.length >= SKILL_DETAIL_MIN_LEN || SKILL_DETAIL_PUNCT_RE.test(text);
+}
+
+/**
+ * Plan which technicalSkills entries are standalone group heading rows.
+ * Render-site mirror of parser.py::plan_skill_group_heads: a head needs a
+ * detail-shaped successor, no head-shaped predecessor, and at least
+ * SKILL_GROUP_MIN_HEADS qualified heads across the whole list — so flat
+ * bare-name lists and isolated short entries keep their ordinary rendering.
+ */
+export function planSkillGroupHeaders(skills: readonly string[]): Set<number> {
+  const qualified = new Set<number>();
+  for (let index = 0; index < skills.length; index += 1) {
+    if (!isSkillGroupHead(skills[index])) continue;
+    const nextIndex = index + 1;
+    if (nextIndex >= skills.length || !isSkillDetailRow(skills[nextIndex])) continue;
+    const prevIndex = index - 1;
+    if (prevIndex >= 0 && isSkillGroupHead(skills[prevIndex])) continue;
+    qualified.add(index);
+  }
+  return qualified.size >= SKILL_GROUP_MIN_HEADS ? qualified : new Set();
+}
+
+export interface SkillGroup {
+  /** Null for entries before the first head (an ungrouped leading group). */
+  head: string | null;
+  items: string[];
+}
+
+/**
+ * Split a flat technicalSkills list into head/items groups using the planner.
+ * Ungrouped lists come back as a single head-less group, so callers can rely
+ * on one shape and only branch on whether a head is present.
+ */
+export function groupSkillEntries(skills: readonly string[]): SkillGroup[] {
+  const heads = planSkillGroupHeaders(skills);
+  if (heads.size === 0) return [{ head: null, items: [...skills] }];
+  const groups: SkillGroup[] = [];
+  let current: SkillGroup = { head: null, items: [] };
+  skills.forEach((entry, index) => {
+    if (heads.has(index)) {
+      if (current.head !== null || current.items.length > 0) groups.push(current);
+      current = {
+        head: entry
+          .trim()
+          .replace(/[：:]$/, '')
+          .trim(),
+        items: [],
+      };
+    } else {
+      current.items.push(entry);
+    }
+  });
+  if (current.head !== null || current.items.length > 0) groups.push(current);
+  return groups;
+}
+
 const CJK_CHAR_RE = /[一-鿿]/;
 // A body row carrying sentence punctuation, or a label prefix glued to prose
 // ("项目亮点：实时时延<50ms"), is not a stack entry; such a body stays stacked
@@ -333,6 +419,10 @@ export const TECH_STACK_CATEGORY_RE = /^[一-鿿A-Za-z][一-鿿A-Za-z0-9/（）(
 const CATEGORY_SENTENCE_RE = /[。；！？!?;]/;
 
 export function isTechStackCategoryRow(row: string): boolean {
+  // A standalone "http(s)://…" URL matches the short-colon shape by accident
+  // (prefix "https" + colon); a link is never a 分类：… row. Mirrors the URL
+  // guards in parser._is_tech_stack_category_row / resume_docx — keep in sync.
+  if (/^(?:https?:\/\/|www\.)/i.test(row.trim())) return false;
   if (!TECH_STACK_CATEGORY_RE.test(row) || CATEGORY_SENTENCE_RE.test(row)) return false;
   // A glued known sub-module ("技术难点及亮点：实时时延<50ms", no period) stays
   // prose even though it has the same short-colon shape as a category row.

@@ -185,6 +185,17 @@ class TestFormatFidelity:
     def test_skill_group_labels_kept_per_line(self) -> None:
         assert "后端框架" in PARSE_RESUME_PROMPT
 
+    def test_standalone_skill_group_headers_kept_as_own_entries(self) -> None:
+        # Content lock for the grouped-skills shape (resume 4d85f471): a
+        # standalone bold category header above detail bullets must survive
+        # as its own short technicalSkills entry so the deterministic render
+        # planner can rebuild the header/details hierarchy.
+        prompt = " ".join(PARSE_RESUME_PROMPT.split())
+        assert "STANDALONE bold category/group header" in prompt
+        assert "AI 大模型" in prompt
+        assert "never invent group headers" in prompt
+        assert "render planner rebuilds" in prompt
+
 
 class TestProjectV4Alignment:
     def test_projects_capture_six_field_proxy(self) -> None:
