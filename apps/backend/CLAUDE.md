@@ -3,7 +3,7 @@
 > FastAPI backend for Resume Matcher. This file goes **deeper on the backend**.
 > For project-wide context see the root [`.claude/CLAUDE.md`](../../.claude/CLAUDE.md) and [`docs/agent/README.md`](../../docs/agent/README.md).
 
-Stack: FastAPI 0.128 · Python **3.13+** · Pydantic v2 / pydantic-settings · SQLAlchemy 2 (async) + SQLite (`aiosqlite`) · LiteLLM (multi-provider AI) · markitdown (DOCX/PDF→Markdown) · Playwright/Chromium (PDF). Managed with **uv** (`pyproject.toml`, version `1.3.0`).
+Stack: FastAPI 0.128 · Python **3.13+** · Pydantic v2 / pydantic-settings · SQLAlchemy 2 (async) + SQLite (`aiosqlite`) · LiteLLM (multi-provider AI) · markitdown (DOCX/PDF→Markdown) · Playwright/Chromium (PDF). Managed with **uv** (`pyproject.toml`, version `1.4.0`).
 
 ---
 
@@ -21,6 +21,7 @@ Stack: FastAPI 0.128 · Python **3.13+** · Pydantic v2 / pydantic-settings · S
 | PDF | Headless Chromium render of frontend `/print/*` pages; lazy browser init | `app/pdf.py` |
 | Routers | HTTP endpoints (see below) | `app/routers/*.py` |
 | Services | Business logic (parse, improve/diff, refine, cover-letter) | `app/services/*.py` |
+| Rule artifacts | Versioned, validated JSON the parsers/checkers bind to (no YAML at runtime) | `app/services/parser_rules.json` + `parser_rules.py` / `rule_patterns.py`, `diagnosis_rules.json` + `diagnosis_rules.py`; sources in `rules/*.yaml` |
 | Prompts | All LLM prompt templates + placeholder validation | `app/prompts/*.py` |
 | Schemas | Pydantic request/response + `ResumeData` models | `app/schemas/*.py` |
 
@@ -131,6 +132,7 @@ Interactive API docs at `/docs`.
 - **Dates lose months:** LLMs drop month precision; `restore_dates_from_markdown` + `_restore_original_dates` re-insert them (incl. numeric `YYYY.MM` and empty-field fills). Preserve this when editing the parse/improve flow.
 - **Embedded-subset font PDFs:** markitdown/pdfminer can extract CJK as Kangxi-radical glyphs (U+2E80–U+2FDF) with digit runs missing. `_recover_glyph_loss` detects the signature and falls back to **pypdfium2** (core dep, pure wheel; same pin also in the `ocr` extra), gated by a CJK-ratio + digit-count quality check; `normalize_cjk_compat(_deep)` then maps radicals to simplified Han. See [resume-parsing-rules.md](../../docs/agent/features/resume-parsing-rules.md).
 - **Single-worker assumption:** caches and locks assume one uvicorn worker / cooperative async. Don't add cross-worker shared mutable state without revisiting `config_cache` and the master lock.
+- **Rule artifacts are data, not code:** parser vocabularies/regex strings/thresholds ship in `app/services/parser_rules.json` (human source `rules/parser_rules.yaml` + cross-consumer `rules/shared_terms.yaml`); diagnosis checker parameters/vocabularies ship in `diagnosis_rules.json` (xlsx + `rules/diagnosis_rules.yaml`). Runtime code reads only the JSON via the Pydantic loaders (`parser_rules.get_parser_rules()` / `diagnosis_rules.get_rules()`, both `lru_cache`, fail-fast at import/load). PyYAML/openpyxl are export-time-only deps — never import YAML from app code. To change declarative data: edit the YAML/xlsx, regenerate from the repo root with `uv run --with pyyaml …` (and `generate_frontend_rules.py` for shared tables), then run the golden tests (`test_rule_artifacts.py`, `test_diagnosis_rule_artifact.py`, `test_generated_rules_drift.py`). Pipeline order, state machines, scoring and the composed-regex *shapes* stay in Python — only their leaves/quantifiers are configurable. Never hand-edit generated files (`lib/generated/*.generated.ts`); the pre-push drift gate blocks it, and diagnosis `equiv`/criterion/qc never leave the server.
 - **PDF needs the frontend running** (`FRONTEND_BASE_URL`, default `http://localhost:3000`) — Chromium renders `/print/*` pages. Browser is lazily initialized on first PDF request.
 - **Improve/confirm requires a prior preview** — it validates `preview_hash`; arbitrary payloads are rejected (400).
 

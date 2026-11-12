@@ -491,6 +491,32 @@ java-p3(5), …, java-p8(5)`）。导出器校验：序号连续、维度/prereq
   `competency_models`。`diagnosis_rules.py` 加载制品（`lru_cache`）为
   `DiagnosisRules` 视图（含空的 `global_rules`）。
 
+### 客观 checker 的阈值与词表（YAML 外置段）
+
+22 项细则文本（criterion/qc/职级矩阵）仍以 xlsx 为唯一源；13 个客观 checker
+的声明式数据另走 `rules/diagnosis_rules.yaml`，由同一个
+`scripts/export_diagnosis_rules.py`（ephemeral openpyxl + PyYAML）合并进
+`diagnosis_rules.json` 的两个新顶层段：
+
+- `parameters`（26 个标量阈值）：版式篇幅（每行 46 字、每页 950 字、单要点 6
+  行、页数上限 3）、技能数 8–15、栈组符合度 0.75 及评级分档、优势 2–5 点、自评
+  3–5 点、项目 2–4 个、空窗 6/3 月、5 年 4 家、短任期 6/12 月、年限容差 ±0.5
+  等。`diagnosis_checks.py` 经 `CheckParameters` 视图在每次
+  `run_objective_checks()` 构造一次后透传，bool 值在加载期被拒绝。
+- `vocabularies`（8 组）：`regex_patterns`（23 条隐私/动词/业余项目正则，加载期
+  逐条编译）、`degree_rank_patterns`（5 条学历档位）、`mainstream_stack_groups`
+  （9 个主流栈组，pattern 字符串 + 服务端专属 `equiv` 等价口径）、优势/自我评价
+  标题与关键词 token、`template_labels`（7 项）。
+
+留代码的部分：`_VERDICT_RANK`、`_join_findings`、区间算术、checker 状态机与
+evidence/suggestion 中文文案（与信号相邻编写，受防泄漏测试约束）。PyYAML 仅为
+导出期临时依赖，运行时只读 JSON；坏正则、缺段、越界值在加载期 fail-fast。
+
+**保密边界**：`mainstream_stack_groups[*].equiv` 与 xlsx 的 criterion/qc 同级，
+只注入服务端 LLM judge prompt，永远不进 API 响应或任何前端生成产物；前端代码
+生成器（见 [resume-parsing-rules.md](resume-parsing-rules.md#82-前端代码生成与-drift-门)）
+只导出白名单公开词表。
+
 ## 端点
 
 - `GET /api/v1/diagnosis/competency-models?title=…` —— 目录 + 自动匹配（见上）；

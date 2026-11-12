@@ -180,3 +180,49 @@
 
 - 不传或传 `None`（improve、enrichment 等既有调用方）时，接地仍只看结构化 source，数字剥离、相似度闸门、review 警告的算法与逐字节行为不变，既有测试零改动。
 - **智能微调**（见 [fine-tune.md](fine-tune.md)）传入 `original_markdown` 作为第二证据源：候选行中的数字若出现在原文证据中则不计为虚构；定性行相似度在 `source_tokens ∪ evidence_tokens` 上计算；原文中有、结构化漏掉的职责/成果允许补回。证据中仍无据的数字照剥，无法证实的定性表述以 `GROUNDING_REVIEW` 警告保留交人工核对。范围裁剪（`restrict_to_scope`）与冻结规则（`personalInfo` / `sectionMeta`）在接地之后再强制执行。
+
+## 8. 规则制品（声明式数据外置）
+
+解析器的词表、别名映射、正则字符串与数值阈值不再硬编码在 `parser.py` 里，而是以带校验的版本化制品发布；19 道后处理的顺序、区域状态机、日期消歧打分、容器校验、`ResumeData` schema 与 CJK 字形表是结构契约，仍留在 Python。
+
+### 8.1 制品链路
+
+```
+rules/parser_rules.yaml          人工编辑源（阈值/词表/正则字符串）
+rules/shared_terms.yaml          跨端共享词表（canonical_tech_terms 等）
+        │  uv run --with pyyaml python -I scripts/export_parser_rules.py
+        ▼
+app/services/parser_rules.json   随包入库的运行时唯一制品（只读 JSON）
+        │  app/services/parser_rules.py（Pydantic 校验 + lru_cache，导入期 fail-fast）
+        ▼
+parser.py / resume_docx.py / tech_terms.py   经 typed 访问器绑定
+```
+
+- PyYAML 只是**导出期临时依赖**（`uv run --with`），运行时与 pytest 不引入新依赖；生产代码只读 JSON。制品分四段：`spec_version`、`thresholds`（11 个标量，bool 被显式拒绝）、`vocabularies`（15 个：有序词表或别名映射；`header_field_labels` 的叶子是正则片段，导出期与加载期各编译一次）、`patterns`（32 个 `{pattern, flags?}`，flag 白名单仅 IGNORECASE/MULTILINE/DOTALL/UNICODE）。
+- 加载器 `get_parser_rules()` 与 `config_cache` 一样假设单 worker、进程级缓存、无运行时热更；坏正则/缺段/未知键/空白或重复词条都在加载期响亮报错。访问器按形状区分：`vocabulary_list()` / `vocabulary_mapping()` / `pattern()` / `int_threshold()` / `float_threshold()`，类型不符抛 `ValueError`。
+- **动态组合正则仍是代码**：`_HEADER_LABEL_RE`、`_INLINE_SUB_LABEL_RE`、`_CANON_EN_POINT_RE`、`_START_DATE_RE`、教育段标签、错放凭证行、`_EMBEDDED_LABEL_RE` / `_STANDALONE_SUB_LABEL_RE`（量词 `{0,n}` 由阈值驱动，pattern 形状留代码）——外置的是叶子片段与量词阈值，组合算法不可配置。安全预算常量（4MB/16MB/2MB、OCR 页上限、递归深度 10 等运维参数）不进规则包。
+- `resume_docx.py` 过去手工镜像 parser 的词表/正则/阈值，现统一经同一加载器绑定（`_STANDALONE_LABEL_RE` 刻意少一个源序号前缀可选组——调用方已先剥离点号标记，这一形状差异由测试锁定）。
+
+### 8.2 前端代码生成与 drift 门
+
+技术名词规范大小写表（77 条 `canonical_tech_terms`）有后端与前端两个消费方：
+
+```
+rules/shared_terms.yaml
+   ├─ export_parser_rules.py → parser_rules.json → tech_terms.py（tuple 绑定）
+   └─ generate_frontend_rules.py → apps/frontend/lib/generated/tech-terms.generated.ts
+                                   （入库的生成产物，文件头 DO NOT EDIT）
+```
+
+前端构建不依赖 uv/PyYAML，所以生成产物随代码入库；`lib/utils/tech-terms.ts` 只保留 ES2017 无 lookbehind 的捕获组等价实现与字段覆盖逻辑，词表从 generated 模块 re-export。`scripts/check_generated_rules.py`（纯标准库）比对 generated TS 与后端 JSON 制品，drift 时退出码 1 并给出再生成命令，已挂入 `.githooks/pre-push`（第 3 门，与 locale parity 同列，无需 Node）。**保密边界**：生成器只导出公开词表；诊断 criterion/qc 与主流栈组等价口径永不离开服务端。
+
+### 8.3 解析提示词可覆盖
+
+`PARSE_RESUME_PROMPT` 默认模板仍在 `app/prompts/templates.py`（36 条内容锁测试不变），但允许在 `config.json` 用 `parse_resume_prompt` 覆盖：经 `PUT /api/v1/config/feature-prompts` 保存，保存期校验必须含 `{schema}` 与 `{resume_text}` 两个占位符（缺失返回 422 结构化 detail；空串表示回退默认）。运行时 `parser._resolve_parse_prompt()` 取自定义或默认模板；自定义模板 `.format()` 失败（如带外编辑留下未转义 JSON 花括号）时服务端记 WARNING 并回退内置默认，客户端维持通用报错面。自定义提示词中的字面 JSON 花括号必须双写 `{{ }}`。设置页「Content Generation」区块提供编辑文本域，七语种文案同构。
+
+### 8.4 改动规则后的固定动作
+
+1. 编辑 `rules/parser_rules.yaml` 或 `rules/shared_terms.yaml`；
+2. 仓库根目录跑 `uv run --with pyyaml python -I scripts/export_parser_rules.py`，涉及共享词表再跑 `uv run --with pyyaml python -I scripts/generate_frontend_rules.py`；
+3. `git diff` 两个制品确认变更仅来自预期 YAML 编辑；
+4. `cd apps/backend && uv run pytest`（golden 测试 `tests/unit/test_rule_artifacts.py`、`test_tech_terms.py`、`test_generated_rules_drift.py` 会在默认值漂移或手工改 generated 文件时变红），前端 `npm run test && npm run lint && npm run typecheck`。
