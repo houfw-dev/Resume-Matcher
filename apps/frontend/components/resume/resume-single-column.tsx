@@ -200,13 +200,16 @@ export const ResumeSingleColumn: React.FC<ResumeSingleColumnProps> = ({
         return (
           <div key={section.id} className={baseStyles['resume-section']}>
             <h3 className={baseStyles['resume-section-title']}>{section.displayName}</h3>
-            <div className={baseStyles['resume-items']}>
+            <div className={`${baseStyles['resume-items']} ${styles.entrySectionWork}`}>
               {workExperience.map((exp) => {
                 // A legacy plain department line ("全球资金部") is lifted into
                 // the department column and removed from the bullet list.
                 const promoted = promoteWorkDepartment(exp);
                 return (
-                  <div key={exp.id} className={baseStyles['resume-item']}>
+                  <div
+                    key={exp.id}
+                    className={`${baseStyles['resume-item']} ${styles.entrySubgridItem}`}
+                  >
                     {/* Four columns with a department, three without. */}
                     <WorkEntryRow exp={exp} department={promoted.department} />
                     <DescriptionList
@@ -247,9 +250,12 @@ export const ResumeSingleColumn: React.FC<ResumeSingleColumnProps> = ({
         return (
           <div key={section.id} className={baseStyles['resume-section']}>
             <h3 className={baseStyles['resume-section-title']}>{section.displayName}</h3>
-            <div className={baseStyles['resume-items']}>
+            <div className={`${baseStyles['resume-items']} ${styles.entrySectionEdu}`}>
               {education.map((edu) => (
-                <div key={edu.id} className={baseStyles['resume-item']}>
+                <div
+                  key={edu.id}
+                  className={`${baseStyles['resume-item']} ${styles.entrySubgridItem}`}
+                >
                   {/* Four columns, left-aligned: time | university | major | degree */}
                   <EducationEntryRow edu={edu} />
                 </div>

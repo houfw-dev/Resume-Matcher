@@ -82,27 +82,51 @@
 
 /*
   Time-first single-row entry headers shared by work and education:
-  time | company/school | department/major | role/degree. minmax(0, …) tracks
-  let long values wrap INSIDE their own cell instead of pushing neighbors
-  around; empty cells still reserve their track, so every entry shares
-  identical column edges (行列对齐）, with the date flush left and role/degree
-  flush right （两端对齐）, all on one line.
+  time | company/school | department/major | role/degree. The SECTION owns
+  the column tracks and every entry header nests as a subgrid, so all rows
+  share identical column edges (行列对齐） even though the role track is
+  `auto` — an independent per-row grid let a long title shrink the fr tracks
+  and shift the department column left. The date hugs the left edge and the
+  role/degree hugs the right edge （两端对齐）; minmax(0, …) tracks let long
+  values wrap inside their own cell instead of pushing neighbors around.
 */
-.entryGrid {
+.entryGridSection {
   display: grid;
   grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr) auto;
   column-gap: 1rem;
+  row-gap: var(--item-gap);
+}
+
+.entryGridItem {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}
+
+/* Description fragments fill the whole row; the header subgrid spans all too. */
+.entryGridItem > * {
+  grid-column: 1 / -1;
+}
+
+.entryGrid {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   align-items: baseline;
   text-align: left;
 }
 
-/* No department: three real columns — time | company | role. */
+/* No department: the role spans the department+role tracks, flush right. */
 .entryGridThree {
   display: grid;
-  grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr);
-  column-gap: 1rem;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   align-items: baseline;
   text-align: left;
+}
+
+.entryGridThree > :last-child {
+  grid-column: 3 / -1;
 }
 
 /* Dynamic custom itemList sections keep the two-line two-track header. */

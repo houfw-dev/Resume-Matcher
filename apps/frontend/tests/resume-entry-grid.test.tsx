@@ -17,14 +17,17 @@ vi.mock('@/lib/i18n', () => ({ useTranslations: () => ({ t: (k: string) => k }) 
  * Work and education entry headers in Modern / LaTeX / Clean render as ONE
  * time-first justified row — work: time | company · location | department |
  * role; education: time | university | major | degree — mirroring the
- * swiss-single contract. Fixed minmax(0, …) tracks keep column edges aligned
- * across every entry (行列对齐）, the date is flush left and role/degree flush
- * right （两端对齐）, and a long value wraps inside its own cell instead of
- * pushing another field onto a second line. A work entry without a
- * department uses a three-track row; a legacy plain department description
- * line is promoted into the department column. jsdom performs no layout, so
- * the contract is locked at class token + cell structure plus a stylesheet
- * content lock.
+ * swiss-single contract. The SECTION grid (.entryGridSection) owns the fixed
+ * minmax(0, …) tracks once; every item and header row nests as a subgrid, so
+ * column edges align across every entry (行列对齐） even though the role track
+ * is `auto` — per-row grids used to size it independently and let a long
+ * title shift the department column left. The date is flush left and
+ * role/degree flush right （两端对齐）, and a long value wraps inside its own
+ * cell instead of pushing another field onto a second line. A work entry
+ * without a department uses a three-cell row whose role spans the last two
+ * tracks; a legacy plain department description line is promoted into the
+ * department column. jsdom performs no layout, so the contract is locked at
+ * class token + cell structure plus a stylesheet content lock.
  */
 const data: ResumeData = {
   personalInfo: { name: '李勇', email: 'li@example.com' },
@@ -186,19 +189,34 @@ describe('entry grid stylesheet lock', () => {
     readFileSync(resolve(process.cwd(), 'components/resume/styles', file), 'utf8');
 
   it.each([['clean.module.css'], ['latex.module.css'], ['modern.module.css']])(
-    '%s pins the shared time-first 4/3-track templates',
+    '%s pins the shared section tracks with nested subgrid rows',
     (file) => {
       const css = readCss(file);
-      const fourTrack = css.slice(css.indexOf('.entryGrid {'));
-      expect(fourTrack).toContain('display: grid');
-      expect(fourTrack).toContain(
+      // The SECTION owns the 4-track template. The role track is `auto` but
+      // is shared across every row of the section: independent per-row grids
+      // sized it per row, so a long title shrank the fr tracks and shifted
+      // the department column left (alignment regression, 2026-11).
+      const section = css.slice(css.indexOf('.entryGridSection'));
+      expect(section).toContain('display: grid');
+      expect(section).toContain(
         'grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr) auto'
       );
 
+      // Entries and their header rows nest as subgrids, inheriting the
+      // section's column tracks instead of defining their own.
+      const item = css.slice(css.indexOf('.entryGridItem {'));
+      expect(item).toContain('display: grid');
+      expect(item).toContain('grid-template-columns: subgrid');
+
+      const fourTrack = css.slice(css.indexOf('.entryGrid {'));
+      expect(fourTrack).toContain('display: grid');
+      expect(fourTrack).toContain('grid-template-columns: subgrid');
+
+      // No-department rows inherit the same four tracks and span the role
+      // across the department+role bands so it stays flush right.
       const threeTrack = css.slice(css.indexOf('.entryGridThree'));
-      expect(threeTrack).toContain(
-        'grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr)'
-      );
+      expect(threeTrack).toContain('grid-template-columns: subgrid');
+      expect(threeTrack).toContain('grid-column: 3 / -1');
     }
   );
 

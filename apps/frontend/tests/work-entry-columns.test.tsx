@@ -151,7 +151,29 @@ describe('ResumeSingleColumn work entry row', () => {
       '../components/resume/styles/swiss-single.module.css'
     );
     const css = readFileSync(stylesPath, 'utf8');
-    expect(css.match(/minmax\(0, 10\.5rem\)/g)).toHaveLength(3);
+    // The two SECTION grids own the 10.5rem date track (work + education).
+    // Row grids must NOT redefine it: they nest as subgrids, so every row
+    // shares the section's column edges instead of sizing an `auto` role
+    // track per row and drifting the department column left.
+    expect(css.match(/minmax\(0, 10\.5rem\)/g)).toHaveLength(2);
+    const workSection = css.slice(css.indexOf('.entrySectionWork {'));
+    expect(workSection).toContain(
+      'grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr) auto'
+    );
+    const eduSection = css.slice(css.indexOf('.entrySectionEdu {'));
+    expect(eduSection).toContain(
+      'grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 7rem)'
+    );
+    for (const token of [
+      '.entrySubgridItem {',
+      '.entryColumnsWork {',
+      '.entryColumnsWorkThree {',
+      '.entryColumns4 {',
+    ]) {
+      expect(css.slice(css.indexOf(token))).toContain('grid-template-columns: subgrid');
+    }
+    // A no-department row keeps its role flush right by spanning two tracks.
+    expect(css.slice(css.indexOf('.entryRoleThree {'))).toContain('grid-column: 3 / -1');
     // The project row keeps its time column where it was (name-first grid).
     expect(css).toContain('minmax(0, 2fr) minmax(0, 9.5rem)');
   });

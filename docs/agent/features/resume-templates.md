@@ -237,6 +237,20 @@ renders (empty string reserves space, so roles line up across entries), the
 role is deliberately **not bold** (`entryRole`, regular weight), and an
 optional `location` stays appended to the company cell.
 
+The section wrapper (`entrySectionWork`), not the individual rows, owns the
+column tracks (`minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr) auto`);
+each entry item and its header row nest as `grid-template-columns: subgrid`
+spanning `1 / -1`. Independent per-row grids used to size the `auto` role
+track separately, so a long title squeezed the `fr` tracks on that row and
+shifted its department cell left (the 部门不对齐 regression). Subgrid makes
+the role track as wide as the section-widest title exactly once, so every
+row's department/role edges coincide. modern/latex/clean mirror the same
+contract with `entryGridSection` / `entryGridItem` / `entryGrid` /
+`entryGridThree`; rows without a department keep three cells and span the
+role across the department+role tracks (`grid-column: 3 / -1`). The
+name-first project grid (`entryColumnsProject`) is intentionally left
+independent.
+
 The org unit on its own source line (`武汉软通动力 / 全球资金部`, also
 研发部 / 云计算集成部 / 保险事业群 / 平台研发中心 / "Payments Team") must
 land in `Experience.department`, not in the description. Two layers guarantee

@@ -160,13 +160,16 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
         return (
           <div key={section.id} className={baseStyles['resume-section']}>
             <h3 className={styles['section-title-accent']}>{section.displayName}</h3>
-            <div className={baseStyles['resume-items']}>
+            <div className={`${baseStyles['resume-items']} ${styles.entryGridSection}`}>
               {workExperience.map((exp) => {
                 // A legacy plain department line ("全球资金部") is lifted into
                 // the department column and removed from the bullet list.
                 const promoted = promoteWorkDepartment(exp);
                 return (
-                  <div key={exp.id} className={baseStyles['resume-item']}>
+                  <div
+                    key={exp.id}
+                    className={`${baseStyles['resume-item']} ${styles.entryGridItem}`}
+                  >
                     <WorkEntryRow exp={exp} department={promoted.department} />
                     <DescriptionList
                       items={promoted.description}
@@ -263,9 +266,12 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
         return (
           <div key={section.id} className={baseStyles['resume-section']}>
             <h3 className={styles['section-title-accent']}>{section.displayName}</h3>
-            <div className={baseStyles['resume-items']}>
+            <div className={`${baseStyles['resume-items']} ${styles.entryGridSection}`}>
               {education.map((edu) => (
-                <div key={edu.id} className={baseStyles['resume-item']}>
+                <div
+                  key={edu.id}
+                  className={`${baseStyles['resume-item']} ${styles.entryGridItem}`}
+                >
                   <EducationEntryRow edu={edu} />
                 </div>
               ))}

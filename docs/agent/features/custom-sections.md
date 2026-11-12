@@ -380,20 +380,36 @@ templates (components under `apps/frontend/components/resume/`):
   与技能列表（`.resume-section > ol`）同样「列表可跨页、单行不切」。屏幕分页预览
   的 JS 边界算法（`use-pagination.ts::collectUnbreakableBounds`）与这些规则一一
   对应（`<ol>` 与 `<ul>` 同等处理），保证预览与导出一致。
-- **swiss-single (the default and PDF template) lays work/education entry
-  headers out as fixed left-aligned CSS grids** (`WorkEntryRow` /
-  `EducationEntryRow` in `resume-single-column.tsx`, classes
-  `entryColumnsWork` / `entryColumnsWorkThree` / `entryColumns4` in
-  `swiss-single.module.css`):
-  - Work without department = **time | company | role** (3 tracks, class
-    `entryColumnsWorkThree`: `10.5rem | 1.35fr | 1fr`); with a department it is
-    4 tracks (`entryColumnsWork`: `10.5rem | 1.35fr | 1fr | auto`).
-    Location stays appended to the company cell with `·`.
-  - Education = **time | university | major | degree** (4 tracks:
-    `10.5rem | 1.35fr | 1fr | 7rem`); major is `education.description`.
+- **The four full-width templates (swiss-single, modern, latex, clean) lay
+  work/education entry headers out as justified CSS grids whose SECTION owns
+  the column tracks and whose rows nest as subgrids** (`WorkEntryRow` /
+  `EducationEntryRow`; swiss-single classes `entrySectionWork` /
+  `entrySectionEdu` + `entrySubgridItem` / `entryColumnsWork` /
+  `entryColumnsWorkThree` / `entryColumns4` in `swiss-single.module.css`;
+  the other three modules use `entryGridSection` / `entryGridItem` /
+  `entryGrid` / `entryGridThree`):
+  - Work without department = **time | company | role** (the role spans the
+    department+role tracks with `grid-column: 3 / -1`, class
+    `entryColumnsWorkThree` / `entryGridThree`); with a department it is four
+    tracks, **time | company | department | role**. Location stays appended
+    to the company cell with `·`.
+  - Education = **time | university | major | degree**; major is
+    `education.description`.
+  - The section grid defines the tracks once — work
+    `minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr) auto`, swiss-single
+    education the same first three tracks plus a fixed `minmax(0, 7rem)`
+    degree track — and every entry/item row is
+    `grid-template-columns: subgrid` spanning `1 / -1`, so all rows share
+    identical column edges. Previously each row was an independent grid: a
+    long job title grew that row's `auto` role track, squeezed the `fr`
+    tracks and pushed the department column left (visible 不对齐). Subgrid
+    sizes the role track to the section-widest title once, aligning every
+    department/role edge with zero extra wrapping.
   - Project = **name | time | scale | role** (`ProjectEntryRow`, class
-    `entryColumnsProject`: `2fr | 9.5rem | 0.9fr | 1.1fr`); when all three
-    metadata tracks are empty the name renders full-width on its own row.
+    `entryColumnsProject`: `2fr | 9.5rem | 0.9fr | 1.1fr`); this name-first
+    grid deliberately stays independent of the time-first section grids;
+    when all three metadata tracks are empty the name renders full-width on
+    its own row.
   - The 10.5rem date track is deliberately wider than the date glyphs, so the
     company/school column starts a little right of them (DOCX mirrors it with
     a 3.3cm first track).
@@ -402,10 +418,9 @@ templates (components under `apps/frontend/components/resume/`):
     values wrap inside their own column (`minmax(0, …)`,
     `overflow-wrap: anywhere`) instead of pushing the date around.
     Description bullets render below, left-aligned.
-  - `clean` and `vivid` keep their own single-line entry header; `latex` /
-    `modern` keep their deliberate two-row header, and the two-column
-    templates keep their main/sidebar layout — the grid rule is specific
-    to swiss-single's full-width ATS layout.
+  - `vivid` and the two-column templates (`resume-two-column`,
+    `resume-modern-two-column`) keep their own entry layouts — the
+    section/subgrid rule is specific to the four full-width ATS layouts.
 - **swiss-single header facts.** Below the left-aligned name, the header
   renders a labeled, left-aligned fact grid (`infoGrid` / `infoCell`) in
   the Chinese-resume order: **性别 / 年龄 / 学历 / 工作年限 / 求职意向 /

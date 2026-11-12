@@ -115,31 +115,57 @@
 
 /*
   Tabular entry rows — work: time | company | department | role (4 columns),
-  education: time | institution | major | degree (4 columns).
-  Work rows are end-aligned (两端对齐): the date hugs the left edge and the
-  role hugs the right edge; company/department occupy the middle tracks, and
-  an empty department still reserves its track so roles line up across
-  entries. Fixed minmax(0, …) tracks let long values wrap inside their own
-  column instead of pushing the date.
+  education: time | institution | major | degree (4 columns). The SECTION
+  owns the column tracks and every entry header nests as a subgrid, so all
+  rows share identical column edges (行列对齐） even though the work role
+  track is `auto` — an independent per-row grid let a long title shrink the
+  fr tracks and shift the department column left. Work rows are end-aligned
+  (两端对齐）: the date hugs the left edge, the role hugs the right edge;
+  minmax(0, …) tracks let long values wrap inside their own column.
 */
 /* Date track is deliberately wider than the date glyphs need so the company
    column starts a little further right (mirrors the DOCX 3.3cm first track). */
-.entryColumnsWork {
+.entrySectionWork {
   display: grid;
   grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr) auto;
   column-gap: 0.75rem;
+  row-gap: var(--item-gap);
+}
+
+/* Education shares the first three tracks but its degree track is a fixed
+   7rem (no auto sizing), so it gets its own section grid. */
+.entrySectionEdu {
+  display: grid;
+  grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 7rem);
+  column-gap: 0.75rem;
+  row-gap: var(--item-gap);
+}
+
+.entrySubgridItem {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}
+
+/* Description fragments fill the whole row; header subgrids span all too. */
+.entrySubgridItem > * {
+  grid-column: 1 / -1;
+}
+
+.entryColumnsWork {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   align-items: baseline;
   text-align: left;
 }
 
-/* No department: three real columns — time | company | role. The company
-   band keeps its 1.35fr width (it lines up with four-column rows); the role
-   fills the freed department+role bands (1fr) and stays flush right so the
-   row is 两端对齐 (date at the left edge, role at the right edge). */
+/* No department: the role spans the department+role tracks, flush right so
+   the row stays 两端对齐 (date at the left edge, role at the right edge). */
 .entryColumnsWorkThree {
   display: grid;
-  grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr);
-  column-gap: 0.75rem;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   align-items: baseline;
   text-align: left;
 }
@@ -153,16 +179,18 @@
 }
 
 /* Three-column (no department) rows keep the role flush with the right edge
-   (两端对齐). Declared after .entryRole so it wins when both are applied. */
+   (两端对齐） by spanning the department+role tracks. Declared after
+   .entryRole so it wins when both are applied. */
 .entryRoleThree {
+  grid-column: 3 / -1;
   justify-self: end;
   text-align: right;
 }
 
 .entryColumns4 {
   display: grid;
-  grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 7rem);
-  column-gap: 0.75rem;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   align-items: baseline;
   text-align: left;
 }
