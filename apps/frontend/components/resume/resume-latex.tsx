@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mail, Phone, Globe, Linkedin, Github, ExternalLink } from 'lucide-react';
+import { Globe, Linkedin, Github, ExternalLink } from 'lucide-react';
 import type {
   ResumeData,
   SectionMeta,
@@ -21,6 +21,7 @@ import {
 } from '@/lib/utils/resume-headings';
 import { formatDateRange } from '@/lib/utils';
 import { DescriptionList } from './description-list';
+import { buildHeaderFactCells, HeaderFactGrid } from './header-fact-grid';
 import { stripPointMarker } from './list-format';
 import { SkillGroupList } from './skill-list';
 import { promoteWorkDepartment } from './work-department';
@@ -66,10 +67,9 @@ export const ResumeLatex: React.FC<ResumeLatexProps> = ({
   // 培训与证书 / 荣誉奖项 (projected to the back by getRenderSections).
   const renderSections = getRenderSections(data);
 
-  // LaTeX renders location as its own centered line, so it is not a contact-row item.
+  // Only the social-link row remains in the header; phone/email/location are
+  // facts in HeaderFactGrid and carry no icons.
   const contactIcons: Record<string, React.ReactNode> = {
-    Email: <Mail size={12} />,
-    Phone: <Phone size={12} />,
     Website: <Globe size={12} />,
     LinkedIn: <Linkedin size={12} />,
     GitHub: <Github size={12} />,
@@ -123,10 +123,20 @@ export const ResumeLatex: React.FC<ResumeLatexProps> = ({
     );
   };
 
-  // Build the contact row (phone, email, linkedin, github, website) joined by middots.
+  // Basic-info facts （性别/年龄/学历/工作年限/求职意向/意向城市/电话/邮箱/
+  // 外语水平） render in the centered fact grid, mirroring swiss-single's
+  // header contract. The contact row therefore keeps only the labeled social
+  // links (location/phone/email — including LaTeX's old standalone location
+  // line — live as facts above it).
+  const factCells = buildHeaderFactCells({
+    personalInfo,
+    education,
+    languages: additional?.languages,
+    labels: infoLabels,
+  });
+
+  // Social-link row (linkedin, github, website) joined by middots.
   const contactItems = [
-    renderContactDetail('Phone', personalInfo?.phone),
-    renderContactDetail('Email', personalInfo?.email, 'mailto:'),
     renderContactDetail('LinkedIn', personalInfo?.linkedin, '', infoLabels.linkedin),
     renderContactDetail('GitHub', personalInfo?.github, '', infoLabels.github),
     renderContactDetail('Website', personalInfo?.website, '', infoLabels.website),
@@ -274,7 +284,6 @@ export const ResumeLatex: React.FC<ResumeLatexProps> = ({
             key={section.id}
             additional={additional}
             displayName={section.displayName}
-            labels={additionalSectionLabels}
           />
         );
 
@@ -298,15 +307,12 @@ export const ResumeLatex: React.FC<ResumeLatexProps> = ({
       {personalInfo && (
         <header className={`text-center ${baseStyles['resume-header']}`}>
           {personalInfo.name && <h1 className={`${styles.name} mb-1`}>{personalInfo.name}</h1>}
-          {personalInfo.title && (
-            <div className={`${styles.tagline} mb-1`}>{personalInfo.title}</div>
-          )}
-          {personalInfo.location && (
-            <div className={`${styles.locationLine} mb-1`}>{personalInfo.location}</div>
-          )}
+          {/* 求职意向（title）/ 意向城市（location， formerly the standalone
+              location line）/ 电话 / 邮箱 join the labeled fact grid. */}
+          <HeaderFactGrid cells={factCells} />
           {contactItems.length > 0 && (
             <div
-              className={`flex flex-wrap justify-center items-center gap-x-2 gap-y-1 ${styles.contactRow}`}
+              className={`flex flex-wrap justify-center items-center gap-x-2 gap-y-1 mt-2 ${styles.contactRow}`}
             >
               {contactItems.map((item, index) => (
                 <React.Fragment key={index}>
@@ -401,40 +407,28 @@ const EducationEntryRow: React.FC<{ edu: Education }> = ({ edu }) => {
 };
 
 /**
- * The early `additional` slot renders ONLY the skills block (technical skills
- * + languages). Technical skills render as an ordered numbered list — group
- * heads are bold unnumbered labels and each group restarts numbering at 1 —
- * with no inline "Technical Skills:" label (the section title already names
- * the block). Languages keep their bold inline label + comma-joined line.
- * Cert/award lists are projected to the back of the resume by
+ * The early `additional` slot renders ONLY the technical-skills block, as an
+ * ordered numbered list — group heads are bold unnumbered labels and each
+ * group restarts numbering at 1 — with no inline "Technical Skills:" label
+ * (the section title already names the block). Languages never render here:
+ * per the parsing-rules spec they live only in the header fact grid as the
+ * 外语水平 fact. Cert/award lists are projected to the back of the resume by
  * getRenderSections and rendered via <LateAdditionalModule>.
  */
 const AdditionalSkillsSection: React.FC<{
   additional: ResumeData['additional'];
   displayName?: string;
-  labels?: Partial<AdditionalSectionLabels>;
-}> = ({ additional, displayName = 'Skills', labels }) => {
+}> = ({ additional, displayName = 'Skills' }) => {
   if (!additional) return null;
 
   const technicalSkills = nonBlankStrings(additional.technicalSkills);
-  const languages = nonBlankStrings(additional.languages);
-  if (technicalSkills.length === 0 && languages.length === 0) return null;
-
-  const languagesLabel = labels?.languages ?? 'Languages:';
-
-  const line = (label: string, items: string[]) =>
-    items.length > 0 ? (
-      <div>
-        <span className="font-bold">{label}</span> {items.map(stripPointMarker).join(', ')}
-      </div>
-    ) : null;
+  if (technicalSkills.length === 0) return null;
 
   return (
     <div className={baseStyles['resume-section']}>
       <h3 className={styles.sectionTitle}>{displayName}</h3>
       <div className={`${baseStyles['resume-stack']} ${baseStyles['resume-text-sm']}`}>
-        {technicalSkills.length > 0 && <SkillGroupList entries={technicalSkills} />}
-        {line(languagesLabel, languages)}
+        <SkillGroupList entries={technicalSkills} />
       </div>
     </div>
   );

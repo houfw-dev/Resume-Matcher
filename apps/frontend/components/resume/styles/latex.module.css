@@ -36,17 +36,6 @@
   color: var(--resume-text-primary);
 }
 
-.locationLine {
-  font-size: var(--font-size-base);
-  color: var(--resume-text-body);
-}
-
-.tagline {
-  font-style: italic;
-  font-size: calc(var(--font-size-base) * 1.05);
-  color: var(--resume-text-body);
-}
-
 .contactRow {
   font-size: calc(var(--font-size-base) * 0.95);
   color: var(--resume-text-body);

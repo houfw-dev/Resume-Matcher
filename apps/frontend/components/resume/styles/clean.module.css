@@ -35,11 +35,6 @@
   color: var(--resume-text-primary);
 }
 
-.tagline {
-  font-size: calc(var(--font-size-base) * 1.05);
-  color: var(--resume-text-tertiary);
-}
-
 .contactRow {
   font-size: calc(var(--font-size-base) * 0.85);
   color: var(--resume-text-body);

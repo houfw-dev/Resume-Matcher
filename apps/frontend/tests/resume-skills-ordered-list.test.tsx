@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import React from 'react';
 import type { AdditionalSectionLabels, ResumeData } from '@/components/dashboard/resume-component';
+import type { PersonalInfoLabels } from '@/lib/utils/resume-headings';
 import { ResumeClean } from '@/components/resume/resume-clean';
 import { ResumeLatex } from '@/components/resume/resume-latex';
 import { ResumeModern } from '@/components/resume/resume-modern';
@@ -19,6 +20,7 @@ vi.mock('@/lib/i18n', () => ({ useTranslations: () => ({ t: (k: string) => k }) 
 type TemplateProps = {
   data: ResumeData;
   additionalSectionLabels?: Partial<AdditionalSectionLabels>;
+  personalInfoLabels?: Partial<PersonalInfoLabels>;
 };
 
 const TEMPLATES: [string, React.ComponentType<TemplateProps>][] = [
@@ -100,7 +102,7 @@ describe.each(TEMPLATES)('%s technical skills as an ordered list', (_name, Templ
     expect(secondItems[1].textContent).toMatch(/^2\./);
   });
 
-  it('never emits the inline technical-skills label, while languages keep theirs', () => {
+  it('never emits the inline technical-skills label; languages move to the header fact grid', () => {
     render(
       <Template
         data={baseData({
@@ -108,6 +110,7 @@ describe.each(TEMPLATES)('%s technical skills as an ordered list', (_name, Templ
           languages: ['英语 CET-6'],
         })}
         additionalSectionLabels={{ technicalSkills: '技术技能：', languages: '外语：' }}
+        personalInfoLabels={{ foreignLanguage: '外语水平' }}
       />
     );
 
@@ -119,8 +122,14 @@ describe.each(TEMPLATES)('%s technical skills as an ordered list', (_name, Templ
     expect(screen.queryByText('Technical Skills:')).toBeNull();
     // The skills themselves still render, numbered.
     expect(section.querySelector('ol')?.querySelectorAll('li')).toHaveLength(2);
-    // Languages are untouched: bold inline label + joined line.
-    expect(within(section).getByText('外语：')).toBeInTheDocument();
-    expect(within(section).getByText('英语 CET-6')).toBeInTheDocument();
+
+    // Languages never render in the skills block: per the parsing-rules spec
+    // they live only in the header fact grid as the 外语水平 fact.
+    expect(section.textContent).not.toContain('英语 CET-6');
+    expect(section.textContent).not.toContain('外语');
+    const languageCell = screen.getByText('英语 CET-6').closest('[data-header-fact]')!;
+    expect(languageCell).toBeTruthy();
+    expect(languageCell).toHaveAttribute('data-header-fact', 'foreignLanguage');
+    expect(languageCell.textContent).toContain('外语水平');
   });
 });
