@@ -797,6 +797,11 @@
         "label": "Message de prospection à froid",
         "description": "Générez un message de networking pour LinkedIn ou e-mail"
       },
+      "parseResumePrompt": {
+        "label": "Prompt d'analyse de CV",
+        "description": "Prompt personnalisé utilisé lorsque les CV importés sont convertis en JSON structuré.",
+        "help": "Doit inclure ces espaces réservés (chacun entre accolades) : schema, resume_text. Laissez vide pour utiliser le prompt par défaut. Les accolades JSON littérales doivent être doublées : {{ }}."
+      },
       "customPromptLabel": "Invite personnalisée (optionnelle)",
       "customPromptHelp": "Doit inclure ces espaces réservés (chacun entre accolades) : job_description, resume_data, output_language. Laissez vide pour utiliser l'invite par défaut.",
       "customPromptResetButton": "Rétablir la valeur par défaut",

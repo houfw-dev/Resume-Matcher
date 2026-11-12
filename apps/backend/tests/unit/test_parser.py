@@ -7,10 +7,12 @@ coverage with none of it exercised.
 """
 
 import copy
+import logging
 
 import pytest
 from unittest.mock import AsyncMock, patch
 
+from app.prompts.templates import PARSE_RESUME_PROMPT, RESUME_SCHEMA_EXAMPLE
 from app.services.parser import (
     _MAX_RESUME_CONTENT_RECURSION,
     _MD_NUMERIC_DATE_RE,
@@ -18,6 +20,7 @@ from app.services.parser import (
     _extract_markdown_dates,
     _is_tech_stack_category_row,
     _recover_glyph_loss,
+    _resolve_parse_prompt,
     _shows_glyph_loss,
     backfill_personal_info_from_markdown,
     canonicalize_date_period,
@@ -1919,6 +1922,80 @@ class TestMeaningfulResumeContent:
         mock_complete_json.return_value = {"workExperience": [{}]}
         with pytest.raises(ValueError, match="empty structured resume"):
             await parse_resume_to_json("Jane Doe")
+
+
+class TestParsePromptOverride:
+    """config.json ``parse_resume_prompt`` override and its default fallback."""
+
+    @pytest.mark.parametrize(
+        "stored",
+        [{}, {"parse_resume_prompt": ""}, {"parse_resume_prompt": "   "}],
+    )
+    def test_resolve_returns_built_in_default_when_unset_or_blank(
+        self, stored: dict
+    ) -> None:
+        with patch(
+            "app.services.parser.load_config_file", return_value=stored
+        ):
+            template, is_custom = _resolve_parse_prompt()
+        assert template is PARSE_RESUME_PROMPT
+        assert is_custom is False
+
+    def test_resolve_returns_custom_template_when_configured(self) -> None:
+        custom = "Custom template {schema} {resume_text}"
+        with patch(
+            "app.services.parser.load_config_file",
+            return_value={"parse_resume_prompt": custom},
+        ):
+            template, is_custom = _resolve_parse_prompt()
+        assert template == custom
+        assert is_custom is True
+
+    @pytest.mark.asyncio
+    @patch("app.services.parser.load_config_file")
+    @patch("app.services.parser.complete_json", new_callable=AsyncMock)
+    async def test_custom_prompt_is_rendered_and_sent_to_llm(
+        self, mock_complete_json: AsyncMock, mock_load
+    ) -> None:
+        mock_load.return_value = {
+            "parse_resume_prompt": "CUSTOM PARSE {schema} || {resume_text}"
+        }
+        # Capture the rendered prompt, then abort before the post-processing
+        # pipeline needs a valid LLM payload.
+        mock_complete_json.side_effect = RuntimeError("stop after capture")
+        with pytest.raises(RuntimeError, match="stop after capture"):
+            await parse_resume_to_json("Jane Doe")
+
+        sent = mock_complete_json.call_args.kwargs["prompt"]
+        assert sent.startswith("CUSTOM PARSE ")
+        assert RESUME_SCHEMA_EXAMPLE in sent
+        assert sent.endswith("|| Jane Doe")
+
+    @pytest.mark.asyncio
+    @patch("app.services.parser.load_config_file")
+    @patch("app.services.parser.complete_json", new_callable=AsyncMock)
+    async def test_broken_custom_prompt_falls_back_to_default(
+        self,
+        mock_complete_json: AsyncMock,
+        mock_load,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        # An out-of-band disk edit can bypass save-time validation; the lone
+        # opening brace makes str.format() raise ValueError.
+        mock_load.return_value = {
+            "parse_resume_prompt": "Broken {schema} {resume_text} {unclosed"
+        }
+        mock_complete_json.side_effect = RuntimeError("stop after capture")
+        with caplog.at_level(logging.WARNING):
+            with pytest.raises(RuntimeError, match="stop after capture"):
+                await parse_resume_to_json("Jane Doe")
+
+        sent = mock_complete_json.call_args.kwargs["prompt"]
+        expected_default = PARSE_RESUME_PROMPT.format(
+            schema=RESUME_SCHEMA_EXAMPLE, resume_text="Jane Doe"
+        )
+        assert sent == expected_default
+        assert "failed to format" in caplog.text
 
 
 class TestSplitBlobTextSections:

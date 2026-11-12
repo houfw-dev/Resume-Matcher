@@ -29,9 +29,14 @@ from app.schemas import (
 from app.prompts import (
     DEFAULT_IMPROVE_PROMPT_ID,
     IMPROVE_PROMPT_OPTIONS,
+    PARSE_REQUIRED_PLACEHOLDERS,
     validate_prompt_placeholders,
 )
-from app.prompts.templates import COVER_LETTER_PROMPT, OUTREACH_MESSAGE_PROMPT
+from app.prompts.templates import (
+    COVER_LETTER_PROMPT,
+    OUTREACH_MESSAGE_PROMPT,
+    PARSE_RESUME_PROMPT,
+)
 from app.config import (
     get_api_keys_from_config,
     get_config_path,
@@ -397,7 +402,7 @@ async def update_prompt_config(
 
 @router.get("/feature-prompts", response_model=FeaturePromptsResponse)
 async def get_feature_prompts() -> FeaturePromptsResponse:
-    """Get custom feature prompts (cover letter, outreach message).
+    """Get custom feature prompts (cover letter, outreach, resume parse).
 
     Empty strings mean "use default". The ``*_default`` fields expose the
     built-in prompts so the UI can show them as placeholder text without
@@ -407,8 +412,10 @@ async def get_feature_prompts() -> FeaturePromptsResponse:
     return FeaturePromptsResponse(
         cover_letter_prompt=stored.get("cover_letter_prompt", "") or "",
         outreach_message_prompt=stored.get("outreach_message_prompt", "") or "",
+        parse_resume_prompt=stored.get("parse_resume_prompt", "") or "",
         cover_letter_default=COVER_LETTER_PROMPT,
         outreach_message_default=OUTREACH_MESSAGE_PROMPT,
+        parse_resume_default=PARSE_RESUME_PROMPT,
     )
 
 
@@ -418,12 +425,13 @@ async def update_feature_prompts(
 ) -> FeaturePromptsResponse:
     """Update custom feature prompts.
 
-    Non-empty prompts are validated for the three required placeholders
-    (``{job_description}``, ``{resume_data}``, ``{output_language}``).
-    Missing placeholders return a 422 with a structured detail so the UI
-    can list exactly which ones are absent. Empty strings clear the
-    override — persisted as ``""`` so runtime resolution falls back to the
-    built-in default.
+    Non-empty prompts are validated for their required placeholders:
+    cover-letter/outreach prompts need ``{job_description}``,
+    ``{resume_data}`` and ``{output_language}``; the resume-parse prompt
+    needs ``{schema}`` and ``{resume_text}``. Missing placeholders return a
+    422 with a structured detail so the UI can list exactly which ones are
+    absent. Empty strings clear the override — persisted as ``""`` so
+    runtime resolution falls back to the built-in default.
     """
     stored = _load_config()
 
@@ -457,13 +465,32 @@ async def update_feature_prompts(
                 )
         stored["outreach_message_prompt"] = prompt
 
+    if request.parse_resume_prompt is not None:
+        prompt = request.parse_resume_prompt.strip()
+        if prompt:
+            missing = validate_prompt_placeholders(
+                prompt, required=PARSE_REQUIRED_PLACEHOLDERS
+            )
+            if missing:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "missing_placeholders",
+                        "field": "parse_resume_prompt",
+                        "missing": missing,
+                    },
+                )
+        stored["parse_resume_prompt"] = prompt
+
     _save_config(stored)
 
     return FeaturePromptsResponse(
         cover_letter_prompt=stored.get("cover_letter_prompt", "") or "",
         outreach_message_prompt=stored.get("outreach_message_prompt", "") or "",
+        parse_resume_prompt=stored.get("parse_resume_prompt", "") or "",
         cover_letter_default=COVER_LETTER_PROMPT,
         outreach_message_default=OUTREACH_MESSAGE_PROMPT,
+        parse_resume_default=PARSE_RESUME_PROMPT,
     )
 
 

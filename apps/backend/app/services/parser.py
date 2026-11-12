@@ -45,6 +45,7 @@ from pdfminer.pdftypes import (
 )
 from pdfminer.psparser import PSKeyword, literal_name
 
+from app.config import load_config_file
 from app.llm import complete_json, get_llm_config, get_model_name, get_safe_max_tokens
 from app.prompts import PARSE_RESUME_PROMPT
 from app.services import ocr as ocr_service
@@ -3869,6 +3870,24 @@ async def parse_document(content: bytes, filename: str) -> str:
         raise
 
 
+def _resolve_parse_prompt() -> tuple[str, bool]:
+    """Resolve the resume-parse prompt template at runtime.
+
+    Mirrors cover_letter._resolve_feature_prompt: a non-empty
+    ``parse_resume_prompt`` entry in config.json overrides the built-in
+    default. Returns ``(template, is_custom)``; the ``is_custom`` flag lets
+    the caller fall back to the default instead of crashing when an
+    out-of-band disk edit produced a template ``.format()`` cannot render.
+    Save-time placeholder validation (``{schema}`` / ``{resume_text}``)
+    makes the fallback defensive rather than expected.
+    """
+    stored = load_config_file()
+    custom = (stored.get("parse_resume_prompt") or "").strip()
+    if not custom:
+        return PARSE_RESUME_PROMPT, False
+    return custom, True
+
+
 async def parse_resume_to_json(markdown_text: str) -> dict[str, Any]:
     """Parse resume markdown to structured JSON using LLM.
 
@@ -3890,10 +3909,30 @@ async def parse_resume_to_json(markdown_text: str) -> dict[str, Any]:
     if not markdown_text or not markdown_text.strip():
         raise ValueError("Resume content is empty after text extraction.")
 
-    prompt = PARSE_RESUME_PROMPT.format(
-        schema=RESUME_SCHEMA_EXAMPLE,
-        resume_text=markdown_text,
-    )
+    template, is_custom = _resolve_parse_prompt()
+    try:
+        prompt = template.format(
+            schema=RESUME_SCHEMA_EXAMPLE,
+            resume_text=markdown_text,
+        )
+    except (KeyError, IndexError, ValueError) as e:
+        # str.format() raises KeyError for unknown placeholders, IndexError for
+        # positional out-of-range, and ValueError for unmatched/invalid braces.
+        # A failing built-in default means broken upstream code — re-raise. A
+        # user-supplied custom prompt (e.g. an out-of-band config edit with
+        # unescaped JSON braces) falls back to the default with a server-side
+        # warning; the client keeps the generic upload error surface.
+        if not is_custom:
+            raise
+        logger.warning(
+            "Custom parse-resume prompt failed to format (%s); "
+            "falling back to the built-in default",
+            e,
+        )
+        prompt = PARSE_RESUME_PROMPT.format(
+            schema=RESUME_SCHEMA_EXAMPLE,
+            resume_text=markdown_text,
+        )
 
     config = get_llm_config()
     model_name = get_model_name(config)

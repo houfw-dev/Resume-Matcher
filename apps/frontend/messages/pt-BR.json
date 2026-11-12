@@ -797,6 +797,11 @@
         "label": "Mensagem de Contato Frio",
         "description": "Gerar uma mensagem de networking para LinkedIn ou email"
       },
+      "parseResumePrompt": {
+        "label": "Prompt de análise de currículo",
+        "description": "Prompt personalizado usado quando os currículos enviados são convertidos em JSON estruturado.",
+        "help": "Deve incluir estes marcadores (cada um entre chaves): schema, resume_text. Deixe em branco para usar o prompt padrão. Chaves JSON literais devem ser duplicadas: {{ }}."
+      },
       "customPromptLabel": "Prompt personalizado (opcional)",
       "customPromptHelp": "Deve incluir estes marcadores (cada um entre chaves): job_description, resume_data, output_language. Deixe em branco para usar o prompt padrão.",
       "customPromptResetButton": "Restaurar padrão",

@@ -28,18 +28,27 @@ REQUIRED_FEATURE_PROMPT_PLACEHOLDERS: tuple[str, ...] = (
     "{output_language}",
 )
 
+# Placeholders every user-supplied resume-parse prompt must contain. They match
+# the ``.format()`` keys in parser.parse_resume_to_json; deliberately a
+# separate tuple — the parse prompt has no JD/output-language slots.
+PARSE_REQUIRED_PLACEHOLDERS: tuple[str, ...] = ("{schema}", "{resume_text}")
 
-def validate_prompt_placeholders(prompt: str) -> list[str]:
+
+def validate_prompt_placeholders(
+    prompt: str,
+    required: tuple[str, ...] = REQUIRED_FEATURE_PROMPT_PLACEHOLDERS,
+) -> list[str]:
     """Return required placeholders missing from ``prompt``.
 
     Empty or whitespace-only prompts are treated as "use default" and return
     an empty list (valid — the router treats them as clearing the override).
-    Non-empty prompts must include every entry from
-    ``REQUIRED_FEATURE_PROMPT_PLACEHOLDERS``.
+    Non-empty prompts must include every entry from ``required`` (the
+    cover-letter/outreach set by default; pass ``PARSE_REQUIRED_PLACEHOLDERS``
+    for the resume-parse prompt).
     """
     if not prompt or not prompt.strip():
         return []
-    return [p for p in REQUIRED_FEATURE_PROMPT_PLACEHOLDERS if p not in prompt]
+    return [p for p in required if p not in prompt]
 
 
 __all__ = [
@@ -58,6 +67,7 @@ __all__ = [
     "INTERVIEW_PREP_NO_JD_PROMPT",
     "OUTREACH_NO_JD_PROMPT",
     "REQUIRED_FEATURE_PROMPT_PLACEHOLDERS",
+    "PARSE_REQUIRED_PLACEHOLDERS",
     "validate_prompt_placeholders",
     "get_language_name",
 ]

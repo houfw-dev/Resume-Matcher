@@ -797,6 +797,11 @@
         "label": "Cold Outreach Message",
         "description": "Generate a networking message for LinkedIn or email"
       },
+      "parseResumePrompt": {
+        "label": "Resume Parse Prompt",
+        "description": "Custom prompt used when uploaded resumes are parsed into structured JSON.",
+        "help": "Must include these placeholders (each in curly braces): schema, resume_text. Leave blank to use the default prompt. Any literal JSON braces must be doubled: {{ }}."
+      },
       "customPromptLabel": "Custom prompt (optional)",
       "customPromptHelp": "Must include these placeholders (each in curly braces): job_description, resume_data, output_language. Leave blank to use the default prompt.",
       "customPromptResetButton": "Reset to default",

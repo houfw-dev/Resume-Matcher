@@ -797,6 +797,11 @@
         "label": "站内信",
         "description": "生成用于招聘平台沟通的站内私信"
       },
+      "parseResumePrompt": {
+        "label": "简历解析提示词",
+        "description": "上传简历被解析为结构化 JSON 时使用的自定义提示词。",
+        "help": "必须包含以下占位符（各自放在花括号中）：schema、resume_text。留空则使用默认提示词。提示词中任何字面 JSON 花括号都必须双写：{{ }}。"
+      },
       "customPromptLabel": "自定义提示词（可选）",
       "customPromptHelp": "必须包含以下占位符（各自使用大括号括起来）：job_description、resume_data、output_language。留空则使用默认提示词。",
       "customPromptResetButton": "恢复默认",

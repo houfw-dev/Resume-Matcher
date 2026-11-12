@@ -338,6 +338,67 @@ class TestFeaturePrompts:
         )
         assert data["outreach_message_prompt"] == ""
 
+    @patch("app.routers.config._load_config")
+    async def test_get_feature_prompts_exposes_parse_prompt(
+        self, mock_load, client
+    ):
+        mock_load.return_value = {
+            "parse_resume_prompt": "custom {schema} {resume_text}",
+        }
+        async with client:
+            resp = await client.get("/api/v1/config/feature-prompts")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["parse_resume_prompt"] == "custom {schema} {resume_text}"
+        assert "{schema}" in data["parse_resume_default"]
+        assert "{resume_text}" in data["parse_resume_default"]
+        # Unset sibling overrides normalize to empty strings.
+        assert data["cover_letter_prompt"] == ""
+        assert data["outreach_message_prompt"] == ""
+
+    @patch("app.routers.config._load_config")
+    async def test_put_parse_resume_prompt_rejects_missing_placeholders(
+        self, mock_load, client
+    ):
+        mock_load.return_value = {}
+        async with client:
+            resp = await client.put(
+                "/api/v1/config/feature-prompts",
+                json={"parse_resume_prompt": "Parse {resume_text} without schema"},
+            )
+
+        assert resp.status_code == 422
+        assert resp.json()["detail"] == {
+            "code": "missing_placeholders",
+            "field": "parse_resume_prompt",
+            "missing": ["{schema}"],
+        }
+
+    @patch("app.routers.config._save_config")
+    @patch("app.routers.config._load_config")
+    async def test_put_parse_resume_prompt_strips_persists_and_echoes_default(
+        self, mock_load, mock_save, client
+    ):
+        mock_load.return_value = {}
+        custom = "Parse {schema} from {resume_text}"
+        async with client:
+            resp = await client.put(
+                "/api/v1/config/feature-prompts",
+                json={"parse_resume_prompt": f"  {custom}  "},
+            )
+
+        assert resp.status_code == 200
+        saved_config = mock_save.call_args.args[0]
+        assert saved_config["parse_resume_prompt"] == custom
+        data = resp.json()
+        assert data["parse_resume_prompt"] == custom
+        assert "{schema}" in data["parse_resume_default"]
+        assert "{resume_text}" in data["parse_resume_default"]
+        # Sibling overrides are untouched by a parse-only update.
+        assert "cover_letter_prompt" not in saved_config
+        assert "outreach_message_prompt" not in saved_config
+
 
 class TestLanguageConfig:
     """GET/PUT /api/v1/config/language"""

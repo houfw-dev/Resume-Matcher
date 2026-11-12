@@ -797,6 +797,11 @@
         "label": "Mensaje de acercamiento en frío",
         "description": "Genera un mensaje de networking para LinkedIn o correo electrónico"
       },
+      "parseResumePrompt": {
+        "label": "Prompt de análisis de currículum",
+        "description": "Prompt personalizado que se usa al convertir los currículums cargados en JSON estructurado.",
+        "help": "Debe incluir estos marcadores (cada uno entre llaves): schema, resume_text. Déjalo en blanco para usar el prompt predeterminado. Las llaves JSON literales deben duplicarse: {{ }}."
+      },
       "customPromptLabel": "Prompt personalizado (opcional)",
       "customPromptHelp": "Debe incluir estos marcadores (cada uno entre llaves): job_description, resume_data, output_language. Déjalo en blanco para usar el prompt por defecto.",
       "customPromptResetButton": "Restablecer al predeterminado",

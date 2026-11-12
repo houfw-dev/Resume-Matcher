@@ -797,6 +797,11 @@
         "label": "コールドアウトリーチメッセージ",
         "description": "LinkedIn やメール向けのネットワーキングメッセージを生成します"
       },
+      "parseResumePrompt": {
+        "label": "履歴書解析プロンプト",
+        "description": "アップロードされた履歴書を構造化 JSON に解析するときに使うカスタムプロンプトです。",
+        "help": "次のプレースホルダーを含める必要があります（それぞれ中括弧で囲む）: schema、resume_text。空欄の場合は既定のプロンプトを使用します。リテラル JSON の中括弧は二重にする必要があります: {{ }}。"
+      },
       "customPromptLabel": "カスタムプロンプト（任意）",
       "customPromptHelp": "次のプレースホルダーを中括弧で囲んで含めてください：job_description, resume_data, output_language。空欄の場合は既定のプロンプトを使用します。",
       "customPromptResetButton": "デフォルトにリセット",
