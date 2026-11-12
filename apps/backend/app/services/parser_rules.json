@@ -1,0 +1,509 @@
+{
+  "spec_version": "1.0",
+  "thresholds": {
+    "header_search_limit": 2000,
+    "skill_group_head_max_len": 14,
+    "skill_group_min_heads": 2,
+    "skill_detail_min_len": 16,
+    "nested_group_head_max_len": 16,
+    "nested_group_min_heads": 2,
+    "misfile_region_max_rows": 6,
+    "pdfium_min_cjk_ratio": 0.6,
+    "embedded_label_max_len": 11,
+    "standalone_label_cjk_max_len": 11,
+    "standalone_label_latin_max_len": 20
+  },
+  "vocabularies": {
+    "header_field_labels": {
+      "name": "姓\\s*名",
+      "gender": "性\\s*别",
+      "age": "年\\s*龄",
+      "workYears": "工\\s*作\\s*(?:年\\s*限|经\\s*验|时\\s*间)",
+      "educationLevel": "(?:最\\s*高)?学\\s*历",
+      "languages": "(?:外\\s*语|语\\s*言)\\s*(?:水\\s*平|能\\s*力)|英\\s*语\\s*水\\s*平",
+      "phone": "联\\s*系\\s*电\\s*话|电\\s*话|手\\s*机\\s*号?\\s*码?|Cell(?:\\s*phone)?|Tel(?:ephone)?",
+      "email": "(?:电\\s*子\\s*)?邮\\s*(?:箱|件)|E\\s*-?\\s*[Mm]ail",
+      "title": "求\\s*职\\s*意\\s*向|期\\s*望\\s*(?:职\\s*位|岗\\s*位|职\\s*业)|意\\s*向\\s*(?:职\\s*位|岗\\s*位|职\\s*业)|目\\s*标\\s*岗\\s*位",
+      "location": "(?:期\\s*望|意\\s*向|工\\s*作)\\s*(?:城\\s*市|地\\s*点)",
+      "website": "博\\s*客\\s*地\\s*址|个\\s*人\\s*网\\s*站|个\\s*人\\s*主\\s*页|个\\s*人\\s*博\\s*客|个\\s*人\\s*网\\s*址|主\\s*页|博\\s*客|网\\s*站|网\\s*址|Website|Web\\s*site|Homepage|Blog(?:\\s*site)?",
+      "linkedin": "领\\s*英|Linked\\s*[Ii]n",
+      "github": "Git\\s*[Hh]ub"
+    },
+    "header_basic_headings": [
+      "基本资料",
+      "个人信息",
+      "基本信息",
+      "个人资料",
+      "个人概况"
+    ],
+    "header_stop_headings": [
+      "教育背景",
+      "教育经历",
+      "教育情况",
+      "学历信息",
+      "求学履历",
+      "工作经历",
+      "工作经验",
+      "工作履历",
+      "从业经历",
+      "职业履历",
+      "任职经历",
+      "职场经历",
+      "实习经历",
+      "项目经历",
+      "项目经验",
+      "项目履历",
+      "重点项目",
+      "专业技能",
+      "职业技能",
+      "核心技能",
+      "专业能力",
+      "技能专长",
+      "技能清单",
+      "个人优势",
+      "核心优势",
+      "竞争优势",
+      "综合优势",
+      "个人简介",
+      "个人介绍",
+      "个人简述",
+      "自我介绍",
+      "个人总结",
+      "自我评价",
+      "个人评价",
+      "荣誉证书",
+      "资质荣誉",
+      "资格证书",
+      "获奖情况",
+      "校园经历",
+      "社会实践",
+      "兴趣特长"
+    ],
+    "sub_label_candidates": [
+      "技术难点及亮点",
+      "技术难度及解决方案",
+      "技术架构",
+      "系统架构",
+      "架构说明",
+      "项目背景",
+      "项目概述",
+      "业务背景",
+      "项目描述",
+      "项目简介",
+      "需求背景",
+      "项目概况",
+      "项目介绍",
+      "工作职责",
+      "工作内容",
+      "项目职责",
+      "个人职责",
+      "项目责任",
+      "核心职责与成果",
+      "项目职责与成果",
+      "项目职责和成果",
+      "项目职责及成果",
+      "工作职责与成果",
+      "工作职责和成果",
+      "工作职责及成果",
+      "个人职责与成果",
+      "职责与成果",
+      "职责和成果",
+      "职责及成果",
+      "主要职责",
+      "核心职责",
+      "核心工作",
+      "责任描述",
+      "技术栈",
+      "技术列表",
+      "技术选型",
+      "所用技术",
+      "技术清单",
+      "技术方案",
+      "技术亮点",
+      "技术难点",
+      "难点及亮点",
+      "难点与解决",
+      "难点与方案",
+      "解决方案",
+      "项目亮点",
+      "项目难点",
+      "负责内容",
+      "项目成果",
+      "个人成果",
+      "工作业绩",
+      "项目业绩",
+      "主要成果",
+      "核心成果",
+      "项目成效",
+      "工作成效",
+      "实施成效",
+      "建设成效",
+      "应用成效",
+      "业务成效",
+      "落地成效",
+      "实际成效",
+      "量化成效",
+      "运营成效",
+      "项目效果",
+      "实施效果",
+      "应用效果",
+      "落地效果",
+      "运行效果",
+      "实际效果",
+      "项目角色",
+      "担任角色"
+    ],
+    "project_sub_label_canonical": {
+      "项目成果": "项目亮点",
+      "个人成果": "项目亮点",
+      "技术亮点": "项目亮点",
+      "技术难点": "项目亮点",
+      "难点与解决": "项目亮点",
+      "技术难点及亮点": "项目亮点",
+      "工作职责": "项目职责",
+      "主要职责": "项目职责",
+      "负责内容": "项目职责",
+      "核心工作": "项目职责",
+      "工作内容": "项目职责",
+      "个人职责": "项目职责",
+      "项目责任": "项目职责",
+      "核心职责与成果": "项目职责",
+      "项目职责与成果": "项目职责",
+      "项目职责和成果": "项目职责",
+      "项目职责及成果": "项目职责",
+      "工作职责与成果": "项目职责",
+      "工作职责和成果": "项目职责",
+      "工作职责及成果": "项目职责",
+      "个人职责与成果": "项目职责",
+      "职责与成果": "项目职责",
+      "职责和成果": "项目职责",
+      "职责及成果": "项目职责",
+      "项目概述": "项目背景",
+      "业务背景": "项目背景",
+      "项目简介": "项目背景",
+      "需求背景": "项目背景",
+      "项目概况": "项目背景",
+      "项目介绍": "项目背景",
+      "技术选型": "技术栈",
+      "技术架构": "技术栈",
+      "所用技术": "技术栈",
+      "技术清单": "技术栈",
+      "技术列表": "技术栈"
+    },
+    "project_inline_plain_labels": [
+      "业务背景",
+      "所用技术",
+      "技术列表",
+      "技术架构",
+      "技术栈",
+      "技术清单",
+      "技术选型",
+      "架构说明",
+      "系统架构",
+      "需求背景",
+      "项目介绍",
+      "项目描述",
+      "项目概况",
+      "项目概述",
+      "项目简介",
+      "项目背景"
+    ],
+    "dedupable_additional_fields": [
+      "technicalSkills",
+      "certificationsTraining",
+      "awards",
+      "languages"
+    ],
+    "edu_major_label_cores": [
+      "专业方向",
+      "主修专业",
+      "专业名称",
+      "专业"
+    ],
+    "edu_award_label_cores": [
+      "奖项名称",
+      "获奖情况",
+      "获奖名称",
+      "获奖记录",
+      "荣誉奖项",
+      "荣誉称号",
+      "荣誉证书",
+      "奖项",
+      "获奖",
+      "荣誉",
+      "奖励",
+      "Awards",
+      "Award",
+      "Honors",
+      "Honours",
+      "Honor"
+    ],
+    "edu_cert_label_cores": [
+      "资格证书",
+      "资格认证",
+      "资质证书",
+      "职业资格",
+      "证书名称",
+      "认证证书",
+      "资质",
+      "认证",
+      "证书",
+      "执照",
+      "Certifications",
+      "Certification",
+      "Certificates",
+      "Certificate",
+      "Qualifications",
+      "Qualification",
+      "Licenses",
+      "License",
+      "Licences",
+      "Licence"
+    ],
+    "edu_mixed_label_cores": [
+      "荣誉证书",
+      "荣誉资质",
+      "资质荣誉"
+    ],
+    "extra_award_label_cores": [
+      "所获荣誉",
+      "个人荣誉",
+      "荣誉表彰",
+      "获奖荣誉",
+      "所获奖励"
+    ],
+    "extra_cert_label_cores": [
+      "执业资格",
+      "职业证书",
+      "专业证书",
+      "技能证书"
+    ],
+    "edu_lang_label_cores": [
+      "语言能力",
+      "外语能力",
+      "语言水平",
+      "外语水平",
+      "英语水平",
+      "英语能力",
+      "语言情况",
+      "掌握语言",
+      "Languages",
+      "Language",
+      "语言",
+      "外语"
+    ],
+    "canonical_tech_terms": [
+      "Spring Cloud Alibaba",
+      "Spring AI Alibaba",
+      "Spring Framework",
+      "Spring Boot",
+      "Spring Cloud",
+      "Spring MVC",
+      "Spring AI",
+      "MyBatis-Plus",
+      "LangChain4j",
+      "Elasticsearch",
+      "Kubernetes",
+      "JavaScript",
+      "TypeScript",
+      "Element UI",
+      "PostgreSQL",
+      "ActiveMQ",
+      "RabbitMQ",
+      "RocketMQ",
+      "LangChain",
+      "Next.js",
+      "Node.js",
+      "Nuxt.js",
+      "Vue.js",
+      "FastAPI",
+      "Hibernate",
+      "MongoDB",
+      "MyBatis",
+      "Tailwind CSS",
+      "Sentinel",
+      "SQL Server",
+      "DevOps",
+      "Docker",
+      "Dubbo",
+      "Flask",
+      "GitLab",
+      "Gradle",
+      "GraalVM",
+      "GraphQL",
+      "Hadoop",
+      "Nacos",
+      "Nginx",
+      "React",
+      "Redis",
+      "Seata",
+      "Spock",
+      "Kafka",
+      "Linux",
+      "Maven",
+      "MySQL",
+      "NumPy",
+      "Pandas",
+      "Pulsar",
+      "Python",
+      "Quartz",
+      "Spring",
+      "SVN",
+      "Thymeleaf",
+      "Tomcat",
+      "Vert.x",
+      "Webpack",
+      "Golang",
+      "JUnit",
+      "Java",
+      "JVM",
+      "JDK",
+      "JRE",
+      "CSS",
+      "Git",
+      "HTML",
+      "JSON",
+      "K8s",
+      "AWS",
+      "gRPC",
+      "CI/CD",
+      "SQL",
+      ".NET",
+      "C++"
+    ]
+  },
+  "patterns": {
+    "md_date": {
+      "pattern": "(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?\\s+\\d{4})(?:\\s*[-–—]\\s*(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?\\s+\\d{4}|Present|Current|Now|Ongoing))?",
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    "month_en": {
+      "pattern": "\\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)",
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    "numeric_date": {
+      "pattern": "\\d{4}\\s*[年./-]\\s*(?:0?[1-9]|1[0-2])(?!\\d|[./-]\\d)(?:\\s*月)?(?:\\s*[-–—~～]\\s*(?:\\d{4}\\s*[年./-]\\s*(?:0?[1-9]|1[0-2])(?!\\d|[./-]\\d)(?:\\s*月)?|至今|现在|目前|Present|Current|Now|Ongoing))?",
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    "present_marker": {
+      "pattern": "至今|现在|目前|Present|Current|Now|Ongoing",
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    "numeric_month_precise": {
+      "pattern": "\\d{4}\\s*[年./-]\\s*(?:0?[1-9]|1[0-2])(?!\\d|[./-]\\d)"
+    },
+    "canon_numeric_point": {
+      "pattern": "(\\d{4})\\s*[年./-]\\s*(0?[1-9]|1[0-2])(?!\\d|[./-]\\d)(?:\\s*月)?"
+    },
+    "canon_bare_year": {
+      "pattern": "(?<![\\d.])(\\d{4})(?!\\d|[./-]\\d)"
+    },
+    "canon_present": {
+      "pattern": "至今|现在|目前|Present|Current|Now|Ongoing",
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    "canon_connector_word": {
+      "pattern": "\\bto\\b",
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    "canon_trailing_note": {
+      "pattern": "^[（(][^（）()]*[)）]\\s*$"
+    },
+    "markdown_inline_link": {
+      "pattern": "!?\\[[^\\]]*\\]\\(\\s*([^)\\s]*)\\s*\\)"
+    },
+    "bare_url": {
+      "pattern": "(?:https?://|www\\.)[^\\s|｜，,；;）)】\\]]+"
+    },
+    "point_marker": {
+      "pattern": "^\\s*(?:\\d{1,2}\\s*[.、)）．:：]|[（(]\\d{1,2}[)）]|[①-⑩]|[•·・●▪▸▹◆■]|[\\-—–]\\s+|[一二三四五六七八九十]{1,3}\\s*[、.．)）])\\s*"
+    },
+    "md_bold_star": {
+      "pattern": "\\*\\*\\s*([^*]+?)\\s*\\*\\*",
+      "flags": [
+        "DOTALL"
+      ]
+    },
+    "md_bold_under": {
+      "pattern": "__\\s*([^_]+?)__",
+      "flags": [
+        "DOTALL"
+      ]
+    },
+    "md_italic_star": {
+      "pattern": "(?<![\\w*])\\*([^*\\s][^*]*?)\\*(?![\\w*])"
+    },
+    "md_italic_under": {
+      "pattern": "(?<![\\w_])_([^_\\s][^_]*?)_(?![\\w_])"
+    },
+    "md_code": {
+      "pattern": "`+([^`]+?)`+"
+    },
+    "md_strike": {
+      "pattern": "~~([^~]+?)~~"
+    },
+    "md_orphan_bold": {
+      "pattern": "\\*\\*|__"
+    },
+    "md_orphan_strike": {
+      "pattern": "~~"
+    },
+    "github_host": {
+      "pattern": "(?:^|\\.)github\\.com$",
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    "edu_cert_item_hint": {
+      "pattern": "证书|认证|资格|资质|执照"
+    },
+    "edu_credential_clause": {
+      "pattern": "[；;。\\n，,]+"
+    },
+    "misfile_cert_item_hint": {
+      "pattern": "PMP|CPA|CFA|ACCA|AWS|Azure|Google\\s*Cloud|OCI|ITIL|CKA|Licen[cs]e|Certified|证书|认证|资格|资质|执照|执业|结业证",
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    "misfile_lang_item_hint": {
+      "pattern": "英语|日语|韩语|法语|德语|俄语|西班牙语|葡萄牙语|意大利语|阿拉伯语|泰语|越南语|印尼语|马来语|粤语|普通话|汉语|中文|外语|口语|口译|笔译|雅思|IELTS|托福|TOEFL|GRE|GMAT|SAT|TESOL|TEFL|CATTI|CET|大学英语|专四|专八|四级|六级|八级|N[1-5](?![0-9])|English|Japanese|Korean|French|German|Spanish|Mandarin|Cantonese",
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    "misfile_award_item_hint": {
+      "pattern": "奖|荣誉|荣获|获奖|奖学金|冠军|亚军|季军|金奖|银奖|铜奖|表彰|勋章|标兵|三好|优秀|先进|奖章|立功|嘉奖|Dean'?s List|Cum Laude|Magna|Summa|Prize|Scholarship|Fellowship|Medal|Honor Roll|Recognition|Champion|Runner[- ]?up|Awards?|Honou?rs",
+      "flags": [
+        "IGNORECASE"
+      ]
+    },
+    "tech_stack_category": {
+      "pattern": "^[一-鿿A-Za-z][一-鿿A-Za-z0-9/（）() -]{0,10}[：:]\\s*\\S"
+    },
+    "category_sentence": {
+      "pattern": "[。；！？!?;]"
+    },
+    "project_header_field": {
+      "pattern": "^\\s*(?:\\d{1,2}\\s*[.、)）．:：]\\s*)?(?P<label>项目规模|团队规模|项目角色|担任角色)\\s*[：:]\\s*(?P<value>.+?)\\s*$"
+    },
+    "work_department_line": {
+      "pattern": "^\\s*(?:[一-鿿][一-鿿A-Za-z0-9（）()·&/+\\- ]{0,13}(?:事业部|事业群|部门|条线|分院|大区|办公室|中心|团队|小组|[部组室科处])|[A-Za-z0-9][A-Za-z0-9 &/+\\-]{1,28}(?:Department|Dept\\.?|Division|Team|Group))(?:[（(][^（）()]{1,12}[）)])?\\s*$"
+    },
+    "work_department_sentence_punct": {
+      "pattern": "[。．.，,；;：:！!？?、…]"
+    }
+  }
+}

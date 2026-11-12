@@ -1,0 +1,460 @@
+# 简历解析规则制品（人工编辑源）
+#
+# 链路：本文件
+#   -> scripts/export_parser_rules.py（ephemeral PyYAML，运行时不依赖 yaml）
+#   -> apps/backend/app/services/parser_rules.json（随包入库的运行时唯一制品）
+#
+# 只放声明式数据：数值阈值、词表/别名、正则字符串。解析流水线顺序、区域状态机、
+# 日期消歧打分、容器校验、ResumeData schema 与 CJK Unicode 字形表属于结构契约，
+# 永远留在 Python 代码里，不进本文件。
+#
+# 改完重新导出（仓库根目录）：
+#   uv run --with pyyaml python -I scripts/export_parser_rules.py
+# 坏正则 / 缺段 / 未知 flags 会在导出期响亮报错；运行时加载器（parser_rules.py）
+# 对 JSON 制品再做一次同样的 fail-fast 校验。
+
+spec_version: "1.0"
+
+# 数值/标量阈值（标量：int / float / str；不接受 bool，避免 YAML yes/no 歧义）。
+# 只放业务识别阈值；文档安全预算（解压上限、转换超时、递归深度等运维参数）
+# 留在 parser.py 代码里，不进本文件。
+thresholds:
+  # 头部事实标签超出此前导字符数即视为正文标签（如职位里的「电话销售」）。
+  header_search_limit: 2000
+  # 专业技能分组标题识别：标题最大长度、成组最少标题数、细节描述最小长度。
+  skill_group_head_max_len: 14
+  skill_group_min_heads: 2
+  skill_detail_min_len: 16
+  # 嵌套技能分组标题识别（参数语义同上）。
+  nested_group_head_max_len: 16
+  nested_group_min_heads: 2
+  # 错放凭证区域：失去标签边界后最多延续的行数，超出即放弃搬运。
+  misfile_region_max_rows: 6
+  # pypdfium2 字形丢失回退的最低 CJK 字符保留比例。
+  pdfium_min_cjk_ratio: 0.6
+  # 头部事实值里内嵌「标签：」的最大标签长度（_EMBEDDED_LABEL_RE 量词）。
+  embedded_label_max_len: 11
+  # 独立标签行的 CJK / latin 标签最大长度（_STANDALONE_SUB_LABEL_RE 量词）。
+  standalone_label_cjk_max_len: 11
+  standalone_label_latin_max_len: 20
+
+vocabularies:
+  # 头部「标签：值」事实格的识别片段。值是 regex 字符串（不是普通词表），按
+  # ResumeData 字段命名；parser.py 负责把它们按序组合成带命名分组的总正则，
+  # 组合算法与列边界判定留代码。片段在导出期与加载期都会单独 re.compile 校验。
+  header_field_labels:
+    name: 姓\s*名
+    gender: 性\s*别
+    age: 年\s*龄
+    workYears: 工\s*作\s*(?:年\s*限|经\s*验|时\s*间)
+    educationLevel: (?:最\s*高)?学\s*历
+    languages: (?:外\s*语|语\s*言)\s*(?:水\s*平|能\s*力)|英\s*语\s*水\s*平
+    phone: 联\s*系\s*电\s*话|电\s*话|手\s*机\s*号?\s*码?|Cell(?:\s*phone)?|Tel(?:ephone)?
+    # email 片段刻意以具体 CJK/字母字符开头（无前导 \s*），列边界检查才能
+    # 落在标签前一个字符而不是 padding 空白里。
+    email: (?:电\s*子\s*)?邮\s*(?:箱|件)|E\s*-?\s*[Mm]ail
+    title: 求\s*职\s*意\s*向|期\s*望\s*(?:职\s*位|岗\s*位|职\s*业)|意\s*向\s*(?:职\s*位|岗\s*位|职\s*业)|目\s*标\s*岗\s*位
+    location: (?:期\s*望|意\s*向|工\s*作)\s*(?:城\s*市|地\s*点)
+    # 个人链接格与事实格共用头部行；识别出它们才能正确截断上一个事实的值域。
+    website: 博\s*客\s*地\s*址|个\s*人\s*网\s*站|个\s*人\s*主\s*页|个\s*人\s*博\s*客|个\s*人\s*网\s*址|主\s*页|博\s*客|网\s*站|网\s*址|Website|Web\s*site|Homepage|Blog(?:\s*site)?
+    linkedin: 领\s*英|Linked\s*[Ii]n
+    github: Git\s*[Hh]ub
+
+  # 头部「基本资料」类区块标题（命中后开启头部事实扫描区）。
+  header_basic_headings:
+    - 基本资料
+    - 个人信息
+    - 基本信息
+    - 个人资料
+    - 个人概况
+
+  # 头部扫描的终止标题：命中其中任一项即认为头部事实区结束、正文开始。
+  header_stop_headings:
+    - 教育背景
+    - 教育经历
+    - 教育情况
+    - 学历信息
+    - 求学履历
+    - 工作经历
+    - 工作经验
+    - 工作履历
+    - 从业经历
+    - 职业履历
+    - 任职经历
+    - 职场经历
+    - 实习经历
+    - 项目经历
+    - 项目经验
+    - 项目履历
+    - 重点项目
+    - 专业技能
+    - 职业技能
+    - 核心技能
+    - 专业能力
+    - 技能专长
+    - 技能清单
+    - 个人优势
+    - 核心优势
+    - 竞争优势
+    - 综合优势
+    - 个人简介
+    - 个人介绍
+    - 个人简述
+    - 自我介绍
+    - 个人总结
+    - 自我评价
+    - 个人评价
+    - 荣誉证书
+    - 资质荣誉
+    - 资格证书
+    - 获奖情况
+    - 校园经历
+    - 社会实践
+    - 兴趣特长
+
+  # 工作/项目条目描述内部允许切分的子模块标签（有序词表；运行时按长度降序
+  # 拼接正则，排序动作留代码）。成效/效果类标签刻意不进 canonical 映射。
+  # 三端镜像：resume_docx.py 与前端 list-format.ts 各有一份副本。
+  sub_label_candidates:
+    - 技术难点及亮点
+    - 技术难度及解决方案
+    - 技术架构
+    - 系统架构
+    - 架构说明
+    - 项目背景
+    - 项目概述
+    - 业务背景
+    - 项目描述
+    - 项目简介
+    - 需求背景
+    - 项目概况
+    - 项目介绍
+    - 工作职责
+    - 工作内容
+    - 项目职责
+    - 个人职责
+    - 项目责任
+    - 核心职责与成果
+    - 项目职责与成果
+    - 项目职责和成果
+    - 项目职责及成果
+    - 工作职责与成果
+    - 工作职责和成果
+    - 工作职责及成果
+    - 个人职责与成果
+    - 职责与成果
+    - 职责和成果
+    - 职责及成果
+    - 主要职责
+    - 核心职责
+    - 核心工作
+    - 责任描述
+    - 技术栈
+    - 技术列表
+    - 技术选型
+    - 所用技术
+    - 技术清单
+    - 技术方案
+    - 技术亮点
+    - 技术难点
+    - 难点及亮点
+    - 难点与解决
+    - 难点与方案
+    - 解决方案
+    - 项目亮点
+    - 项目难点
+    - 负责内容
+    - 项目成果
+    - 个人成果
+    - 工作业绩
+    - 项目业绩
+    - 主要成果
+    - 核心成果
+    # 成效/效果模块是项目亮点的平级模块，保持原文，禁止并入 canonical 映射。
+    - 项目成效
+    - 工作成效
+    - 实施成效
+    - 建设成效
+    - 应用成效
+    - 业务成效
+    - 落地成效
+    - 实际成效
+    - 量化成效
+    - 运营成效
+    - 项目效果
+    - 实施效果
+    - 应用效果
+    - 落地效果
+    - 运行效果
+    - 实际效果
+    - 项目角色
+    - 担任角色
+
+  # 项目条目内子模块标题的别名 -> 四个规范名（项目职责/项目亮点/项目背景/技术栈）。
+  # 仅对项目生效；工作条目的「工作职责」等标签保持原文。前端渲染期有同构镜像。
+  project_sub_label_canonical:
+    项目成果: 项目亮点
+    个人成果: 项目亮点
+    技术亮点: 项目亮点
+    技术难点: 项目亮点
+    难点与解决: 项目亮点
+    技术难点及亮点: 项目亮点
+    工作职责: 项目职责
+    主要职责: 项目职责
+    负责内容: 项目职责
+    核心工作: 项目职责
+    工作内容: 项目职责
+    # 真实简历中出现的个人职责措辞，与职责模块同源。
+    个人职责: 项目职责
+    项目责任: 项目职责
+    # 「职责与成果」复合标题开启职责区，统一到规范名 项目职责。
+    核心职责与成果: 项目职责
+    项目职责与成果: 项目职责
+    项目职责和成果: 项目职责
+    项目职责及成果: 项目职责
+    工作职责与成果: 项目职责
+    工作职责和成果: 项目职责
+    工作职责及成果: 项目职责
+    个人职责与成果: 项目职责
+    职责与成果: 项目职责
+    职责和成果: 项目职责
+    职责及成果: 项目职责
+    项目概述: 项目背景
+    业务背景: 项目背景
+    项目简介: 项目背景
+    需求背景: 项目背景
+    项目概况: 项目背景
+    项目介绍: 项目背景
+    技术选型: 技术栈
+    技术架构: 技术栈
+    所用技术: 技术栈
+    技术清单: 技术栈
+    技术列表: 技术栈
+
+  # 项目内描述型（非职责）子标签：切出后内容行强制 plain 不编号。运行时
+  # 转为 frozenset；此处按字典序排列仅为稳定 diff，集合语义与顺序无关。
+  project_inline_plain_labels:
+    - 业务背景
+    - 所用技术
+    - 技术列表
+    - 技术架构
+    - 技术栈
+    - 技术清单
+    - 技术选型
+    - 架构说明
+    - 系统架构
+    - 需求背景
+    - 项目介绍
+    - 项目描述
+    - 项目概况
+    - 项目概述
+    - 项目简介
+    - 项目背景
+
+  # additional 下需要去重的纯字符串展示字段（索引对齐数组不在此列）。
+  dedupable_additional_fields:
+    - technicalSkills
+    - certificationsTraining
+    - awards
+    - languages
+
+  # --- 教育/错放区凭证标签核心词（extract_education_credentials 与
+  # extract_misfiled_credentials 共用）。排序、去重、长短语优先拼接、
+  # lookbehind 边界等组合动作留 parser.py，这里只放有序词表。-------------
+  edu_major_label_cores:
+    - 专业方向
+    - 主修专业
+    - 专业名称
+    - 专业
+  edu_award_label_cores:
+    - 奖项名称
+    - 获奖情况
+    - 获奖名称
+    - 获奖记录
+    - 荣誉奖项
+    - 荣誉称号
+    - 荣誉证书
+    - 奖项
+    - 获奖
+    - 荣誉
+    - 奖励
+    - Awards
+    - Award
+    - Honors
+    - Honours
+    - Honor
+  edu_cert_label_cores:
+    - 资格证书
+    - 资格认证
+    - 资质证书
+    - 职业资格
+    - 证书名称
+    - 认证证书
+    - 资质
+    - 认证
+    - 证书
+    - 执照
+    - Certifications
+    - Certification
+    - Certificates
+    - Certificate
+    - Qualifications
+    - Qualification
+    - Licenses
+    - License
+    - Licences
+    - Licence
+  # 一行混放奖项与证书的标签（如「荣誉证书：校三好、PMP 证书」），条目按
+  # 关键词逐个路由；运行时转 frozenset，YAML 顺序仅为稳定 diff。
+  edu_mixed_label_cores:
+    - 荣誉证书
+    - 荣誉资质
+    - 资质荣誉
+  # 工作/项目列表区域额外识别的奖项、证书核心词。
+  extra_award_label_cores:
+    - 所获荣誉
+    - 个人荣誉
+    - 荣誉表彰
+    - 获奖荣誉
+    - 所获奖励
+  extra_cert_label_cores:
+    - 执业资格
+    - 职业证书
+    - 专业证书
+    - 技能证书
+  # 语言能力标签核心词；裸「语言」刻意置末，组合正则里带固定宽度
+  # lookbehind 防止「编程语言：Java」误匹配（拼接逻辑留 parser.py）。
+  edu_lang_label_cores:
+    - 语言能力
+    - 外语能力
+    - 语言水平
+    - 外语水平
+    - 英语水平
+    - 英语能力
+    - 语言情况
+    - 掌握语言
+    - Languages
+    - Language
+    - 语言
+    - 外语
+
+# 正则字符串。每项形如：
+#   名称:
+#     pattern: "正则字符串"
+#     flags: [IGNORECASE]        # 可省略；白名单：IGNORECASE/MULTILINE/DOTALL/UNICODE
+# 编译发生在加载期，pattern 非法会阻止应用启动。动态拼接型正则（命名分组
+# 总正则、月份表拼接的 _CANON_EN_POINT_RE / _START_DATE_RE 等）组合逻辑留
+# 在 parser.py，不进本段。
+patterns:
+  # --- Markdown 日期抽取（restore_dates_from_markdown 族）-----------------
+  # 英文月份区间/单日期："Jan 2020 - Dec 2023"、"Jun 2023"。
+  md_date:
+    pattern: (?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{4})(?:\s*[-–—]\s*(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{4}|Present|Current|Now|Ongoing))?
+    flags: [IGNORECASE]
+  # 英文月份单词（无年份），用于回插英文日期文本。
+  month_en:
+    pattern: \b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)
+    flags: [IGNORECASE]
+  # 中文简历常见数字日期区间："2017.09 - 2021.07"、"2025.07 - 至今"。
+  # 月份后不得再跟日组件（"21.0.1" 不匹配），年份必须四位。
+  numeric_date:
+    pattern: \d{4}\s*[年./-]\s*(?:0?[1-9]|1[0-2])(?!\d|[./-]\d)(?:\s*月)?(?:\s*[-–—~～]\s*(?:\d{4}\s*[年./-]\s*(?:0?[1-9]|1[0-2])(?!\d|[./-]\d)(?:\s*月)?|至今|现在|目前|Present|Current|Now|Ongoing))?
+    flags: [IGNORECASE]
+  # 开放结束标记（中文三词 + 英文四词）。
+  present_marker:
+    pattern: 至今|现在|目前|Present|Current|Now|Ongoing
+    flags: [IGNORECASE]
+  # 已带月份精度的数字年月（无区间尾段）。
+  numeric_month_precise:
+    pattern: \d{4}\s*[年./-]\s*(?:0?[1-9]|1[0-2])(?!\d|[./-]\d)
+
+  # --- canonicalize_date_period 规范化族 ----------------------------------
+  # 数字年月点 "2020.06" / "2020年6月"（无日部分），两个捕获组为年、月。
+  canon_numeric_point:
+    pattern: (\d{4})\s*[年./-]\s*(0?[1-9]|1[0-2])(?!\d|[./-]\d)(?:\s*月)?
+  # 裸四位年份，且两侧不邻接其他日期组件。
+  canon_bare_year:
+    pattern: (?<![\d.])(\d{4})(?!\d|[./-]\d)
+  # 开放结束标记，规范化后统一渲染为 至今。
+  canon_present:
+    pattern: 至今|现在|目前|Present|Current|Now|Ongoing
+    flags: [IGNORECASE]
+  # 英文连接词 "to"（中文连接符走 skip 字符集，留代码）。
+  canon_connector_word:
+    pattern: \bto\b
+    flags: [IGNORECASE]
+  # 日期串尾部唯一允许的括号注释，如 "2020.06~2023.09（实习）"。
+  canon_trailing_note:
+    pattern: ^[（(][^（）()]*[)）]\s*$
+
+  # --- Markdown / URL 清理族 ----------------------------------------------
+  # 行内 Markdown 链接/图片 "[文字](url)"，捕获组 1 为 url 目标。
+  markdown_inline_link:
+    pattern: '!?\[[^\]]*\]\(\s*([^)\s]*)\s*\)'
+  # 裸 URL（http(s):// 或 www. 开头），在全角/半角分隔符处截断。
+  bare_url:
+    pattern: (?:https?://|www\.)[^\s|｜，,；;）)】\]]+
+  # 源文档自带的点号编号（"1、"/"①"/"一、"/"• "/" - "）；三端镜像，
+  # 渲染侧会自行编号，存储内容保留前缀会造成双重编号。
+  point_marker:
+    pattern: ^\s*(?:\d{1,2}\s*[.、)）．:：]|[（(]\d{1,2}[)）]|[①-⑩]|[•·・●▪▸▹◆■]|[\-—–]\s+|[一二三四五六七八九十]{1,3}\s*[、.．)）])\s*
+  # Markdown 强调标记（strip_markdown_emphasis 族）；bold 两条需要 DOTALL
+  # 跨行匹配，斜体靠 lookaround 避免误伤单词内星号/下划线。
+  md_bold_star:
+    pattern: \*\*\s*([^*]+?)\s*\*\*
+    flags: [DOTALL]
+  md_bold_under:
+    pattern: __\s*([^_]+?)__
+    flags: [DOTALL]
+  md_italic_star:
+    pattern: (?<![\w*])\*([^*\s][^*]*?)\*(?![\w*])
+  md_italic_under:
+    pattern: (?<![\w_])_([^_\s][^_]*?)_(?![\w_])
+  md_code:
+    pattern: '`+([^`]+?)`+'
+  md_strike:
+    pattern: ~~([^~]+?)~~
+  # 孤立强调标记（无闭合），清理阶段直接移除。
+  md_orphan_bold:
+    pattern: \*\*|__
+  md_orphan_strike:
+    pattern: ~~
+  # 个人链接 host 判定（github.io / github.com 子域）。
+  github_host:
+    pattern: (?:^|\.)github\.com$
+    flags: [IGNORECASE]
+
+  # --- 教育/错放凭证区 -----------------------------------------------------
+  # 证书类条目的内容提示词（仅在显式凭证标签区域内使用）。
+  edu_cert_item_hint:
+    pattern: 证书|认证|资格|资质|执照
+  # 凭证条目之间的分句符。
+  edu_credential_clause:
+    pattern: '[；;。\n，,]+'
+  # 错放区条目的路由证据词（证书/语言/奖项三个桶），强证据优先。
+  misfile_cert_item_hint:
+    pattern: PMP|CPA|CFA|ACCA|AWS|Azure|Google\s*Cloud|OCI|ITIL|CKA|Licen[cs]e|Certified|证书|认证|资格|资质|执照|执业|结业证
+    flags: [IGNORECASE]
+  misfile_lang_item_hint:
+    pattern: 英语|日语|韩语|法语|德语|俄语|西班牙语|葡萄牙语|意大利语|阿拉伯语|泰语|越南语|印尼语|马来语|粤语|普通话|汉语|中文|外语|口语|口译|笔译|雅思|IELTS|托福|TOEFL|GRE|GMAT|SAT|TESOL|TEFL|CATTI|CET|大学英语|专四|专八|四级|六级|八级|N[1-5](?![0-9])|English|Japanese|Korean|French|German|Spanish|Mandarin|Cantonese
+    flags: [IGNORECASE]
+  misfile_award_item_hint:
+    pattern: 奖|荣誉|荣获|获奖|奖学金|冠军|亚军|季军|金奖|银奖|铜奖|表彰|勋章|标兵|三好|优秀|先进|奖章|立功|嘉奖|Dean'?s List|Cum Laude|Magna|Summa|Prize|Scholarship|Fellowship|Medal|Honor Roll|Recognition|Champion|Runner[- ]?up|Awards?|Honou?rs
+    flags: [IGNORECASE]
+
+  # --- 技术栈分类 / 项目头字段 / 工作部门行 -------------------------------
+  # 结构化技术栈分类行（"后端：Java、Spring Boot"），三端镜像；短冒号形状。
+  tech_stack_category:
+    pattern: ^[一-鿿A-Za-z][一-鿿A-Za-z0-9/（）() -]{0,10}[：:]\s*\S
+  # 分类行里出现句末标点即视为普通句子而非枚举行。
+  category_sentence:
+    pattern: '[。；！？!?;]'
+  # 项目描述里应提升到项目头的 规模/角色 标签行（两个命名捕获组）。
+  project_header_field:
+    pattern: ^\s*(?:\d{1,2}\s*[.、)）．:：]\s*)?(?P<label>项目规模|团队规模|项目角色|担任角色)\s*[：:]\s*(?P<value>.+?)\s*$
+  # 独立组织单位行（"研发部" / "Payments Team"）的紧门闩形状。
+  work_department_line:
+    pattern: ^\s*(?:[一-鿿][一-鿿A-Za-z0-9（）()·&/+\- ]{0,13}(?:事业部|事业群|部门|条线|分院|大区|办公室|中心|团队|小组|[部组室科处])|[A-Za-z0-9][A-Za-z0-9 &/+\-]{1,28}(?:Department|Dept\.?|Division|Team|Group))(?:[（(][^（）()]{1,12}[）)])?\s*$
+  # 部门行禁用的整句标点。
+  work_department_sentence_punct:
+    pattern: '[。．.，,；;：:！!？?、…]'

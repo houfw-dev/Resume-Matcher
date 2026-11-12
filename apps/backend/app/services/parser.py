@@ -15,7 +15,7 @@ import zipfile
 import zlib
 from pathlib import Path
 from collections.abc import Mapping
-from typing import Any, BinaryIO, Sequence
+from typing import Any, BinaryIO, Sequence, cast
 
 import anyio
 from markitdown import MarkItDown, UnsupportedFormatException
@@ -48,11 +48,18 @@ from pdfminer.psparser import PSKeyword, literal_name
 from app.llm import complete_json, get_llm_config, get_model_name, get_safe_max_tokens
 from app.prompts import PARSE_RESUME_PROMPT
 from app.services import ocr as ocr_service
+from app.services.parser_rules import get_parser_rules
 from app.services.tech_terms import canonicalize_tech_terms
 from app.prompts.templates import RESUME_SCHEMA_EXAMPLE
 from app.schemas import ResumeData
 
 logger = logging.getLogger(__name__)
+
+# Declarative parser data (vocabularies, thresholds, regex strings) ships in
+# parser_rules.json via rules/parser_rules.yaml; the loader validates it
+# fail-fast at import time. Pipeline order, region state machines, date
+# disambiguation, container validation and the CJK glyph tables stay here.
+_PARSER_RULES = get_parser_rules()
 
 DOCUMENT_IO_CHUNK_SIZE = 64 * 1024
 MAX_DOCX_MEMBERS = 1_024
@@ -526,46 +533,20 @@ def _validate_extracted_text(text: str) -> None:
 
 
 # Matches date ranges like "Jan 2020 - Dec 2023", "May 2021 - Present",
-# "January 2020 - Current", and single dates like "Jun 2023".
-_MD_DATE_RE = re.compile(
-    r"(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?"
-    r"|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?"
-    r"|Dec(?:ember)?)"
-    r"\.?\s+\d{4})"
-    r"(?:\s*[-–—]\s*"
-    r"(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?"
-    r"|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?"
-    r"|Dec(?:ember)?)"
-    r"\.?\s+\d{4}"
-    r"|Present|Current|Now|Ongoing))?",
-    re.IGNORECASE,
-)
-_MONTH_RE = re.compile(
-    r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?"
-    r"|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?"
-    r"|Dec(?:ember)?)",
-    re.IGNORECASE,
-)
+# "January 2020 - Current", and single dates like "Jun 2023". Pattern strings
+# live in parser_rules.yaml -> parser_rules.json (patterns section).
+_MD_DATE_RE = _PARSER_RULES.pattern("md_date")
+_MONTH_RE = _PARSER_RULES.pattern("month_en")
 
 
 # Numeric date ranges common in Chinese resumes: "2017.09 - 2021.07",
 # "2020年6月 - 2023年8月", "2025.07 - 至今", "2020/06 – Present". The month
 # (01-12) must not be followed by another day component (so versions such as
 # "21.0.1" never match) and the year needs all four digits (rules out "0.6").
-_MD_NUMERIC_DATE_RE = re.compile(
-    r"\d{4}\s*[年./-]\s*(?:0?[1-9]|1[0-2])(?!\d|[./-]\d)(?:\s*月)?"
-    r"(?:\s*[-–—~～]\s*"
-    r"(?:\d{4}\s*[年./-]\s*(?:0?[1-9]|1[0-2])(?!\d|[./-]\d)(?:\s*月)?"
-    r"|至今|现在|目前|Present|Current|Now|Ongoing))?",
-    re.IGNORECASE,
-)
-_PRESENT_MARKER_RE = re.compile(
-    r"至今|现在|目前|Present|Current|Now|Ongoing", re.IGNORECASE
-)
+_MD_NUMERIC_DATE_RE = _PARSER_RULES.pattern("numeric_date")
+_PRESENT_MARKER_RE = _PARSER_RULES.pattern("present_marker")
 # A years field already carrying month precision in numeric form.
-_NUMERIC_MONTH_PRECISE_RE = re.compile(
-    r"\d{4}\s*[年./-]\s*(?:0?[1-9]|1[0-2])(?!\d|[./-]\d)"
-)
+_NUMERIC_MONTH_PRECISE_RE = _PARSER_RULES.pattern("numeric_month_precise")
 
 
 def _extract_markdown_dates(markdown: str) -> list[str]:
@@ -755,42 +736,15 @@ def restore_dates_from_markdown(
 # recovered value therefore wins over a stripped LLM value, while contact
 # fields and languages only fill an empty parsed value.
 
-_HEADER_FIELD_LABELS: tuple[tuple[str, str], ...] = (
-    ("name", r"姓\s*名"),
-    ("gender", r"性\s*别"),
-    ("age", r"年\s*龄"),
-    ("workYears", r"工\s*作\s*(?:年\s*限|经\s*验|时\s*间)"),
-    ("educationLevel", r"(?:最\s*高)?学\s*历"),
-    (
-        "languages",
-        r"(?:外\s*语|语\s*言)\s*(?:水\s*平|能\s*力)|英\s*语\s*水\s*平",
-    ),
-    (
-        "phone",
-        r"联\s*系\s*电\s*话|电\s*话|手\s*机\s*号?\s*码?|Cell(?:\s*phone)?|Tel(?:ephone)?",
-    ),
-    # Starts on a concrete CJK/letter char (no leading \s*) so the column
-    # boundary check lands on the character before the label, not in padding.
-    ("email", r"(?:电\s*子\s*)?邮\s*(?:箱|件)|E\s*-?\s*[Mm]ail"),
-    (
-        "title",
-        r"求\s*职\s*意\s*向"
-        r"|期\s*望\s*(?:职\s*位|岗\s*位|职\s*业)"
-        r"|意\s*向\s*(?:职\s*位|岗\s*位|职\s*业)"
-        r"|目\s*标\s*岗\s*位",
-    ),
-    ("location", r"(?:期\s*望|意\s*向|工\s*作)\s*(?:城\s*市|地\s*点)"),
-    # Personal-link cells share the header row. Recognizing them is what ends
-    # the previous fact's value span: an unrecognized "博客地址：" label used to
-    # glue its Markdown link onto workYears ("13年 博客地址：[x](https://…)").
-    (
-        "website",
-        r"博\s*客\s*地\s*址|个\s*人\s*网\s*站|个\s*人\s*主\s*页|个\s*人\s*博\s*客"
-        r"|个\s*人\s*网\s*址|主\s*页|博\s*客|网\s*站|网\s*址"
-        r"|Website|Web\s*site|Homepage|Blog(?:\s*site)?",
-    ),
-    ("linkedin", r"领\s*英|Linked\s*[Ii]n"),
-    ("github", r"Git\s*[Hh]ub"),
+# field -> regex fragment, artifact order is the named-group alternation
+# order. The fragments are validated (each compiles on its own) at artifact
+# load time; the combined named-group regex below stays code because its
+# composition and the column-boundary check are algorithm.
+_HEADER_FIELD_LABELS: tuple[tuple[str, str], ...] = tuple(
+    (field, cast(str, pattern))
+    for field, pattern in _PARSER_RULES.vocabulary_mapping(
+        "header_field_labels"
+    ).items()
 )
 
 _HEADER_LABEL_RE = re.compile(
@@ -799,49 +753,11 @@ _HEADER_LABEL_RE = re.compile(
     + r")\s*[:：|｜]\s*"
 )
 
-_HEADER_BASIC_HEADINGS = ("基本资料", "个人信息", "基本信息", "个人资料", "个人概况")
-_HEADER_STOP_HEADINGS = (
-    "教育背景",
-    "教育经历",
-    "教育情况",
-    "学历信息",
-    "求学履历",
-    "工作经历",
-    "工作经验",
-    "工作履历",
-    "从业经历",
-    "职业履历",
-    "任职经历",
-    "职场经历",
-    "实习经历",
-    "项目经历",
-    "项目经验",
-    "项目履历",
-    "重点项目",
-    "专业技能",
-    "职业技能",
-    "核心技能",
-    "专业能力",
-    "技能专长",
-    "技能清单",
-    "个人优势",
-    "核心优势",
-    "竞争优势",
-    "综合优势",
-    "个人简介",
-    "个人介绍",
-    "个人简述",
-    "自我介绍",
-    "个人总结",
-    "自我评价",
-    "个人评价",
-    "荣誉证书",
-    "资质荣誉",
-    "资格证书",
-    "获奖情况",
-    "校园经历",
-    "社会实践",
-    "兴趣特长",
+_HEADER_BASIC_HEADINGS: tuple[str, ...] = tuple(
+    _PARSER_RULES.vocabulary_list("header_basic_headings")
+)
+_HEADER_STOP_HEADINGS: tuple[str, ...] = tuple(
+    _PARSER_RULES.vocabulary_list("header_stop_headings")
 )
 _HEADER_HEADING_RE = re.compile(
     r"^\s*(?:[◆■●★◇▸►#*]{1,2}\s*)?"
@@ -851,8 +767,8 @@ _HEADER_HEADING_RE = re.compile(
     re.MULTILINE,
 )
 # A label not found within this many leading characters is assumed to live in
-# the body, not the header.
-_HEADER_SEARCH_LIMIT = 2000
+# the body, not the header. Value ships in parser_rules.yaml (thresholds).
+_HEADER_SEARCH_LIMIT: int = _PARSER_RULES.int_threshold("header_search_limit")
 _LABEL_BOUNDARY_CHARS = " \t\r\n　|｜:："
 
 
@@ -894,14 +810,20 @@ _HEADER_FACT_FIELDS: tuple[str, ...] = ("gender", "age", "workYears", "education
 
 # Inline Markdown link/image, e.g. "[fengba.blog.csdn.net](https://…)" — the
 # URL target is captured so link fields can collapse to it.
-_MARKDOWN_INLINE_LINK_RE = re.compile(r"!?\[[^\]]*\]\(\s*([^)\s]*)\s*\)")
-_BARE_URL_RE = re.compile(r"(?:https?://|www\.)[^\s|｜，,；;）)】\]]+")
+_MARKDOWN_INLINE_LINK_RE = _PARSER_RULES.pattern("markdown_inline_link")
+_BARE_URL_RE = _PARSER_RULES.pattern("bare_url")
 # A second "label：" inside a fact value marks the next glued cell. The label
 # must follow whitespace (the cell separator) so a value whose own opening
 # characters reach a colon ("本科 学 校：…") is cut at the label, not at its
 # first character. Spaces inside the label are allowed because markitdown
 # splits CJK runs ("学 校").
-_EMBEDDED_LABEL_RE = re.compile(r"(?<=\s)[一-鿿A-Za-z][一-鿿A-Za-z\s]{0,11}\s*[:：]")
+_EMBEDDED_LABEL_MAX_LEN: int = _PARSER_RULES.int_threshold(
+    "embedded_label_max_len"
+)
+# The length quantifier is a threshold; the pattern shape stays code.
+_EMBEDDED_LABEL_RE = re.compile(
+    rf"(?<=\s)[一-鿿A-Za-z][一-鿿A-Za-z\s]{{0,{_EMBEDDED_LABEL_MAX_LEN}}}\s*[:：]"
+)
 
 
 def sanitize_header_fact_value(value: str) -> str:
@@ -1140,22 +1062,21 @@ def sort_timeline_sections_newest_first(
 # ---------------------------------------------------------------------------
 
 #: Numeric point "2020.06" / "2020/6" / "2020-06" / "2020年6月" (no day part).
-_CANON_NUMERIC_POINT_RE = re.compile(
-    r"(\d{4})\s*[年./-]\s*(0?[1-9]|1[0-2])(?!\d|[./-]\d)(?:\s*月)?"
-)
-#: English point "Jan 2020" / "January 2020" (optional trailing dot).
+_CANON_NUMERIC_POINT_RE = _PARSER_RULES.pattern("canon_numeric_point")
+#: English point "Jan 2020" / "January 2020" (optional trailing dot). Composed
+#: from the _EN_MONTH_BY_NAME lookup table, so the composition stays in code.
 _CANON_EN_POINT_RE = re.compile(
     r"\b(" + "|".join(sorted(_EN_MONTH_BY_NAME, key=len, reverse=True)) + r")\.?\s+(\d{4})",
     re.IGNORECASE,
 )
 #: Bare four-digit year ("2020"); never adjacent to another date component.
-_CANON_BARE_YEAR_RE = re.compile(r"(?<![\d.])(\d{4})(?!\d|[./-]\d)")
+_CANON_BARE_YEAR_RE = _PARSER_RULES.pattern("canon_bare_year")
 #: Open-ended markers all render as Chinese 至今 (canonical for all locales).
-_CANON_PRESENT_RE = re.compile(r"至今|现在|目前|Present|Current|Now|Ongoing", re.IGNORECASE)
+_CANON_PRESENT_RE = _PARSER_RULES.pattern("canon_present")
 #: English word connector ("Jan 2020 to Dec 2023"); Chinese 至 also accepted.
-_CANON_CONNECTOR_WORD_RE = re.compile(r"\bto\b", re.IGNORECASE)
+_CANON_CONNECTOR_WORD_RE = _PARSER_RULES.pattern("canon_connector_word")
 #: A single trailing parenthesized note ("2020.06~2023.09（实习）") is preserved.
-_CANON_TRAILING_NOTE_RE = re.compile(r"^[（(][^（）()]*[)）]\s*$")
+_CANON_TRAILING_NOTE_RE = _PARSER_RULES.pattern("canon_trailing_note")
 _CANON_SKIP_CHARS = frozenset(" \t\r\n\u00a0-–—―~～至")
 
 
@@ -1270,84 +1191,13 @@ def normalize_date_periods(parsed_data: dict[str, Any]) -> dict[str, Any]:
 # source layout (label on its own "plain" row, content untouched). Only these
 # curated labels are split — normal duty bullets routinely contain a
 # mid-sentence colon ("设计并落地……：租户隔离……") and must never be cut.
-_SUB_LABEL_CANDIDATES = (
-    "技术难点及亮点",
-    "技术难度及解决方案",
-    "技术架构",
-    "系统架构",
-    "架构说明",
-    "项目背景",
-    "项目概述",
-    "业务背景",
-    "项目描述",
-    "项目简介",
-    "需求背景",
-    "项目概况",
-    "项目介绍",
-    "工作职责",
-    "工作内容",
-    "项目职责",
-    "个人职责",
-    "项目责任",
-    "核心职责与成果",
-    "项目职责与成果",
-    "项目职责和成果",
-    "项目职责及成果",
-    "工作职责与成果",
-    "工作职责和成果",
-    "工作职责及成果",
-    "个人职责与成果",
-    "职责与成果",
-    "职责和成果",
-    "职责及成果",
-    "主要职责",
-    "核心职责",
-    "核心工作",
-    "责任描述",
-    "技术栈",
-    "技术列表",
-    "技术选型",
-    "所用技术",
-    "技术清单",
-    "技术方案",
-    "技术亮点",
-    "技术难点",
-    "难点及亮点",
-    "难点与解决",
-    "难点与方案",
-    "解决方案",
-    "项目亮点",
-    "项目难点",
-    "负责内容",
-    "项目成果",
-    "个人成果",
-    "工作业绩",
-    "项目业绩",
-    "主要成果",
-    "核心成果",
-    # Outcome/effectiveness modules are PEERS of 项目亮点 (real resumes carry
-    # both in one project: highlight bullets followed by a 项目成效 prose
-    # block). They stay verbatim — deliberately NOT in
-    # PROJECT_SUB_LABEL_CANONICAL, so they must never be merged into 项目亮点
-    # or rendered as a nested numbered head inside it.
-    "项目成效",
-    "工作成效",
-    "实施成效",
-    "建设成效",
-    "应用成效",
-    "业务成效",
-    "落地成效",
-    "实际成效",
-    "量化成效",
-    "运营成效",
-    "项目效果",
-    "实施效果",
-    "应用效果",
-    "落地效果",
-    "运行效果",
-    "实际效果",
-    "项目角色",
-    "担任角色",
+# The 成效/效果 outcome labels at the tail of this list are PEERS of 项目亮点
+# (real resumes carry both in one project: highlight bullets followed by a
+# 项目成效 prose block). They stay verbatim — deliberately NOT in
+# PROJECT_SUB_LABEL_CANONICAL, so they must never be merged into 项目亮点 or
+# rendered as a nested numbered head inside it.
+_SUB_LABEL_CANDIDATES: tuple[str, ...] = tuple(
+    _PARSER_RULES.vocabulary_list("sub_label_candidates")
 )
 
 _INLINE_SUB_LABEL_RE = re.compile(
@@ -1363,9 +1213,16 @@ _INLINE_SUB_LABEL_RE = re.compile(
 # so latin-prefixed heads rewritten by the model ("CPU 飙升问题：") still
 # match. Mirrored by resume_docx._STANDALONE_LABEL_RE and the frontend
 # STANDALONE_LABEL_RE — keep the three in sync.
+_STANDALONE_LABEL_CJK_MAX_LEN: int = _PARSER_RULES.int_threshold(
+    "standalone_label_cjk_max_len"
+)
+_STANDALONE_LABEL_LATIN_MAX_LEN: int = _PARSER_RULES.int_threshold(
+    "standalone_label_latin_max_len"
+)
 _STANDALONE_SUB_LABEL_RE = re.compile(
     r"^\s*(?:\d{1,2}\s*[.、)）．:：]\s*)?"
-    r"(?:[一-鿿A-Za-z][一-鿿A-Za-z0-9/（）() -]{0,11}|[A-Za-z][A-Za-z /-]{0,20})"
+    rf"(?:[一-鿿A-Za-z][一-鿿A-Za-z0-9/（）() -]{{0,{_STANDALONE_LABEL_CJK_MAX_LEN}}}"
+    rf"|[A-Za-z][A-Za-z /-]{{0,{_STANDALONE_LABEL_LATIN_MAX_LEN}}})"
     r"\s*[：:]\s*$"
 )
 
@@ -1379,47 +1236,10 @@ _STANDALONE_SUB_LABEL_RE = re.compile(
 # this map at render time so already-stored resumes get the canonical names
 # without re-parsing; keep the two in sync.
 PROJECT_SUB_LABEL_CANONICAL: dict[str, str] = {
-    "项目成果": "项目亮点",
-    "个人成果": "项目亮点",
-    "技术亮点": "项目亮点",
-    "技术难点": "项目亮点",
-    "难点与解决": "项目亮点",
-    "技术难点及亮点": "项目亮点",
-    "工作职责": "项目职责",
-    "主要职责": "项目职责",
-    "负责内容": "项目职责",
-    "核心工作": "项目职责",
-    "工作内容": "项目职责",
-    # Personal-duty phrasings seen in real uploads ("个人职责：" / "项目责任：")
-    # are the same duty module under a different heading.
-    "个人职责": "项目职责",
-    "项目责任": "项目职责",
-    # Combined duty + result headings ("项目职责与成果：" / "核心职责与成果：")
-    # open a duty region; they are unified to the canonical 项目职责 name.
-    "核心职责与成果": "项目职责",
-    # Combined duty + result headings ("项目职责与成果：") open a duty region;
-    # they are unified to the canonical 项目职责 name for projects.
-    "项目职责与成果": "项目职责",
-    "项目职责和成果": "项目职责",
-    "项目职责及成果": "项目职责",
-    "工作职责与成果": "项目职责",
-    "工作职责和成果": "项目职责",
-    "工作职责及成果": "项目职责",
-    "个人职责与成果": "项目职责",
-    "职责与成果": "项目职责",
-    "职责和成果": "项目职责",
-    "职责及成果": "项目职责",
-    "项目概述": "项目背景",
-    "业务背景": "项目背景",
-    "项目简介": "项目背景",
-    "需求背景": "项目背景",
-    "项目概况": "项目背景",
-    "项目介绍": "项目背景",
-    "技术选型": "技术栈",
-    "技术架构": "技术栈",
-    "所用技术": "技术栈",
-    "技术清单": "技术栈",
-    "技术列表": "技术栈",
+    alias: cast(str, canonical)
+    for alias, canonical in _PARSER_RULES.vocabulary_mapping(
+        "project_sub_label_canonical"
+    ).items()
 }
 
 # Descriptive (non-duty) sub-labels: project intro/background and tech-stack
@@ -1428,24 +1248,7 @@ PROJECT_SUB_LABEL_CANONICAL: dict[str, str] = {
 # context, not a duty/highlight point). Mirrors the frontend
 # splitProjectPlainPrefix() display rule for already-stored glued rows.
 PROJECT_INLINE_PLAIN_LABELS: frozenset[str] = frozenset(
-    {
-        "项目简介",
-        "项目描述",
-        "项目概况",
-        "项目背景",
-        "项目概述",
-        "业务背景",
-        "需求背景",
-        "项目介绍",
-        "技术架构",
-        "系统架构",
-        "架构说明",
-        "技术栈",
-        "技术列表",
-        "技术选型",
-        "所用技术",
-        "技术清单",
-    }
+    _PARSER_RULES.vocabulary_list("project_inline_plain_labels")
 )
 
 
@@ -1589,17 +1392,12 @@ def _normalize_item_description_rows(
 # Mirrors the frontend POINT_MARKER_RE (components/resume/list-format.ts):
 # every rendered list supplies its own numbers, so keeping these prefixes in
 # stored content produces double numbering ("1. 1、…"). Keep the two in sync.
-_POINT_MARKER_RE = re.compile(
-    r"^\s*(?:\d{1,2}\s*[.、)）．:：]"
-    r"|[（(]\d{1,2}[)）]"
-    r"|[①-⑩]"
-    # Glyph markers need no following whitespace ("•Java" is still a bullet);
-    # dash markers keep the whitespace requirement to protect minus signs and
-    # version ranges like "-30%" / "v1.0-2.0".
-    r"|[•·・●▪▸▹◆■]"
-    r"|[\-—–]\s+"
-    r"|[一二三四五六七八九十]{1,3}\s*[、.．)）])\s*"
-)
+# Glyph markers need no following whitespace ("•Java" is still a bullet);
+# dash markers keep the whitespace requirement to protect minus signs and
+# version ranges like "-30%" / "v1.0-2.0". The pattern string ships in
+# parser_rules.yaml (patterns.point_marker), mirrored by the frontend
+# POINT_MARKER_RE in components/resume/list-format.ts.
+_POINT_MARKER_RE = _PARSER_RULES.pattern("point_marker")
 
 
 def strip_source_point_marker(text: Any) -> Any:
@@ -1726,14 +1524,16 @@ def normalize_cjk_compat_deep(value: Any) -> Any:
 # additional.languages). Resume renderers never interpret markdown, so every
 # emphasis marker is removed while its enclosed text is kept. Mirrored on the
 # frontend display layer (lib/utils/markdown-strip.ts).
-_MD_BOLD_STAR_RE = re.compile(r"\*\*\s*([^*]+?)\s*\*\*", re.DOTALL)
-_MD_BOLD_UNDER_RE = re.compile(r"__\s*([^_]+?)__", re.DOTALL)
-_MD_ITALIC_STAR_RE = re.compile(r"(?<![\w*])\*([^*\s][^*]*?)\*(?![\w*])")
-_MD_ITALIC_UNDER_RE = re.compile(r"(?<![\w_])_([^_\s][^_]*?)_(?![\w_])")
-_MD_CODE_RE = re.compile(r"`+([^`]+?)`+")
-_MD_STRIKE_RE = re.compile(r"~~([^~]+?)~~")
-_MD_ORPHAN_BOLD_RE = re.compile(r"\*\*|__")
-_MD_ORPHAN_STRIKE_RE = re.compile(r"~~")
+# Pattern strings ship in parser_rules.yaml (patterns.md_*); bold patterns
+# keep their DOTALL flag so emphasis spanning newlines is stripped.
+_MD_BOLD_STAR_RE = _PARSER_RULES.pattern("md_bold_star")
+_MD_BOLD_UNDER_RE = _PARSER_RULES.pattern("md_bold_under")
+_MD_ITALIC_STAR_RE = _PARSER_RULES.pattern("md_italic_star")
+_MD_ITALIC_UNDER_RE = _PARSER_RULES.pattern("md_italic_under")
+_MD_CODE_RE = _PARSER_RULES.pattern("md_code")
+_MD_STRIKE_RE = _PARSER_RULES.pattern("md_strike")
+_MD_ORPHAN_BOLD_RE = _PARSER_RULES.pattern("md_orphan_bold")
+_MD_ORPHAN_STRIKE_RE = _PARSER_RULES.pattern("md_orphan_strike")
 
 
 def strip_markdown_emphasis(text: Any) -> Any:
@@ -1776,11 +1576,8 @@ def strip_markdown_emphasis_deep(value: Any) -> Any:
 # Display list fields that must never contain repeated entries. Index-aligned
 # arrays (description / descriptionStyles) are intentionally excluded: their
 # positions carry meaning, so a generic collapse would desynchronise them.
-_DEDUPABLE_ADDITIONAL_FIELDS = (
-    "technicalSkills",
-    "certificationsTraining",
-    "awards",
-    "languages",
+_DEDUPABLE_ADDITIONAL_FIELDS: tuple[str, ...] = tuple(
+    _PARSER_RULES.vocabulary_list("dedupable_additional_fields")
 )
 
 
@@ -1841,10 +1638,12 @@ def dedupe_resume_lists(parsed_data: dict[str, Any]) -> dict[str, Any]:
 # at render time. Mirrored by planSkillGroupHeaders() in
 # components/resume/list-format.ts and consumed by the DOCX exporter — keep
 # the three in sync.
-_SKILL_GROUP_HEAD_MAX_LEN = 14
+_SKILL_GROUP_HEAD_MAX_LEN: int = _PARSER_RULES.int_threshold(
+    "skill_group_head_max_len"
+)
 _SKILL_GROUP_HEAD_PUNCT_RE = re.compile(r"[，。；！？、,.!?;：:]")
-_SKILL_GROUP_MIN_HEADS = 2
-_SKILL_DETAIL_MIN_LEN = 16
+_SKILL_GROUP_MIN_HEADS: int = _PARSER_RULES.int_threshold("skill_group_min_heads")
+_SKILL_DETAIL_MIN_LEN: int = _PARSER_RULES.int_threshold("skill_detail_min_len")
 _SKILL_DETAIL_PUNCT_RE = re.compile(r"[。；！？!?;：:]")
 
 
@@ -2390,10 +2189,7 @@ def split_blob_text_sections(parsed_data: dict[str, Any]) -> dict[str, Any]:
     return parsed_data
 
 
-_PROJECT_HEADER_FIELD_RE = re.compile(
-    r"^\s*(?:\d{1,2}\s*[.、)）．:：]\s*)?"
-    r"(?P<label>项目规模|团队规模|项目角色|担任角色)\s*[：:]\s*(?P<value>.+?)\s*$"
-)
+_PROJECT_HEADER_FIELD_RE = _PARSER_RULES.pattern("project_header_field")
 
 
 def extract_project_header_fields(parsed_data: dict[str, Any]) -> dict[str, Any]:
@@ -2448,17 +2244,10 @@ def extract_project_header_fields(parsed_data: dict[str, Any]) -> dict[str, Any]
 # Department"). Tight gate: short, no sentence punctuation, ends with a known
 # organization suffix. Mirrored by the frontend renderer (work-department.ts),
 # which repairs the same shape in already-stored resumes.
-_WORK_DEPARTMENT_LINE_RE = re.compile(
-    r"^\s*"
-    r"(?:"
-    r"[一-鿿][一-鿿A-Za-z0-9（）()·&/+\- ]{0,13}"
-    r"(?:事业部|事业群|部门|条线|分院|大区|办公室|中心|团队|小组|[部组室科处])"
-    r"|[A-Za-z0-9][A-Za-z0-9 &/+\-]{1,28}(?:Department|Dept\.?|Division|Team|Group)"
-    r")"
-    r"(?:[（(][^（）()]{1,12}[）)])?"
-    r"\s*$"
+_WORK_DEPARTMENT_LINE_RE = _PARSER_RULES.pattern("work_department_line")
+_WORK_DEPARTMENT_SENTENCE_PUNCT_RE = _PARSER_RULES.pattern(
+    "work_department_sentence_punct"
 )
-_WORK_DEPARTMENT_SENTENCE_PUNCT_RE = re.compile(r"[。．.，,；;：:！!？?、…]")
 
 
 def _looks_like_department_line(row: Any) -> bool:
@@ -2613,11 +2402,15 @@ def _project_heading_kind(row: Any) -> str | None:
 # are mirrored in resume_docx.py (_is_nested_head_shaped /
 # _plan_nested_group_heads) and the frontend (looksLikeNestedGroupHead /
 # planNestedGroupHeads in list-format.ts) — keep the three in sync.
-_NESTED_GROUP_HEAD_MAX_LEN = 16
+_NESTED_GROUP_HEAD_MAX_LEN: int = _PARSER_RULES.int_threshold(
+    "nested_group_head_max_len"
+)
 _NESTED_GROUP_HEAD_PUNCT_RE = re.compile(r"[，。；！？、,.!?;：:]")
 # A real grouping structure contains at least this many head groups; an
 # isolated short row amid normal points is a peer point, never a head.
-_NESTED_GROUP_MIN_HEADS = 2
+_NESTED_GROUP_MIN_HEADS: int = _PARSER_RULES.int_threshold(
+    "nested_group_min_heads"
+)
 
 
 def _is_nested_head_shaped(row: Any, style: str) -> bool:
@@ -2858,7 +2651,7 @@ def _extract_standalone_url_row(row: Any) -> str | None:
 
 # github.com hosts (incl. subdomains such as gist.github.com) map to the
 # project github field; every other standalone URL is the project website.
-_GITHUB_HOST_RE = re.compile(r"(?:^|\.)github\.com$", re.IGNORECASE)
+_GITHUB_HOST_RE = _PARSER_RULES.pattern("github_host")
 
 
 def _project_url_target_field(url: str) -> str:
@@ -2887,10 +2680,8 @@ def _is_tech_stack_label_row(row: Any) -> bool:
 # components/resume/list-format.ts — keep the three in sync. A region with
 # such rows renders as an ordered list (one number per category row), so its
 # rows must stay separate; pure-name stacks are the ones we join.
-_TECH_STACK_CATEGORY_RE = re.compile(
-    r"^[一-鿿A-Za-z][一-鿿A-Za-z0-9/（）() -]{0,10}[：:]\s*\S"
-)
-_CATEGORY_SENTENCE_RE = re.compile(r"[。；！？!?;]")
+_TECH_STACK_CATEGORY_RE = _PARSER_RULES.pattern("tech_stack_category")
+_CATEGORY_SENTENCE_RE = _PARSER_RULES.pattern("category_sentence")
 
 
 def _is_tech_stack_category_row(row: str) -> bool:
@@ -3112,85 +2903,38 @@ def repair_project_tech_stack_rows(parsed_data: dict[str, Any]) -> dict[str, Any
 # the single major cell of the fixed education row. The labels below re-route
 # each segment to additional.awards / certificationsTraining; the major cell
 # keeps only the specialization text.
-_EDU_MAJOR_LABEL_CORES: tuple[str, ...] = ("专业方向", "主修专业", "专业名称", "专业")
-_EDU_AWARD_LABEL_CORES: tuple[str, ...] = (
-    "奖项名称",
-    "获奖情况",
-    "获奖名称",
-    "获奖记录",
-    "荣誉奖项",
-    "荣誉称号",
-    "荣誉证书",
-    "奖项",
-    "获奖",
-    "荣誉",
-    "奖励",
-    "Awards",
-    "Award",
-    "Honors",
-    "Honours",
-    "Honor",
+# Label cores ship in parser_rules.yaml (vocabularies.edu_*); the sorting and
+# alternation composition below stay in code because the lookbehind handling
+# and longest-first ordering are algorithm.
+_EDU_MAJOR_LABEL_CORES: tuple[str, ...] = tuple(
+    _PARSER_RULES.vocabulary_list("edu_major_label_cores")
 )
-_EDU_CERT_LABEL_CORES: tuple[str, ...] = (
-    "资格证书",
-    "资格认证",
-    "资质证书",
-    "职业资格",
-    "证书名称",
-    "认证证书",
-    "资质",
-    "认证",
-    "证书",
-    "执照",
-    "Certifications",
-    "Certification",
-    "Certificates",
-    "Certificate",
-    "Qualifications",
-    "Qualification",
-    "Licenses",
-    "License",
-    "Licences",
-    "Licence",
+_EDU_AWARD_LABEL_CORES: tuple[str, ...] = tuple(
+    _PARSER_RULES.vocabulary_list("edu_award_label_cores")
+)
+_EDU_CERT_LABEL_CORES: tuple[str, ...] = tuple(
+    _PARSER_RULES.vocabulary_list("edu_cert_label_cores")
 )
 # Labels that mix the two kinds on one line ("荣誉证书：校三好学生、PMP证书。");
 # items are then routed individually by keyword.
 _EDU_MIXED_LABEL_CORES: frozenset[str] = frozenset(
-    {"荣誉证书", "资质荣誉", "荣誉资质"}
+    _PARSER_RULES.vocabulary_list("edu_mixed_label_cores")
 )
 # Extra award/cert cores shared with the work/project list-region pass below.
-_EXTRA_AWARD_LABEL_CORES: tuple[str, ...] = (
-    "所获荣誉",
-    "个人荣誉",
-    "荣誉表彰",
-    "获奖荣誉",
-    "所获奖励",
+_EXTRA_AWARD_LABEL_CORES: tuple[str, ...] = tuple(
+    _PARSER_RULES.vocabulary_list("extra_award_label_cores")
 )
-_EXTRA_CERT_LABEL_CORES: tuple[str, ...] = (
-    "执业资格",
-    "职业证书",
-    "专业证书",
-    "技能证书",
+_EXTRA_CERT_LABEL_CORES: tuple[str, ...] = tuple(
+    _PARSER_RULES.vocabulary_list("extra_cert_label_cores")
 )
 # Language-proficiency label cores, shared by the education string pass and
 # the work/project list-region pass. The bare 语言 core stays last: inside the
 # free-text education regex it carries 编程/开发-family lookbehinds so
 # "编程语言：Java" cannot match; list rows are row-anchored and naturally safe.
-_EDU_LANG_LABEL_CORES: tuple[str, ...] = (
-    "语言能力",
-    "外语能力",
-    "语言水平",
-    "外语水平",
-    "英语水平",
-    "英语能力",
-    "语言情况",
-    "掌握语言",
-    "Languages",
-    "Language",
-    "语言",
-    "外语",
+_EDU_LANG_LABEL_CORES: tuple[str, ...] = tuple(
+    _PARSER_RULES.vocabulary_list("edu_lang_label_cores")
 )
-_EDU_CERT_ITEM_HINT_RE = re.compile(r"证书|认证|资格|资质|执照")
+_EDU_CERT_ITEM_HINT_RE = _PARSER_RULES.pattern("edu_cert_item_hint")
 _EDU_LABEL_ALT = "|".join(
     sorted(
         _EDU_MAJOR_LABEL_CORES
@@ -3222,35 +2966,18 @@ _EDU_LABEL_ALT = (
 # ASCII labels need a lookbehind so "Rewards:" cannot match "Awards:" in its
 # middle; CJK labels are naturally bounded by non-ASCII characters.
 _EDU_SEGMENT_LABEL_RE = re.compile(rf"(?<![A-Za-z0-9])({_EDU_LABEL_ALT})\s*[：:]")
-_EDU_CREDENTIAL_CLAUSE_RE = re.compile(r"[；;。\n，,]+")
+_EDU_CREDENTIAL_CLAUSE_RE = _PARSER_RULES.pattern("edu_credential_clause")
 _EDU_CREDENTIAL_ITEM_TAIL = "。.；;，,、 \t"
 
 # Item-level routing hints. These are used INSIDE an explicit credential label
 # region only (never on free description rows), so broad tokens like 奖/英语
 # stay safe. Strong certificate words/acronyms win over the other two buckets,
 # so a PMP line inside a 语言： region still lands in certificationsTraining.
-_MISFILE_CERT_ITEM_HINT_RE = re.compile(
-    r"PMP|CPA|CFA|ACCA|AWS|Azure|Google\s*Cloud|OCI|ITIL|CKA|"
-    r"Licen[cs]e|Certified|"
-    r"证书|认证|资格|资质|执照|执业|结业证",
-    re.IGNORECASE,
-)
-_MISFILE_LANG_ITEM_HINT_RE = re.compile(
-    r"英语|日语|韩语|法语|德语|俄语|西班牙语|葡萄牙语|意大利语|阿拉伯语|泰语|越南语|"
-    r"印尼语|马来语|粤语|普通话|汉语|中文|外语|口语|口译|笔译|"
-    r"雅思|IELTS|托福|TOEFL|GRE|GMAT|SAT|TESOL|TEFL|CATTI|"
-    r"CET|大学英语|专四|专八|四级|六级|八级|N[1-5](?![0-9])|"
-    r"English|Japanese|Korean|French|German|Spanish|Mandarin|Cantonese",
-    re.IGNORECASE,
-)
-_MISFILE_AWARD_ITEM_HINT_RE = re.compile(
-    r"奖|荣誉|荣获|获奖|奖学金|冠军|亚军|季军|金奖|银奖|铜奖|表彰|勋章|"
-    r"标兵|三好|优秀|先进|奖章|立功|嘉奖|"
-    r"Dean'?s List|Cum Laude|Magna|Summa|Prize|Scholarship|Fellowship|"
-    r"Medal|Honor Roll|Recognition|Champion|Runner[- ]?up|"
-    r"Awards?|Honou?rs",
-    re.IGNORECASE,
-)
+# Routing evidence words ship in parser_rules.yaml (patterns.misfile_*);
+# strong certificate words/acronyms win over the other two buckets.
+_MISFILE_CERT_ITEM_HINT_RE = _PARSER_RULES.pattern("misfile_cert_item_hint")
+_MISFILE_LANG_ITEM_HINT_RE = _PARSER_RULES.pattern("misfile_lang_item_hint")
+_MISFILE_AWARD_ITEM_HINT_RE = _PARSER_RULES.pattern("misfile_award_item_hint")
 
 
 def _route_credential_item(region_kind: str, item: str) -> tuple[str, bool]:
@@ -3436,7 +3163,9 @@ _MISFILE_AWARD_LABEL_CORES: tuple[str, ...] = (
 )
 _MISFILE_CERT_LABEL_CORES: tuple[str, ...] = _EDU_CERT_LABEL_CORES + _EXTRA_CERT_LABEL_CORES
 _MISFILE_MIXED_CORES: frozenset[str] = _EDU_MIXED_LABEL_CORES
-_MISFILE_REGION_MAX_ROWS = 6
+_MISFILE_REGION_MAX_ROWS: int = _PARSER_RULES.int_threshold(
+    "misfile_region_max_rows"
+)
 
 
 def _misfile_label_kind(core: str) -> str:
@@ -3904,7 +3633,7 @@ _GLYPH_LOSS_GAP_RE = re.compile(r"[ \t]{4,}")
 # Date range with its digits dropped: "2017.09 - 2021.07" -> "   .  -    . ".
 _GLYPH_LOSS_DATE_RE = re.compile(r"[ \t]{2,}\.[ \t]*-[ \t]{0,3}\.")
 _GLYPH_LOSS_RADICAL_RE = re.compile(r"[⺀-⻳⼀-⿕]")
-_PDFIUM_MIN_CJK_RATIO = 0.6
+_PDFIUM_MIN_CJK_RATIO: float = _PARSER_RULES.float_threshold("pdfium_min_cjk_ratio")
 
 
 def _shows_glyph_loss(text: str) -> bool:

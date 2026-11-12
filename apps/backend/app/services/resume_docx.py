@@ -33,9 +33,10 @@ the PDF, which renders that template), so screen and export never disagree:
 
 This is the display-side Python mirror of the frontend renderers
 (components/resume/list-format.ts, point-text-list.tsx,
-resume-single-column.tsx); the sub-label sets below intentionally duplicate
-the frontend copies, which themselves mirror parser.py. Keep all three in
-sync.
+resume-single-column.tsx). Its sub-label vocabularies, tech-stack regexes and
+group-head thresholds are not hand-kept copies: they bind through the same
+parser_rules artifact/loader as parser.py, so the two backend consumers cannot
+drift. The frontend TypeScript copies remain mirrors — keep them in sync.
 
 python-docx is already a runtime dependency (it backs the markitdown DOCX
 reader), so this adds no new dependency. Pure CPU: no LLM, no Chromium.
@@ -74,6 +75,7 @@ from app.services.parser import (
     strip_markdown_emphasis_deep,
     strip_source_point_marker,
 )
+from app.services.parser_rules import get_parser_rules
 from app.services.section_order import (
     DEFAULT_SECTION_KEYS,
     SELF_INTRODUCTION_TITLE_ALIASES,
@@ -83,6 +85,11 @@ from app.services.section_order import (
     section_symbol,
 )
 from app.services.tech_terms import canonicalize_tech_terms
+
+# Same versioned artifact as parser.py — the vocabularies/regexes/thresholds
+# below used to be hand-kept mirrors of parser constants; they now bind through
+# the shared loader so the two backend consumers cannot drift apart.
+_PARSER_RULES = get_parser_rules()
 
 DOCX_MEDIA_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -165,92 +172,28 @@ _DEFAULT_SECTION_CHROME_KEY: dict[str, str] = {
 
 # Mirrors components/resume/list-format.ts SUB_LABEL_CANDIDATES, which
 # mirrors parser.py::_SUB_LABEL_CANDIDATES. Only used to promote LEGACY
-# "plain" rows that are really bold sub-module headings.
+# "plain" rows that are really bold sub-module headings. The words live in
+# rules/parser_rules.yaml (vocabulary ``sub_label_candidates``); the parser
+# tuple and this frozenset are two views over the same shipped artifact.
 _SUB_LABEL_CANDIDATES: frozenset[str] = frozenset(
-    {
-        "技术难点及亮点",
-        "技术难度及解决方案",
-        "技术架构",
-        "系统架构",
-        "架构说明",
-        "项目背景",
-        "项目概述",
-        "业务背景",
-        "项目描述",
-        "项目简介",
-        "需求背景",
-        "项目概况",
-        "项目介绍",
-        "工作职责",
-        "工作内容",
-        "项目职责",
-        "个人职责",
-        "项目责任",
-        "核心职责与成果",
-        "项目职责与成果",
-        "项目职责和成果",
-        "项目职责及成果",
-        "工作职责与成果",
-        "工作职责和成果",
-        "工作职责及成果",
-        "个人职责与成果",
-        "职责与成果",
-        "职责和成果",
-        "职责及成果",
-        "主要职责",
-        "核心职责",
-        "核心工作",
-        "责任描述",
-        "技术栈",
-        "技术列表",
-        "技术选型",
-        "所用技术",
-        "技术清单",
-        "技术方案",
-        "技术亮点",
-        "技术难点",
-        "难点及亮点",
-        "难点与解决",
-        "难点与方案",
-        "解决方案",
-        "项目亮点",
-        "项目难点",
-        "负责内容",
-        "项目成果",
-        "个人成果",
-        "工作业绩",
-        "项目业绩",
-        "主要成果",
-        "核心成果",
-        # Outcome/effectiveness modules — peers of 项目亮点， kept verbatim.
-        # Keep in sync with parser.py::_SUB_LABEL_CANDIDATES.
-        "项目成效",
-        "工作成效",
-        "实施成效",
-        "建设成效",
-        "应用成效",
-        "业务成效",
-        "落地成效",
-        "实际成效",
-        "量化成效",
-        "运营成效",
-        "项目效果",
-        "实施效果",
-        "应用效果",
-        "落地效果",
-        "运行效果",
-        "实际效果",
-        "项目角色",
-        "担任角色",
-    }
+    _PARSER_RULES.vocabulary_list("sub_label_candidates")
 )
 
 # A label-only row ending in a colon: short CJK/latin heading, no sentence
 # punctuation. Mirrors parser.py::_STANDALONE_SUB_LABEL_RE / the frontend
-# STANDALONE_LABEL_RE.
+# STANDALONE_LABEL_RE. The shape deliberately omits the parser pipeline's
+# optional source-number prefix (callers strip point markers first); only the
+# two length quantifiers are shared artifact thresholds.
+_STANDALONE_LABEL_CJK_MAX_LEN: int = _PARSER_RULES.int_threshold(
+    "standalone_label_cjk_max_len"
+)
+_STANDALONE_LABEL_LATIN_MAX_LEN: int = _PARSER_RULES.int_threshold(
+    "standalone_label_latin_max_len"
+)
 _STANDALONE_LABEL_RE = re.compile(
-    r"^\s*(?:[一-鿿A-Za-z][一-鿿A-Za-z0-9/（）() -]{0,11}"
-    r"|[A-Za-z][A-Za-z /-]{0,20})"
+    r"^\s*(?:"
+    rf"[一-鿿A-Za-z][一-鿿A-Za-z0-9/（）() -]{{0,{_STANDALONE_LABEL_CJK_MAX_LEN}}}"
+    rf"|[A-Za-z][A-Za-z /-]{{0,{_STANDALONE_LABEL_LATIN_MAX_LEN}}})"
     r"\s*[：:]\s*$"
 )
 _SENTENCE_PUNCTUATION_RE = re.compile(r"[，。；！？、,.!?;：]")
@@ -259,24 +202,7 @@ _SENTENCE_PUNCTUATION_RE = re.compile(r"[，。；！？、,.!?;：]")
 # sets in list-format.ts (PROJECT_INLINE_PLAIN_LABELS /
 # PROJECT_DESCRIPTIVE_LABELS).
 _PROJECT_INLINE_PLAIN_LABELS: frozenset[str] = frozenset(
-    {
-        "项目简介",
-        "项目描述",
-        "项目概况",
-        "项目背景",
-        "项目概述",
-        "业务背景",
-        "需求背景",
-        "项目介绍",
-        "技术架构",
-        "系统架构",
-        "架构说明",
-        "技术栈",
-        "技术列表",
-        "技术选型",
-        "所用技术",
-        "技术清单",
-    }
+    _PARSER_RULES.vocabulary_list("project_inline_plain_labels")
 )
 _PROJECT_DESCRIPTIVE_LABELS: frozenset[str] = frozenset(
     {"项目背景", "技术栈", "项目描述", "系统架构", "架构说明"}
@@ -378,13 +304,13 @@ def _join_inline_body_rows(rows: list[str]) -> str:
 # "数据库：MySQL、Redis"): short category prefix, colon, non-empty content.
 # Mirrors TECH_STACK_CATEGORY_RE in components/resume/list-format.ts — keep in
 # sync. A region with such rows renders as an ordered list (one number per
-# category row); pure-name stacks stay one inline paragraph.
-_TECH_STACK_CATEGORY_RE = re.compile(
-    r"^[一-鿿A-Za-z][一-鿿A-Za-z0-9/（）() -]{0,10}[：:]\s*\S"
-)
+# category row); pure-name stacks stay one inline paragraph. The pattern
+# string ships in parser_rules.json and is shared byte-identically with
+# parser.py.
+_TECH_STACK_CATEGORY_RE = _PARSER_RULES.pattern("tech_stack_category")
 # Sentence punctuation distinguishes a category row from a glued achievement
 # or background sentence ("项目亮点：时延降到 600ms。").
-_CATEGORY_SENTENCE_RE = re.compile(r"[。；！？!?;]")
+_CATEGORY_SENTENCE_RE = _PARSER_RULES.pattern("category_sentence")
 
 
 def _is_tech_stack_category_row(row: str) -> bool:
@@ -442,12 +368,17 @@ def _canonicalize_project_sub_label_prefix(desc: str) -> str:
 # Mirror parser.py nested-group-head planning / the frontend
 # planNestedGroupHeads(): a bare bold sub-heading grouping the points below
 # it ("架构演进与技术债务治理" followed by duty bullets). Keep the three
-# implementations in sync.
-_NESTED_GROUP_HEAD_MAX_LEN = 16
+# implementations in sync. The two cutoffs are artifact thresholds shared
+# with parser.py; only the punctuation shape stays local code.
+_NESTED_GROUP_HEAD_MAX_LEN: int = _PARSER_RULES.int_threshold(
+    "nested_group_head_max_len"
+)
 _NESTED_GROUP_HEAD_PUNCT_RE = re.compile(r"[，。；！？、,.!?;：:]")
 # A real grouping structure holds at least this many head groups per module;
 # an isolated short row amid normal points is a peer point, never a head.
-_NESTED_GROUP_MIN_HEADS = 2
+_NESTED_GROUP_MIN_HEADS: int = _PARSER_RULES.int_threshold(
+    "nested_group_min_heads"
+)
 
 
 def _is_nested_head_shaped(desc: Any, style: str) -> bool:
