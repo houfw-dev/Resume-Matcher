@@ -5,6 +5,8 @@ import type {
   SectionMeta,
   AdditionalSectionLabels,
   ResumeSectionHeadings,
+  Experience,
+  Education,
 } from '@/components/dashboard/resume-component';
 import {
   getRenderSections,
@@ -19,7 +21,9 @@ import {
 } from '@/lib/utils/resume-headings';
 import { formatDateRange } from '@/lib/utils';
 import { DescriptionList } from './description-list';
-import { groupSkillEntries, stripPointMarker } from './list-format';
+import { stripPointMarker } from './list-format';
+import { SkillGroupList } from './skill-list';
+import { promoteWorkDepartment } from './work-department';
 import { OrderedStringList, PointTextList } from './point-text-list';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/latex.module.css';
@@ -128,27 +132,6 @@ export const ResumeLatex: React.FC<ResumeLatexProps> = ({
     renderContactDetail('Website', personalInfo?.website, '', infoLabels.website),
   ].filter(Boolean);
 
-  // Company-first entry header: bold company / bold dates, then italic role / italic location.
-  const renderEntryHeader = (
-    primary?: string,
-    dates?: string,
-    secondary?: string,
-    location?: string
-  ) => (
-    <>
-      <div className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}>
-        <span className={styles.entryPrimary}>{primary}</span>
-        {dates && <span className={`${styles.entryDates} ml-4`}>{formatDateRange(dates)}</span>}
-      </div>
-      {(secondary || location) && (
-        <div className={`flex justify-between items-baseline ${baseStyles['resume-row']}`}>
-          {secondary && <span className={styles.entrySecondary}>{secondary}</span>}
-          {location && <span className={`${styles.entrySecondary} ml-4`}>{location}</span>}
-        </div>
-      )}
-    </>
-  );
-
   const renderBullets = (
     items?: string[],
     pointStyles?: ('bullet' | 'plain' | 'label')[],
@@ -182,12 +165,17 @@ export const ResumeLatex: React.FC<ResumeLatexProps> = ({
           <div key={section.id} className={baseStyles['resume-section']}>
             <h3 className={styles.sectionTitle}>{section.displayName}</h3>
             <div className={baseStyles['resume-items']}>
-              {workExperience.map((exp) => (
-                <div key={exp.id} className={baseStyles['resume-item']}>
-                  {renderEntryHeader(exp.company, exp.years, exp.title, exp.location)}
-                  {renderBullets(exp.description, exp.descriptionStyles)}
-                </div>
-              ))}
+              {workExperience.map((exp) => {
+                // A legacy plain department line ("全球资金部") is lifted into
+                // the department column and removed from the bullet list.
+                const promoted = promoteWorkDepartment(exp);
+                return (
+                  <div key={exp.id} className={baseStyles['resume-item']}>
+                    <WorkEntryRow exp={exp} department={promoted.department} />
+                    {renderBullets(promoted.description, promoted.descriptionStyles)}
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
@@ -272,10 +260,7 @@ export const ResumeLatex: React.FC<ResumeLatexProps> = ({
             <div className={baseStyles['resume-items']}>
               {education.map((edu) => (
                 <div key={edu.id} className={baseStyles['resume-item']}>
-                  {renderEntryHeader(edu.institution, edu.years, edu.degree)}
-                  {edu.description && (
-                    <p className={baseStyles['resume-text-sm']}>{edu.description}</p>
-                  )}
+                  <EducationEntryRow edu={edu} />
                 </div>
               ))}
             </div>
@@ -357,11 +342,72 @@ const nonBlankStrings = (items?: string[]): string[] =>
   (items ?? []).filter((item): item is string => typeof item === 'string' && item.trim() !== '');
 
 /**
+ * Work entry header as one justified serif row — time | company · location |
+ * department | role — mirroring the swiss-single contract. Bold date/company
+ * on the left, italic role flush right （两端对齐）. With a department it uses
+ * four tracks; without one, three tracks (time | company | role). The date
+ * never wraps and long values wrap inside their own minmax(0, …) cell.
+ */
+const WorkEntryRow: React.FC<{ exp: Experience; department?: string }> = ({
+  exp,
+  department: departmentProp,
+}) => {
+  const date = formatDateRange(exp.years ?? '').trim();
+  const company = exp.company?.trim() ?? '';
+  const location = exp.location?.trim() ?? '';
+  const department = (departmentProp ?? '').trim();
+  const role = exp.title?.trim() ?? '';
+
+  if (!date && !company && !department && !location && !role) return null;
+
+  const gridClass = department ? styles.entryGrid : styles.entryGridThree;
+
+  return (
+    <div className={`${gridClass} ${baseStyles['resume-row-tight']}`}>
+      <span className={styles.entryDate}>{date}</span>
+      <span className={styles.entryPrimary}>
+        {company}
+        {location && <span className={baseStyles['resume-meta-sm']}> · {location}</span>}
+      </span>
+      {department && <span className={styles.entryDepartment}>{department}</span>}
+      <span className={styles.entryRoleEnd}>{role}</span>
+    </div>
+  );
+};
+
+/**
+ * Education entry header as one four-column row — time | university | major |
+ * degree. The optional education.description field is the major column (same
+ * convention as swiss-single), so it no longer renders as a separate
+ * paragraph. Empty cells still reserve their track, keeping column edges
+ * aligned across work and education entries.
+ */
+const EducationEntryRow: React.FC<{ edu: Education }> = ({ edu }) => {
+  const date = formatDateRange(edu.years ?? '').trim();
+  const institution = edu.institution?.trim() ?? '';
+  const major = edu.description?.trim() ?? '';
+  const degree = edu.degree?.trim() ?? '';
+
+  if (!date && !institution && !major && !degree) return null;
+
+  return (
+    <div className={`${styles.entryGrid} ${baseStyles['resume-row-tight']}`}>
+      <span className={styles.entryDate}>{date}</span>
+      <span className={styles.entryPrimary}>{institution}</span>
+      <span className={styles.entryDepartment}>{major}</span>
+      <span className={styles.entryRoleEnd}>{degree}</span>
+    </div>
+  );
+};
+
+/**
  * The early `additional` slot renders ONLY the skills block (technical skills
- * + languages). Technical skills render one entry per line, with each group
- * head on its own bold line; languages keep their bold inline label +
- * comma-joined line. Cert/award lists are projected to the back of the
- * resume by getRenderSections and rendered via <LateAdditionalModule>.
+ * + languages). Technical skills render as an ordered numbered list — group
+ * heads are bold unnumbered labels and each group restarts numbering at 1 —
+ * with no inline "Technical Skills:" label (the section title already names
+ * the block). Languages keep their bold inline label + comma-joined line.
+ * Cert/award lists are projected to the back of the resume by
+ * getRenderSections and rendered via <LateAdditionalModule>.
  */
 const AdditionalSkillsSection: React.FC<{
   additional: ResumeData['additional'];
@@ -374,7 +420,6 @@ const AdditionalSkillsSection: React.FC<{
   const languages = nonBlankStrings(additional.languages);
   if (technicalSkills.length === 0 && languages.length === 0) return null;
 
-  const technicalSkillsLabel = labels?.technicalSkills ?? 'Technical Skills:';
   const languagesLabel = labels?.languages ?? 'Languages:';
 
   const line = (label: string, items: string[]) =>
@@ -388,20 +433,7 @@ const AdditionalSkillsSection: React.FC<{
     <div className={baseStyles['resume-section']}>
       <h3 className={styles.sectionTitle}>{displayName}</h3>
       <div className={`${baseStyles['resume-stack']} ${baseStyles['resume-text-sm']}`}>
-        {groupSkillEntries(technicalSkills).map((group, groupIndex) =>
-          group.items.length > 0 ? (
-            <div key={groupIndex}>
-              {(group.head !== null || groupIndex === 0) && (
-                <div className="font-bold">
-                  {group.head !== null ? stripPointMarker(group.head) : technicalSkillsLabel}
-                </div>
-              )}
-              {group.items.map((skill, index) => (
-                <div key={index}>{stripPointMarker(skill)}</div>
-              ))}
-            </div>
-          ) : null
-        )}
+        {technicalSkills.length > 0 && <SkillGroupList entries={technicalSkills} />}
         {line(languagesLabel, languages)}
       </div>
     </div>
@@ -472,20 +504,20 @@ const DynamicResumeSectionLatex: React.FC<{
         <div className={baseStyles['resume-items']}>
           {customSection.items.map((item) => (
             <div key={item.id} className={baseStyles['resume-item']}>
-              <div
-                className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}
-              >
+              <div className={`${styles.entryLineGrid} ${baseStyles['resume-row-tight']}`}>
                 <span className={styles.entryPrimary}>{item.title}</span>
                 {item.years && (
-                  <span className={`${styles.entryDates} ml-4`}>{formatDateRange(item.years)}</span>
+                  <span className={styles.entryDates}>{formatDateRange(item.years)}</span>
                 )}
               </div>
               {(item.subtitle || item.location) && (
-                <div className={`flex justify-between items-baseline ${baseStyles['resume-row']}`}>
-                  {item.subtitle && <span className={styles.entrySecondary}>{item.subtitle}</span>}
-                  {item.location && (
-                    <span className={`${styles.entrySecondary} ml-4`}>{item.location}</span>
+                <div className={`${styles.entryLineGrid} ${baseStyles['resume-row']}`}>
+                  {item.subtitle ? (
+                    <span className={styles.entrySecondary}>{item.subtitle}</span>
+                  ) : (
+                    <span />
                   )}
+                  {item.location && <span className={styles.entryLocation}>{item.location}</span>}
                 </div>
               )}
               {renderBullets(item.description, item.descriptionStyles)}

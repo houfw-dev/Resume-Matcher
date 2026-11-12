@@ -5,6 +5,8 @@ import type {
   SectionMeta,
   AdditionalSectionLabels,
   ResumeSectionHeadings,
+  Experience,
+  Education,
 } from '@/components/dashboard/resume-component';
 import {
   getRenderSections,
@@ -19,7 +21,9 @@ import {
 } from '@/lib/utils/resume-headings';
 import { formatDateRange } from '@/lib/utils';
 import { DescriptionList } from './description-list';
-import { groupSkillEntries, stripPointMarker } from './list-format';
+import { stripPointMarker } from './list-format';
+import { SkillGroupList } from './skill-list';
+import { promoteWorkDepartment } from './work-department';
 import { OrderedStringList, PointTextList } from './point-text-list';
 import baseStyles from './styles/_base.module.css';
 import styles from './styles/modern.module.css';
@@ -140,25 +144,20 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
           <div key={section.id} className={baseStyles['resume-section']}>
             <h3 className={styles['section-title-accent']}>{section.displayName}</h3>
             <div className={baseStyles['resume-items']}>
-              {workExperience.map((exp) => (
-                <div key={exp.id} className={baseStyles['resume-item']}>
-                  <div
-                    className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}
-                  >
-                    <h4 className={baseStyles['resume-item-title']}>{exp.title}</h4>
-                    <span className={`${baseStyles['resume-date']} ml-4`}>
-                      {formatDateRange(exp.years)}
-                    </span>
+              {workExperience.map((exp) => {
+                // A legacy plain department line ("全球资金部") is lifted into
+                // the department column and removed from the bullet list.
+                const promoted = promoteWorkDepartment(exp);
+                return (
+                  <div key={exp.id} className={baseStyles['resume-item']}>
+                    <WorkEntryRow exp={exp} department={promoted.department} />
+                    <DescriptionList
+                      items={promoted.description}
+                      styles={promoted.descriptionStyles}
+                    />
                   </div>
-                  <div
-                    className={`flex justify-between items-center ${baseStyles['resume-row']} ${baseStyles['resume-item-subtitle']}`}
-                  >
-                    <span>{exp.company}</span>
-                    {exp.location && <span>{exp.location}</span>}
-                  </div>
-                  <DescriptionList items={exp.description} styles={exp.descriptionStyles} />
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         );
@@ -250,22 +249,7 @@ export const ResumeModern: React.FC<ResumeModernProps> = ({
             <div className={baseStyles['resume-items']}>
               {education.map((edu) => (
                 <div key={edu.id} className={baseStyles['resume-item']}>
-                  <div
-                    className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}
-                  >
-                    <h4 className={baseStyles['resume-item-title']}>{edu.institution}</h4>
-                    <span className={`${baseStyles['resume-date']} ml-4`}>
-                      {formatDateRange(edu.years)}
-                    </span>
-                  </div>
-                  <div
-                    className={`flex justify-between ${baseStyles['resume-item-subtitle']} ${baseStyles['resume-row-tight']}`}
-                  >
-                    <span>{edu.degree}</span>
-                  </div>
-                  {edu.description && (
-                    <p className={baseStyles['resume-text-sm']}>{edu.description}</p>
-                  )}
+                  <EducationEntryRow edu={edu} />
                 </div>
               ))}
             </div>
@@ -382,11 +366,74 @@ const nonBlankStrings = (items?: string[]): string[] =>
   (items ?? []).filter((item): item is string => typeof item === 'string' && item.trim() !== '');
 
 /**
+ * Work entry header as one justified row — time | company · location |
+ * department | role — mirroring the swiss-single contract. The title stays an
+ * h4 but sits flush right （两端对齐）; with a department the row uses four
+ * tracks, without one, three tracks (time | company | role). The date never
+ * wraps and long values wrap inside their own minmax(0, …) cell.
+ */
+const WorkEntryRow: React.FC<{ exp: Experience; department?: string }> = ({
+  exp,
+  department: departmentProp,
+}) => {
+  const date = formatDateRange(exp.years ?? '').trim();
+  const company = exp.company?.trim() ?? '';
+  const location = exp.location?.trim() ?? '';
+  const department = (departmentProp ?? '').trim();
+  const role = exp.title?.trim() ?? '';
+
+  if (!date && !company && !department && !location && !role) return null;
+
+  const gridClass = department ? styles.entryGrid : styles.entryGridThree;
+
+  return (
+    <div className={`${gridClass} ${baseStyles['resume-row-tight']}`}>
+      <span className={styles.entryDate}>{date}</span>
+      <span className={baseStyles['resume-item-subtitle']}>
+        {company}
+        {location && <span className={baseStyles['resume-meta-sm']}> · {location}</span>}
+      </span>
+      {department && <span className={styles.entryDepartment}>{department}</span>}
+      <h4 className={`${baseStyles['resume-item-title']} ${styles.entryRoleEnd}`}>{role}</h4>
+    </div>
+  );
+};
+
+/**
+ * Education entry header as one four-column row — time | university | major |
+ * degree. The optional education.description field is the major column (same
+ * convention as swiss-single), so it no longer renders as a separate
+ * paragraph. Empty cells still reserve their track, keeping column edges
+ * aligned across work and education entries.
+ */
+const EducationEntryRow: React.FC<{ edu: Education }> = ({ edu }) => {
+  const date = formatDateRange(edu.years ?? '').trim();
+  const institution = edu.institution?.trim() ?? '';
+  const major = edu.description?.trim() ?? '';
+  const degree = edu.degree?.trim() ?? '';
+
+  if (!date && !institution && !major && !degree) return null;
+
+  return (
+    <div className={`${styles.entryGrid} ${baseStyles['resume-row-tight']}`}>
+      <span className={styles.entryDate}>{date}</span>
+      <h4 className={baseStyles['resume-item-title']}>{institution}</h4>
+      <span className={styles.entryDepartment}>{major}</span>
+      <span className={`${baseStyles['resume-item-subtitle']} ${styles.entryRoleEnd}`}>
+        {degree}
+      </span>
+    </div>
+  );
+};
+
+/**
  * The early `additional` slot renders ONLY the skills block (technical skills
- * + languages). Technical skills render one entry per line, with each group
- * head on its own bold line; languages keep their inline label +
- * comma-joined line. Cert/award lists are projected to the back of the
- * resume by getRenderSections and rendered via <LateAdditionalModule>.
+ * + languages). Technical skills render as an ordered numbered list — group
+ * heads are bold unnumbered labels and each group restarts numbering at 1 —
+ * with no inline "Technical Skills:" label (the section title already names
+ * the block). Languages keep their inline label + comma-joined line.
+ * Cert/award lists are projected to the back of the resume by
+ * getRenderSections and rendered via <LateAdditionalModule>.
  */
 const AdditionalSkillsSection: React.FC<{
   additional: ResumeData['additional'];
@@ -399,26 +446,13 @@ const AdditionalSkillsSection: React.FC<{
   const languages = nonBlankStrings(additional.languages);
   if (technicalSkills.length === 0 && languages.length === 0) return null;
 
-  const technicalSkillsLabel = labels?.technicalSkills ?? 'Technical Skills:';
   const languagesLabel = labels?.languages ?? 'Languages:';
 
   return (
     <div className={baseStyles['resume-section']}>
       <h3 className={styles['section-title-accent']}>{displayName}</h3>
       <div className={`${baseStyles['resume-stack']} ${baseStyles['resume-text-sm']}`}>
-        {technicalSkills.length > 0 &&
-          groupSkillEntries(technicalSkills).map((group, groupIndex) => (
-            <div key={groupIndex}>
-              {(group.head !== null || groupIndex === 0) && (
-                <div className="font-bold">
-                  {group.head !== null ? stripPointMarker(group.head) : technicalSkillsLabel}
-                </div>
-              )}
-              {group.items.map((skill, index) => (
-                <div key={index}>{stripPointMarker(skill)}</div>
-              ))}
-            </div>
-          ))}
+        {technicalSkills.length > 0 && <SkillGroupList entries={technicalSkills} />}
         {languages.length > 0 && (
           <div className="flex">
             <span className="font-bold w-32 shrink-0">{languagesLabel}</span>
@@ -510,22 +544,20 @@ function renderDynamicContent(
         <div className={baseStyles['resume-items']}>
           {customSection.items.map((item) => (
             <div key={item.id} className={baseStyles['resume-item']}>
-              <div
-                className={`flex justify-between items-baseline ${baseStyles['resume-row-tight']}`}
-              >
+              <div className={`${styles.entryLineGrid} ${baseStyles['resume-row-tight']}`}>
                 <h4 className={baseStyles['resume-item-title']}>{item.title}</h4>
                 {item.years && (
-                  <span className={`${baseStyles['resume-meta-sm']} shrink-0 ml-4`}>
+                  <span className={baseStyles['resume-meta-sm']}>
                     {formatDateRange(item.years)}
                   </span>
                 )}
               </div>
               {(item.subtitle || item.location) && (
                 <div
-                  className={`flex justify-between items-center ${baseStyles['resume-row']} ${baseStyles['resume-meta']}`}
+                  className={`${styles.entryLineGrid} ${baseStyles['resume-row']} ${baseStyles['resume-meta']}`}
                 >
-                  {item.subtitle && <span>{item.subtitle}</span>}
-                  {item.location && <span>{item.location}</span>}
+                  {item.subtitle ? <span>{item.subtitle}</span> : <span />}
+                  {item.location && <span className={styles.entryLocation}>{item.location}</span>}
                 </div>
               )}
               <DescriptionList items={item.description} styles={item.descriptionStyles} />

@@ -86,9 +86,77 @@
   text-align: right;
 }
 
-.skillLabel {
-  font-weight: 700;
-  color: var(--resume-text-primary);
+/*
+  Time-first single-row entry headers shared by work and education:
+  time | company/school | department/major | role/degree. The date track is
+  deliberately wider than its glyphs need so the company column starts a
+  little right of the date edge (mirrors the DOCX 3.3cm first track and the
+  swiss-single template). minmax(0, …) tracks let long values wrap INSIDE
+  their own cell instead of pushing neighbors around; empty cells still
+  reserve their track, so every entry shares identical column edges
+  (行列对齐）, with the date flush left and role/degree flush right （两端对齐）.
+*/
+.entryGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr) auto;
+  column-gap: 0.75rem;
+  align-items: baseline;
+  text-align: left;
+}
+
+/* No department: three real columns — time | company | role — so the three
+   available fields fill the row instead of leaving an empty middle track. */
+.entryGridThree {
+  display: grid;
+  grid-template-columns: minmax(0, 10.5rem) minmax(0, 1.35fr) minmax(0, 1fr);
+  column-gap: 0.75rem;
+  align-items: baseline;
+  text-align: left;
+}
+
+/* Dynamic custom itemList sections keep the company-first four-track row. */
+.entryItemGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.9fr) auto;
+  column-gap: 0.75rem;
+  align-items: baseline;
+  text-align: left;
+}
+
+/* Time cell: compact metadata, never wraps onto another line. */
+.entryDate {
+  font-size: calc(var(--font-size-base) * 0.85);
+  color: var(--resume-text-tertiary);
+  white-space: nowrap;
+  text-align: left;
+}
+
+/* Department / major cell: compact metadata, wraps inside its own track. */
+.entryDepartment {
+  font-size: calc(var(--font-size-base) * 0.85);
+  color: var(--resume-text-tertiary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+/* Role / degree cell: flush with the right content edge （两端对齐）. */
+.entryRoleEnd {
+  font-variant: small-caps;
+  letter-spacing: 0.02em;
+  color: var(--resume-text-tertiary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  justify-self: end;
+  text-align: right;
+}
+
+.entryLocation {
+  font-size: calc(var(--font-size-base) * 0.85);
+  color: var(--resume-text-tertiary);
+  white-space: nowrap;
+  min-width: 0;
+  text-align: left;
 }
 
 @media print {
