@@ -37,6 +37,12 @@ fix for *that signal* and stays empty when the signal is conform/na. When
 several signals merge into one item, only non-conforming signals contribute
 text — a problem row never carries positive notes or advice about the
 sub-checks that passed.
+
+Every numeric threshold, regex string and recognition vocabulary below comes
+from the versioned rule artifact (``rules/diagnosis_rules.yaml`` ->
+``diagnosis_rules.json``, loaded once through ``get_rules()``). Only the
+typed views are referenced here; the checking algorithms, interval
+arithmetic, finding wording and the verdict merge order stay in code.
 """
 
 import copy
@@ -45,7 +51,7 @@ import math
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, NamedTuple
+from typing import Any
 
 from app.schemas.diagnosis import (
     LayoutLocatorIn,
@@ -59,6 +65,7 @@ from app.services.diagnosis_rules import (
     RATING_NA,
     RATING_NONCONFORM,
     RATING_PARTIAL,
+    get_rules,
 )
 from app.services.section_order import (
     CANONICAL_SEQUENCE_FORMAL,
@@ -79,167 +86,63 @@ logger = logging.getLogger(__name__)
 # Text / date helpers
 # ---------------------------------------------------------------------------
 
-_CHARS_PER_LINE = 46  # CJK chars per rendered line at the resume content width
-_CHARS_PER_PAGE = 950  # CJK chars per A4 page at swiss-single density (estimate)
+# Thresholds, regex strings and vocabularies live in the versioned rule
+# artifact (rules/diagnosis_rules.yaml -> diagnosis_rules.json, loaded and
+# validated by diagnosis_rules.py). Only the typed views are referenced here;
+# the lru_cache makes get_rules() a one-time load per process.
+_RULES = get_rules()
+_PARAMS = _RULES.parameters
+_VOCAB = _RULES.vocabularies
+assert _PARAMS is not None and _VOCAB is not None  # shipped artifact is complete
 
-_DATE_RE = re.compile(
-    r"(\d{4})\s*(?:[.\-/年]\s*(\d{1,2})\s*月?)?"
-)
-_OPEN_ENDED_RE = re.compile(r"至今|现在|当前|目前|今|present|current|now|till|to date", re.IGNORECASE)
-_STATED_YEARS_RE = re.compile(r"工作年限[：:\s]*(\d{1,2}(?:\.\d+)?)\s*年")
-_ID_CARD_RE = re.compile(r"\d{17}[\dXx]|\b\d{15}\b")
-_PRIVACY_LABEL_RE = re.compile(r"(身份证号?码?|家庭住址|银行卡号|家人信息)[:：]?\s*\S+")
-_PHONE_RE = re.compile(r"1[3-9]\d{9}")
-_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_CHARS_PER_LINE = _PARAMS.chars_per_line  # CJK chars per rendered line
+_CHARS_PER_PAGE = _PARAMS.chars_per_page  # CJK chars per A4 page (estimate)
 
-_ENUMERATION_RE = re.compile(
-    r"(?:^|[\n；;])\s*(?:\d{1,2}[.、)]|（\d{1,2}）|\(\d{1,2}\)|[①-⑳]|[•·▪\-*])"
-)
+_DATE_RE = _VOCAB.regex("date")
+_OPEN_ENDED_RE = _VOCAB.regex("open_ended")
+_STATED_YEARS_RE = _VOCAB.regex("stated_years")
+_ID_CARD_RE = _VOCAB.regex("id_card")
+_PRIVACY_LABEL_RE = _VOCAB.regex("privacy_label")
+_PHONE_RE = _VOCAB.regex("phone")
+_EMAIL_RE = _VOCAB.regex("email")
+_ENUMERATION_RE = _VOCAB.regex("enumeration")
+_DATE_CONNECTOR_RE = _VOCAB.regex("date_connector")
+_DEGREE_ANNOTATION_RE = _VOCAB.regex("degree_annotation")
 
 # Item 7: mainstream stack groups (Java backend, 2026 profile from spec).
-#
-# Fields per group:
-#   key    — stable id used by the LLM semantic-review protocol;
-#   name   — public evidence name (quoted in client evidence when HIT);
-#   pattern— deterministic regex over the 专业技能 entries;
-#   hint   — public suggestion example, used ONLY when the group stays missing;
-#   equiv  — SERVER-SIDE equivalence guidance for the LLM semantic review
-#            (what may legitimately rescue a regex miss). It is injected into
-#            the judge prompt only and never leaves the server.
-class _StackGroup(NamedTuple):
-    key: str
-    name: str
-    pattern: re.Pattern[str]
-    hint: str
-    equiv: str
-
-
-_MAINSTREAM_GROUPS: tuple[_StackGroup, ...] = (
-    _StackGroup(
-        "spring_boot",
-        "Spring Boot",
-        re.compile(r"spring\s*boot", re.IGNORECASE),
-        "服务框架（Spring Boot）",
-        "JVM 服务端框架即可：Spring Boot、Spring MVC、Spring Framework、"
-        "Jakarta EE/Java EE、Quarkus、Micronaut、Dropwizard；仅写"
-        "「框架」「微服务」这类泛称不算",
-    ),
-    _StackGroup(
-        "spring_cloud",
-        "Spring Cloud Alibaba",
-        re.compile(r"spring\s*cloud", re.IGNORECASE),
-        "微服务框架（Spring Cloud Alibaba）",
-        "微服务治理框架或其具体组件：Spring Cloud Alibaba、Nacos、Sentinel、"
-        "Seata、Dubbo、OpenFeign、Spring Cloud Gateway、Eureka、Hystrix；"
-        "仅写「微服务架构」「分布式」概念词不算",
-    ),
-    _StackGroup(
-        "rdbms",
-        "MySQL",
-        re.compile(r"mysql", re.IGNORECASE),
-        "关系型数据库（MySQL）",
-        "关系型数据库或直接操作它的持久层框架：PostgreSQL、Oracle、SQL Server、"
-        "MariaDB、达梦、金仓、MyBatis/MyBatis-Plus、JPA、Hibernate；"
-        "Redis/MongoDB 等非关系型存储不算",
-    ),
-    _StackGroup(
-        "redis",
-        "Redis",
-        re.compile(r"redis", re.IGNORECASE),
-        "缓存中间件（Redis）",
-        "分布式缓存/键值中间件：Redis、Memcached、Tair、KeyDB；本地缓存"
-        "（Caffeine、Guava Cache）与仅写「缓存优化」不算",
-    ),
-    _StackGroup(
-        "mq",
-        "消息队列 MQ",
-        re.compile(r"rocketmq|rabbitmq|activemq|kafka|(?:消息队列)|\bmq\b", re.IGNORECASE),
-        "消息队列中间件（RocketMQ、Kafka）",
-        "消息中间件：RocketMQ、Kafka、RabbitMQ、ActiveMQ、Pulsar，或"
-        "「消息队列/MQ/消息中间件」字样；Redis 发布订阅、Spring 事件总线不算",
-    ),
-    _StackGroup(
-        "jvm",
-        "JVM",
-        re.compile(r"\bjvm\b", re.IGNORECASE),
-        "JVM 原理与调优",
-        "Java 虚拟机运行时主题：JVM、Java 虚拟机、GC/垃圾回收、类加载机制、"
-        "JMM/Java 内存模型、JVM 调优；仅写「Java」或「性能调优」不算",
-    ),
-    _StackGroup(
-        "concurrency",
-        "并发编程",
-        re.compile(r"并发|多线程|concurrent", re.IGNORECASE),
-        "并发与多线程编程",
-        "并发/多线程技术：线程池、锁机制、JUC/java.util.concurrent、"
-        "CompletableFuture、NIO/Netty、AQS、CAS；仅写「异步」不算",
-    ),
-    _StackGroup(
-        "ai_app",
-        "AI 应用 (Spring AI / LangChain4j)",
-        re.compile(r"spring\s*ai|langchain4j|langchain|大模型|llm|ai\s*应用", re.IGNORECASE),
-        "AI 应用开发（Spring AI、LangChain4j）",
-        "大模型应用开发技术：Spring AI、LangChain4j/LangChain、RAG、AI Agent/"
-        "智能体、Function Calling、MCP、向量数据库应用、Embedding 应用；"
-        "仅写「关注 AI」「使用 AI 工具」不算",
-    ),
-    _StackGroup(
-        "ai_coding",
-        "AI 编码工具 (Codex/Claude Code/Trae)",
-        re.compile(r"\bcodex\b|claude\s*code|\btrae\b|vibe\s*coding", re.IGNORECASE),
-        "AI 编码工具（Codex、Claude Code、Trae）",
-        "具名的 AI 编码助手：Codex、Claude Code、Trae、GitHub Copilot、Cursor、"
-        "Windsurf、通义灵码、CodeGeeX、Aider；仅写「AI 编程」泛称不算",
-    ),
-)
+# Each group carries key/name/pattern/hint plus an SERVER-SIDE equiv string
+# (LLM semantic-review guidance, never returned to clients); the StackGroup
+# shape is defined in diagnosis_rules.py and populated from the artifact.
+_MAINSTREAM_GROUPS = _VOCAB.mainstream_groups
 
 #: Item-7 coverage threshold: 7 of 9 groups conform; 5–6 partial; ≤4 fail.
-_STACK_CONFORM_RATIO = 0.75
+_STACK_CONFORM_RATIO = _PARAMS.stack_conform_ratio
+#: Below the partial ratio every missing group is a nonconform signal.
+_STACK_PARTIAL_RATIO = _PARAMS.stack_partial_ratio
 
 # Tech vocabulary used to spot a "tech stack" bullet inside project text.
-_TECH_VOCAB_RE = re.compile(
-    r"java|spring|mysql|redis|rocketmq|rabbitmq|kafka|\bmq\b|jvm|微服务|分布式|"
-    r"docker|k8s|kubernetes|elasticsearch|nginx|linux|python|langchain|"
-    # Data engineering / big-data stack (Hadoop ecosystem, streaming, MPP...)
-    r"hadoop|hive|hbase|spark|flink|scala|flume|sqoop|oozie|azkaban|"
-    r"airflow|dolphinscheduler|controlm|phoenix|presto|trino|clickhouse|"
-    r"doris|postgresql|oracle|mongodb|nosql|maxcompute|dataworks",
-    re.IGNORECASE,
-)
+_TECH_VOCAB_RE = _VOCAB.regex("tech_vocab")
 # Explicit tech-stack sub-label produced by the parser (canonical 技术栈 plus
 # the aliases older stored documents may still carry).
-_STACK_LABEL_RE = re.compile(
-    r"^\s*(?:技术栈|技术架构|技术选型|技术列表|技术清单|所用技术|使用技术|"
-    r"技术框架|技术环境|软件环境|开发环境)\s*[:：]?\s*(.*)$"
-)
+_STACK_LABEL_RE = _VOCAB.regex("stack_label")
 # A row that opens with another short sub-label, e.g. "项目背景：多系统…" —
 # used to tell an empty stacked label apart from a split "label row + content
 # row" pair (the following row may be bare or glued to its own content).
-_ANY_LABEL_LINE_RE = re.compile(r"^[一-鿿\w/]{2,10}\s*[:：]")
-_METRIC_RE = re.compile(
-    r"\d+(?:\.\d+)?\s*(?:%|‰|倍|万|亿|个|人|台|条|次|笔|ms|毫秒|秒|分钟|小时|天|"
-    r"qps|tps|rt)|提升|提高|降低|减少|缩短|节省|增长|优化了?|下降|节约",
-    re.IGNORECASE,
-)
-_DUTY_RE = re.compile(r"负责|主导|承担|开发|设计|实现|参与|搭建|重构|推动|对接")
-_BACKGROUND_RE = re.compile(r"背景|为了解决|由于|业务场景|源于|痛点|旨在|为支撑")
-_INTERNSHIP_RE = re.compile(r"实习")
+_ANY_LABEL_LINE_RE = _VOCAB.regex("any_label_line")
+_METRIC_RE = _VOCAB.regex("metric")
+_DUTY_RE = _VOCAB.regex("duty")
+_BACKGROUND_RE = _VOCAB.regex("background")
+_INTERNSHIP_RE = _VOCAB.regex("internship")
 
 # Item 13 annotated-overlap exemptions: the V4 rubric allows otherwise
 # conflicting intervals only when the resume itself carries the note.
-_WORK_OVERLAP_NOTE_RE = re.compile(r"兼职|外包")
-_EDU_OVERLAP_NOTE_RE = re.compile(r"双学位|联合培养|在职|非全日制|兼职")
-_IN_SERVICE_EDU_RE = re.compile(r"在职|非全日制|委培")
-_AMATEUR_PROJECT_RE = re.compile(r"个人业余项目|业余项目|个人开源|业余开源|side\s*project", re.IGNORECASE)
+_WORK_OVERLAP_NOTE_RE = _VOCAB.regex("work_overlap_note")
+_EDU_OVERLAP_NOTE_RE = _VOCAB.regex("edu_overlap_note")
+_IN_SERVICE_EDU_RE = _VOCAB.regex("in_service_edu")
+_AMATEUR_PROJECT_RE = _VOCAB.regex("amateur_project")
 
 # Highest-first: 博士 must be checked before 硕士 (博士研究生 contains 研究生).
-_DEGREE_RANK_PATTERNS: tuple[tuple[int, re.Pattern[str]], ...] = (
-    (5, re.compile(r"博士")),
-    (4, re.compile(r"硕士|研究生")),
-    (3, re.compile(r"本科")),
-    (2, re.compile(r"大专|专科|高职")),
-    (1, re.compile(r"中专|中职|技校|高中")),
-)
+_DEGREE_RANK_PATTERNS = _VOCAB.degree_rank_patterns_compiled
 
 
 def _now_point() -> tuple[int, int]:
@@ -460,10 +363,7 @@ def _iter_text_blocks(resume: dict[str, Any]) -> list[str]:
 
 # Mirrors the frontend POINT_MARKER_RE (components/resume/list-format.ts):
 # leading numbering/bullet markers are display-only and never part of the text.
-_POINT_MARKER_RE = re.compile(
-    r"^\s*(?:\d{1,2}\s*[.、)）．:：]|[（(]\d{1,2}[)）]|[①②③④⑤⑥⑦⑧⑨⑩]|"
-    r"[•·・●▪▸▹◆■\-—–]\s*|[一二三四五六七八九十]{1,3}\s*[、.．)）])\s*"
-)
+_POINT_MARKER_RE = _VOCAB.regex("point_marker")
 
 
 def _norm_point_text(text: str) -> str:
@@ -670,22 +570,11 @@ def _required_section_empty(resume: dict[str, Any], key: str) -> bool:
 # Title tokens and parser-generated data keys for the two named optional
 # modules. Key fallbacks cover resumes parsed before sectionMeta was emitted,
 # where 个人优势/自我评价 existed only as customSections keyed by snake_case
-# ids with no displayName row.
-_ADVANTAGE_TITLE_TOKENS: tuple[str, ...] = ("个人优势", "核心优势", "个人亮点")
-_ADVANTAGE_KEY_TOKENS: tuple[str, ...] = (
-    "personal_advantage",
-    "advantage",
-    "strength",
-    "highlight",
-    "competency",
-)
-_SELFEVAL_TITLE_TOKENS: tuple[str, ...] = ("自我评价", "个人总结", "个人评价")
-_SELFEVAL_KEY_TOKENS: tuple[str, ...] = (
-    "self_evaluation",
-    "self_eval",
-    "self_appraisal",
-    "selfassessment",
-)
+# ids with no displayName row. Sourced from the diagnosis rule artifact.
+_ADVANTAGE_TITLE_TOKENS = tuple(_VOCAB.advantage_title_tokens)
+_ADVANTAGE_KEY_TOKENS = tuple(_VOCAB.advantage_key_tokens)
+_SELFEVAL_TITLE_TOKENS = tuple(_VOCAB.selfeval_title_tokens)
+_SELFEVAL_KEY_TOKENS = tuple(_VOCAB.selfeval_key_tokens)
 
 
 def _custom_section_text(section: Any) -> str:
@@ -841,13 +730,13 @@ def _timeline_facts(intervals: list[tuple[str, Interval]]) -> dict[str, Any]:
     short_stints = [
         {"company": company, "months": iv.length_months, "raw": iv.raw}
         for company, iv in intervals
-        if iv.end is not None and iv.length_months < 12
+        if iv.end is not None and iv.length_months < _PARAMS.short_stint_months
     ]
     recent_companies: set[str] = set()
     for company, iv in intervals:
         start_idx = _month_index(*iv.start)
         end_idx = _month_index(*(iv.end or _now_point()))
-        if end_idx >= today - 60 and start_idx <= today:
+        if end_idx >= today - _PARAMS.recent_window_months and start_idx <= today:
             recent_companies.add(company)
 
     return {
@@ -883,7 +772,7 @@ def _finding(rating: str, evidence: str, suggestion: str = "") -> Finding:
 
 
 # Punctuation sitting directly before a join separator ("…标题。；将该长段…").
-_JOIN_SEAM_RE = re.compile(r"[。.！？!?…]*(；|;)+")
+_JOIN_SEAM_RE = _VOCAB.regex("join_seam")
 
 
 def _join_text(parts: list[str], separator: str = "；") -> str:
@@ -1032,7 +921,7 @@ def _point_rendered_lines(point: str) -> int:
     return math.ceil(len(stripped) / _CHARS_PER_LINE)
 
 
-_MAX_POINT_LINES = 6
+_MAX_POINT_LINES = _PARAMS.max_point_lines
 
 
 def _paragraph_evidence(
@@ -1130,10 +1019,7 @@ def _check_date_format(resume: dict[str, Any]) -> Finding:
         for match in _DATE_RE.finditer(raw):
             tokens.append(match.group(0).strip())
             precision.add("month" if match.group(2) else "year")
-        between = re.search(
-            r"\d{4}(?:[.\-/年]\d{1,2})?\s*([\-–—~～至]+)\s*(?:\d{4}|至今|现在)",
-            raw,
-        )
+        between = _DATE_CONNECTOR_RE.search(raw)
         if between:
             connectors.add(between.group(1))
     if not tokens:
@@ -1182,15 +1068,8 @@ def _check_date_format(resume: dict[str, Any]) -> Finding:
     return _join_findings(issues)
 
 
-_TEMPLATE_LABELS: dict[str, str] = {
-    "swiss-single": "经典单栏",
-    "swiss-two-column": "经典双栏",
-    "modern": "现代单栏",
-    "modern-two-column": "现代双栏",
-    "latex": "LaTeX 风格",
-    "clean": "简洁风格",
-    "vivid": "活力双栏",
-}
+# Template id -> Chinese evidence label (server-side diagnosis artifact).
+_TEMPLATE_LABELS: dict[str, str] = dict(_VOCAB.template_labels)
 
 
 def _check_page_length(
@@ -1198,7 +1077,7 @@ def _check_page_length(
 ) -> Finding:
     if layout is not None:
         pages = layout.page_count
-        if pages > 3:
+        if pages > _PARAMS.max_pages:
             label = _TEMPLATE_LABELS.get(layout.template, layout.template)
             return _finding(
                 RATING_NONCONFORM,
@@ -1210,7 +1089,7 @@ def _check_page_length(
     total = len(re.sub(r"\s", "", _all_text(resume)))
     pages = max(1, math.ceil(total / _CHARS_PER_PAGE))
     note = f"正文约 {total} 字，估算 {pages} 页（以导出 PDF 实际页数为准）"
-    if pages > 3:
+    if pages > _PARAMS.max_pages:
         return _finding(
             RATING_NONCONFORM,
             f"{note}，篇幅偏长",
@@ -1250,7 +1129,11 @@ def _check_modules(resume: dict[str, Any], tenure_years: float | None) -> Findin
     skills = (resume.get("additional") or {}).get("technicalSkills") or []
     if not _is_visible(resume, "additional") or not skills:
         missing.append("专业技能")
-    if not _advantage_text(resume) and tenure_years is not None and tenure_years >= 8:
+    if (
+        not _advantage_text(resume)
+        and tenure_years is not None
+        and tenure_years >= _PARAMS.advantage_required_tenure_years
+    ):
         missing.append("个人优势")
     if not missing:
         return _finding(RATING_CONFORM, "")
@@ -1317,7 +1200,7 @@ def _check_education_elements(resume: dict[str, Any]) -> Finding:
         ]
         missing_total += len(missing)
         degree_text = str(edu.get("degree") or "")
-        if degree_text and not re.search(r"统招|全日制|自考|成教|专升本", degree_text):
+        if degree_text and not _DEGREE_ANNOTATION_RE.search(degree_text):
             unannotated += 1
     if missing_total == 0 and unannotated == 0:
         return _finding(RATING_CONFORM, "")
@@ -1353,9 +1236,9 @@ def _check_summary_points(resume: dict[str, Any], tenure_years: float | None) ->
     if points == 0:
         # The missing-module case belongs to item 3; do not double count.
         return _finding(RATING_NA, "个人优势模块未设置，不适用")
-    if 2 <= points <= 5:
+    if _PARAMS.advantage_points_min <= points <= _PARAMS.advantage_points_max:
         return _finding(RATING_CONFORM, "")
-    if points < 2:
+    if points < _PARAMS.advantage_points_min:
         return _finding(
             RATING_PARTIAL,
             f"个人优势 {points} 点，要点数量偏少",
@@ -1377,13 +1260,13 @@ def _check_skill_count(resume: dict[str, Any]) -> Finding:
     if not skills:
         return _finding(RATING_NA, "专业技能模块为空，不适用")
     count = len(skills)
-    if count < 8:
+    if count < _PARAMS.skill_count_min:
         return _finding(
             RATING_NONCONFORM,
             f"专业技能仅 {count} 条，覆盖面不足",
             "补充与目标岗位相关的专业技能条目，避免只列少量关键词。",
         )
-    if count > 15:
+    if count > _PARAMS.skill_count_max:
         return _finding(
             RATING_NONCONFORM,
             f"专业技能 {count} 条，条目过多、重点被稀释",
@@ -1437,7 +1320,7 @@ def build_mainstream_stack_finding(hit_keys: tuple[str, ...]) -> Finding:
     evidence = (
         f"简历中已见核心技术方向：{'、'.join(f'「{name}」' for name in hit)}；" if hit else ""
     )
-    if ratio >= 0.5:
+    if ratio >= _STACK_PARTIAL_RATIO:
         return _finding(RATING_PARTIAL, evidence + "核心技术方向覆盖不足", suggestion)
     return _finding(RATING_NONCONFORM, evidence + "未见主流后端技术方向的关键词", suggestion)
 
@@ -1484,7 +1367,10 @@ def _check_work_elements(
         for entry in work
         if _INTERNSHIP_RE.search(str(entry.get("title") or ""))
     ]
-    experienced = tenure_years is not None and tenure_years >= 1
+    experienced = (
+        tenure_years is not None
+        and tenure_years >= _PARAMS.internship_experienced_tenure_years
+    )
     if internships and experienced:
         findings.append(
             _finding(
@@ -1521,7 +1407,7 @@ def _project_has_tech_stack(bullets: list[str]) -> bool:
             return True
     joined = "\n".join(bullets)
     tech_hits = {m.group(0).lower() for m in _TECH_VOCAB_RE.finditer(joined)}
-    return len(tech_hits) >= 2
+    return len(tech_hits) >= _PARAMS.project_tech_vocab_min_hits
 
 
 def _check_projects(resume: dict[str, Any]) -> Finding:
@@ -1537,7 +1423,7 @@ def _check_projects(resume: dict[str, Any]) -> Finding:
         return _finding(RATING_NA, "项目经验模块缺失，不适用")
 
     findings: list[Finding] = []
-    if len(projects) > 4:
+    if len(projects) > _PARAMS.project_count_max:
         findings.append(
             _finding(
                 RATING_NONCONFORM,
@@ -1545,7 +1431,7 @@ def _check_projects(resume: dict[str, Any]) -> Finding:
                 "精简项目数量，优先保留与目标岗位最相关的项目。",
             )
         )
-    elif len(projects) == 1:
+    elif len(projects) < _PARAMS.project_count_min:
         findings.append(
             _finding(
                 RATING_NONCONFORM,
@@ -1592,7 +1478,13 @@ def _check_projects(resume: dict[str, Any]) -> Finding:
     if not findings:
         return _finding(RATING_CONFORM, "")
     # Every project missing fields is a stronger signal than a single one.
-    if not (len(projects) > 4 or len(projects) == 1) and field_failures == len(projects):
+    if (
+        not (
+            len(projects) > _PARAMS.project_count_max
+            or len(projects) < _PARAMS.project_count_min
+        )
+        and field_failures == len(projects)
+    ):
         for index, finding in enumerate(findings):
             if finding[0] == RATING_PARTIAL:
                 findings[index] = _finding(RATING_NONCONFORM, finding[1], finding[2])
@@ -1606,9 +1498,9 @@ def _check_selfeval_points(resume: dict[str, Any]) -> Finding:
     points = count_points(text)
     if points == 0:
         return _finding(RATING_NA, "自我评价模块缺失，不适用（选填模块）")
-    if 3 <= points <= 5:
+    if _PARAMS.selfeval_points_min <= points <= _PARAMS.selfeval_points_max:
         return _finding(RATING_CONFORM, "")
-    if points < 3:
+    if points < _PARAMS.selfeval_points_min:
         return _finding(
             RATING_PARTIAL,
             f"自我评价 {points} 点，要点数量偏少",
@@ -1794,7 +1686,7 @@ def _check_work_education_order(resume: dict[str, Any]) -> Finding:
     school = str(highest_entry.get("institution") or "").strip() or "最高学历"
     lead = _month_index(*highest_iv.start) - earliest_start
     # Year-only dates normalize to July; a ≤6-month lead is within rounding noise.
-    if lead > 6:
+    if lead > _PARAMS.work_education_lead_months:
         return _finding(
             RATING_PARTIAL,
             f"最早正式工作经历（{earliest_raw}）早于{school}（{highest_iv.raw}）"
@@ -1839,7 +1731,7 @@ def _check_stated_years(resume: dict[str, Any], tenure_months: int) -> Finding:
     stated = float(match.group(1))
     actual = round(tenure_months / 12, 1)
     diff = round(stated - actual, 1)
-    if abs(diff) > 0.5:
+    if abs(diff) > _PARAMS.stated_years_tolerance:
         if diff > 0:
             return _finding(
                 RATING_NONCONFORM,
@@ -1872,13 +1764,13 @@ def _check_gaps(facts: dict[str, Any]) -> Finding:
     # an auxiliary hint only and never drives the rating.
     largest_gap = facts["largest_gap_months"]
     detail = f"本次空窗 {current_gap} 个月，历史空窗累计 {historical_gap} 个月"
-    if largest_gap > 6:
+    if largest_gap > _PARAMS.gap_nonconform_months:
         return _finding(
             RATING_NONCONFORM,
             detail + "，存在较长空窗，简历中未见安排说明",
             "在简历中说明空窗期安排（如业务调整、项目到期、学习或家庭安排）。",
         )
-    if largest_gap > 3:
+    if largest_gap > _PARAMS.gap_partial_months:
         return _finding(
             RATING_PARTIAL,
             detail + "，存在空窗且简历未见说明",
@@ -1893,7 +1785,7 @@ def _check_job_hops(facts: dict[str, Any]) -> Finding:
     if not facts["stints"]:
         return _finding(RATING_NA, "没有可解析的工作时间段，不适用")
     rendered = "、".join(companies) or "无"
-    if len(companies) >= 4:
+    if len(companies) >= _PARAMS.job_hop_company_count:
         return _finding(
             RATING_PARTIAL,
             f"近年经历 {len(companies)} 家公司：{rendered}，变动较频繁",
@@ -1908,7 +1800,7 @@ def _check_short_stints(facts: dict[str, Any]) -> Finding:
         return _finding(RATING_NA, "没有可解析的工作时间段，不适用")
     if not short:
         return _finding(RATING_CONFORM, "")
-    strong = [s for s in short if s["months"] <= 6]
+    strong = [s for s in short if s["months"] <= _PARAMS.short_stint_strong_months]
     rendered = "；".join(f"{s['company']} {s['raw']}（{s['months']} 个月）" for s in short)
     # Risk marker, not a veto: item 14 is never a red line in V4.
     rating = RATING_NONCONFORM if strong else RATING_PARTIAL
@@ -2091,7 +1983,7 @@ def run_objective_checks(
     }
     # Item 15 (growth) is reference-only below 5 effective dev years:
     # objectively na; from 5 years on it goes to the LLM with the facts packet.
-    if tenure_years is not None and tenure_years < 5:
+    if tenure_years is not None and tenure_years < _PARAMS.growth_gate_years:
         verdicts[15] = (
             RATING_NA,
             f"有效开发年限约 {tenure_years:g} 年，职业成长性暂不评估，仅作参考",

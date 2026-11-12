@@ -1,0 +1,208 @@
+# 简历诊断客观 checker 的声明式数据（人工编辑源）
+#
+# 22 项诊断细则文本（criterion/qc/职级矩阵）仍以 xlsx 为唯一源；本文件只承载
+# diagnosis_checks.py 里 13 个客观 checker 的阈值、词表与正则字符串。
+#
+# 链路：本文件 + rules/简历诊断规范_V4_优化版.xlsx
+#   -> scripts/export_diagnosis_rules.py（ephemeral openpyxl + PyYAML）
+#   -> apps/backend/app/services/diagnosis_rules.json（运行时唯一制品）
+# 运行时只读 JSON，不依赖 PyYAML；坏正则/缺段/越界值在加载期 fail-fast。
+#
+# 保密：mainstream_stack_groups 的 equiv 等价口径与 xlsx 的 criterion/qc 同级，
+# 只进服务端制品，永远不进任何前端生成产物或 API 响应。
+#
+# 改完重新导出（仓库根目录）：
+#   uv run --with openpyxl --with pyyaml python -I scripts/export_diagnosis_rules.py
+
+parameters:
+  # ---- item 1/2 版式与篇幅 ----
+  # 正文区每行可容纳的 CJK 字符数（段落行数估算）
+  chars_per_line: 46
+  # 瑞士单栏密度下每页 CJK 字符数（页数估算，以 PDF 实际页数为准）
+  chars_per_page: 950
+  # 单个要点实际渲染超过该行数即判文字密度过高
+  max_point_lines: 6
+  # 实际渲染/估算页数上限
+  max_pages: 3
+
+  # ---- item 6 个人优势 / item 10 自我评价 要点数区间 ----
+  advantage_points_min: 2
+  advantage_points_max: 5
+  selfeval_points_min: 3
+  selfeval_points_max: 5
+
+  # ---- item 7 专业技能 ----
+  skill_count_min: 8
+  skill_count_max: 15
+  # 9 个主流栈组命中率：≥0.75 符合；≥0.5 部分符合；其余不符合
+  stack_conform_ratio: 0.75
+  stack_partial_ratio: 0.5
+
+  # ---- item 9 项目经验 ----
+  # 项目数量合法区间 [min, max]；仅 1 个或超过 max 均判不符合
+  project_count_min: 2
+  project_count_max: 4
+  # 无显式技术栈标签时，技术词汇命中至少该数才认定存在技术栈
+  project_tech_vocab_min_hits: 2
+
+  # ---- item 14 任职连续性（风险标记，非一票否决）----
+  # 单段空窗：>partial 月为部分符合，>nonconform 月为不符合
+  gap_partial_months: 3
+  gap_nonconform_months: 6
+  # “近 N 月”滚动窗口（5 年 = 60 月）
+  recent_window_months: 60
+  # 窗口内公司数达到该值即判定变动频繁
+  job_hop_company_count: 4
+  # 已结束任职短于该月数计入短任期；≤strong 月数升级为不符合
+  short_stint_months: 12
+  short_stint_strong_months: 6
+
+  # ---- item 13 时间线自洽 ----
+  # 最早正式工作早于最高学历入学超过该月数且无在职备注 → 部分符合
+  work_education_lead_months: 6
+  # 自述工作年限与累计在职月数的允许误差（年）
+  stated_years_tolerance: 0.5
+
+  # ---- 年限门控 ----
+  # item 3：有效开发年限达到该值时个人优势成为必填模块
+  advantage_required_tenure_years: 8
+  # item 8：达到该年限后正式工作经历中不得混入实习条目
+  internship_experienced_tenure_years: 1
+  # item 15：低于该有效开发年限时职业成长性客观 na（仅参考）
+  growth_gate_years: 5
+
+vocabularies:
+  # 正则字符串；flags 白名单：IGNORECASE / MULTILINE / DOTALL / UNICODE
+  regex_patterns:
+    date:
+      pattern: '(\d{4})\s*(?:[.\-/年]\s*(\d{1,2})\s*月?)?'
+    open_ended:
+      pattern: '至今|现在|当前|目前|今|present|current|now|till|to date'
+      flags: [IGNORECASE]
+    stated_years:
+      pattern: '工作年限[：:\s]*(\d{1,2}(?:\.\d+)?)\s*年'
+    id_card:
+      pattern: '\d{17}[\dXx]|\b\d{15}\b'
+    privacy_label:
+      pattern: '(身份证号?码?|家庭住址|银行卡号|家人信息)[:：]?\s*\S+'
+    phone:
+      pattern: '1[3-9]\d{9}'
+    email:
+      pattern: '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+    enumeration:
+      pattern: '(?:^|[\n；;])\s*(?:\d{1,2}[.、)]|（\d{1,2}）|\(\d{1,2}\)|[①-⑳]|[•·▪\-*])'
+    point_marker:
+      pattern: '^\s*(?:\d{1,2}\s*[.、)）．:：]|[（(]\d{1,2}[)）]|[①②③④⑤⑥⑦⑧⑨⑩]|[•·・●▪▸▹◆■\-—–]\s*|[一二三四五六七八九十]{1,3}\s*[、.．)）])\s*'
+    tech_vocab:
+      pattern: 'java|spring|mysql|redis|rocketmq|rabbitmq|kafka|\bmq\b|jvm|微服务|分布式|docker|k8s|kubernetes|elasticsearch|nginx|linux|python|langchain|hadoop|hive|hbase|spark|flink|scala|flume|sqoop|oozie|azkaban|airflow|dolphinscheduler|controlm|phoenix|presto|trino|clickhouse|doris|postgresql|oracle|mongodb|nosql|maxcompute|dataworks'
+      flags: [IGNORECASE]
+    stack_label:
+      pattern: '^\s*(?:技术栈|技术架构|技术选型|技术列表|技术清单|所用技术|使用技术|技术框架|技术环境|软件环境|开发环境)\s*[:：]?\s*(.*)$'
+    any_label_line:
+      pattern: '^[一-鿿\w/]{2,10}\s*[:：]'
+    metric:
+      pattern: '\d+(?:\.\d+)?\s*(?:%|‰|倍|万|亿|个|人|台|条|次|笔|ms|毫秒|秒|分钟|小时|天|qps|tps|rt)|提升|提高|降低|减少|缩短|节省|增长|优化了?|下降|节约'
+      flags: [IGNORECASE]
+    duty:
+      pattern: '负责|主导|承担|开发|设计|实现|参与|搭建|重构|推动|对接'
+    background:
+      pattern: '背景|为了解决|由于|业务场景|源于|痛点|旨在|为支撑'
+    internship:
+      pattern: '实习'
+    work_overlap_note:
+      pattern: '兼职|外包'
+    edu_overlap_note:
+      pattern: '双学位|联合培养|在职|非全日制|兼职'
+    in_service_edu:
+      pattern: '在职|非全日制|委培'
+    amateur_project:
+      pattern: '个人业余项目|业余项目|个人开源|业余开源|side\s*project'
+      flags: [IGNORECASE]
+    join_seam:
+      pattern: '[。.！？!?…]*(；|;)+'
+    date_connector:
+      pattern: '\d{4}(?:[.\-/年]\d{1,2})?\s*([\-–—~～至]+)\s*(?:\d{4}|至今|现在)'
+    degree_annotation:
+      pattern: '统招|全日制|自考|成教|专升本'
+
+  # 学历档位匹配，顺序即优先级（博士须先于研究生判定）
+  degree_rank_patterns:
+    - {rank: 5, pattern: '博士'}
+    - {rank: 4, pattern: '硕士|研究生'}
+    - {rank: 3, pattern: '本科'}
+    - {rank: 2, pattern: '大专|专科|高职'}
+    - {rank: 1, pattern: '中专|中职|技校|高中'}
+
+  # item 7 主流技术栈组（Java 后端 2026 画像）。equiv 为服务端专属的 LLM
+  # 语义复核等价口径，只注入 judge prompt，不离开服务端。
+  mainstream_stack_groups:
+    - key: spring_boot
+      name: Spring Boot
+      pattern: 'spring\s*boot'
+      flags: [IGNORECASE]
+      hint: 服务框架（Spring Boot）
+      equiv: 'JVM 服务端框架即可：Spring Boot、Spring MVC、Spring Framework、Jakarta EE/Java EE、Quarkus、Micronaut、Dropwizard；仅写「框架」「微服务」这类泛称不算'
+    - key: spring_cloud
+      name: Spring Cloud Alibaba
+      pattern: 'spring\s*cloud'
+      flags: [IGNORECASE]
+      hint: 微服务框架（Spring Cloud Alibaba）
+      equiv: '微服务治理框架或其具体组件：Spring Cloud Alibaba、Nacos、Sentinel、Seata、Dubbo、OpenFeign、Spring Cloud Gateway、Eureka、Hystrix；仅写「微服务架构」「分布式」概念词不算'
+    - key: rdbms
+      name: MySQL
+      pattern: 'mysql'
+      flags: [IGNORECASE]
+      hint: 关系型数据库（MySQL）
+      equiv: '关系型数据库或直接操作它的持久层框架：PostgreSQL、Oracle、SQL Server、MariaDB、达梦、金仓、MyBatis/MyBatis-Plus、JPA、Hibernate；Redis/MongoDB 等非关系型存储不算'
+    - key: redis
+      name: Redis
+      pattern: 'redis'
+      flags: [IGNORECASE]
+      hint: 缓存中间件（Redis）
+      equiv: '分布式缓存/键值中间件：Redis、Memcached、Tair、KeyDB；本地缓存（Caffeine、Guava Cache）与仅写「缓存优化」不算'
+    - key: mq
+      name: 消息队列 MQ
+      pattern: 'rocketmq|rabbitmq|activemq|kafka|(?:消息队列)|\bmq\b'
+      flags: [IGNORECASE]
+      hint: 消息队列中间件（RocketMQ、Kafka）
+      equiv: '消息中间件：RocketMQ、Kafka、RabbitMQ、ActiveMQ、Pulsar，或「消息队列/MQ/消息中间件」字样；Redis 发布订阅、Spring 事件总线不算'
+    - key: jvm
+      name: JVM
+      pattern: '\bjvm\b'
+      flags: [IGNORECASE]
+      hint: JVM 原理与调优
+      equiv: 'Java 虚拟机运行时主题：JVM、Java 虚拟机、GC/垃圾回收、类加载机制、JMM/Java 内存模型、JVM 调优；仅写「Java」或「性能调优」不算'
+    - key: concurrency
+      name: 并发编程
+      pattern: '并发|多线程|concurrent'
+      flags: [IGNORECASE]
+      hint: 并发与多线程编程
+      equiv: '并发/多线程技术：线程池、锁机制、JUC/java.util.concurrent、CompletableFuture、NIO/Netty、AQS、CAS；仅写「异步」不算'
+    - key: ai_app
+      name: AI 应用 (Spring AI / LangChain4j)
+      pattern: 'spring\s*ai|langchain4j|langchain|大模型|llm|ai\s*应用'
+      flags: [IGNORECASE]
+      hint: AI 应用开发（Spring AI、LangChain4j）
+      equiv: '大模型应用开发技术：Spring AI、LangChain4j/LangChain、RAG、AI Agent/智能体、Function Calling、MCP、向量数据库应用、Embedding 应用；仅写「关注 AI」「使用 AI 工具」不算'
+    - key: ai_coding
+      name: AI 编码工具 (Codex/Claude Code/Trae)
+      pattern: '\bcodex\b|claude\s*code|\btrae\b|vibe\s*coding'
+      flags: [IGNORECASE]
+      hint: AI 编码工具（Codex、Claude Code、Trae）
+      equiv: '具名的 AI 编码助手：Codex、Claude Code、Trae、GitHub Copilot、Cursor、Windsurf、通义灵码、CodeGeeX、Aider；仅写「AI 编程」泛称不算'
+
+  # 命名选填模块的标题/数据键识别 token（兼容无 sectionMeta 的历史解析件）
+  advantage_title_tokens: [个人优势, 核心优势, 个人亮点]
+  advantage_key_tokens: [personal_advantage, advantage, strength, highlight, competency]
+  selfeval_title_tokens: [自我评价, 个人总结, 个人评价]
+  selfeval_key_tokens: [self_evaluation, self_eval, self_appraisal, selfassessment]
+
+  # item 2 证据文本里模板 id → 中文名
+  template_labels:
+    swiss-single: 经典单栏
+    swiss-two-column: 经典双栏
+    modern: 现代单栏
+    modern-two-column: 现代双栏
+    latex: LaTeX 风格
+    clean: 简洁风格
+    vivid: 活力双栏

@@ -173,4 +173,6 @@ def expand_rules(base: Any, model: CompetencyModel | None) -> Any:
         dimension_order=tuple(base.dimension_order),
         global_rules=base.global_rules,
         competency_models=base.competency_models,
+        parameters=base.parameters,
+        vocabularies=base.vocabularies,
     )

@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
-"""Export the diagnosis rubric from the source xlsx into the shipped JSON.
+"""Export the diagnosis rubric from the source xlsx + YAML into shipped JSON.
 
-The xlsx (rules/简历诊断规范_V4_优化版.xlsx) is the human-maintained source of
-truth; the JSON it produces (apps/backend/app/services/diagnosis_rules.json) is
-the only artifact the backend reads at runtime — openpyxl is deliberately NOT a
-runtime dependency.
+Two human-maintained sources feed the one runtime artifact:
+
+1. The xlsx (rules/简历诊断规范_V4_优化版.xlsx) owns the 22 checklist items,
+   their criterion/qc wording and the competency leveling matrix.
+2. The YAML (rules/diagnosis_rules.yaml) owns the objective checkers'
+   declarative data: numeric thresholds, regex strings, stack groups and
+   recognition tokens.
+
+The JSON they produce (apps/backend/app/services/diagnosis_rules.json) is the
+only artifact the backend reads at runtime — openpyxl and PyYAML are
+deliberately NOT runtime dependencies. The Pydantic loader
+(app/services/diagnosis_rules.py) re-runs equivalent validation at startup.
 
 The workbook carries two sheets:
 
@@ -37,9 +45,10 @@ cross-item rules). The V4-optimized workbook folds that guidance into the
 criterion cells, so the exported ``global_rules`` list is empty; the loader
 keeps the field for forward compatibility.
 
-Run from the repo root with ephemeral openpyxl (the xlsx is untrusted data):
+Run from the repo root with ephemeral openpyxl + PyYAML (both files are
+untrusted data):
 
-    uv run --with openpyxl python -I scripts/export_diagnosis_rules.py
+    uv run --with openpyxl --with pyyaml python -I scripts/export_diagnosis_rules.py
 
 Verify the output after regenerating:
 
@@ -54,9 +63,11 @@ from pathlib import Path
 from typing import Any
 
 import openpyxl
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 XLSX_PATH = REPO_ROOT / "rules" / "简历诊断规范_V4_优化版.xlsx"
+YAML_PATH = REPO_ROOT / "rules" / "diagnosis_rules.yaml"
 OUT_PATH = REPO_ROOT / "apps" / "backend" / "app" / "services" / "diagnosis_rules.json"
 
 SPEC_VERSION = "V4"
@@ -135,6 +146,219 @@ _LEVEL_TITLE_PATTERNS: dict[str, tuple[str, ...]] = {
 
 _LEVEL_FAMILY = "Java"
 _LEVEL_HEADER_RE = re.compile(r"^\s*(P\d)\s*[:：]?\s*(.+?)\s*$")
+
+# ---------------------------------------------------------------------------
+# Objective-checker YAML (thresholds / vocabularies / regex strings). The
+# Pydantic loader in app/services/diagnosis_rules.py is the runtime backstop
+# and mirrors these checks; the ephemeral export environment cannot import it.
+# ---------------------------------------------------------------------------
+
+_PATTERN_FLAGS: dict[str, int] = {
+    "IGNORECASE": re.IGNORECASE,
+    "MULTILINE": re.MULTILINE,
+    "DOTALL": re.DOTALL,
+    "UNICODE": re.UNICODE,
+}
+
+_PARAMETER_KEYS: tuple[str, ...] = (
+    "chars_per_line",
+    "chars_per_page",
+    "max_point_lines",
+    "max_pages",
+    "advantage_points_min",
+    "advantage_points_max",
+    "selfeval_points_min",
+    "selfeval_points_max",
+    "skill_count_min",
+    "skill_count_max",
+    "stack_conform_ratio",
+    "stack_partial_ratio",
+    "project_count_min",
+    "project_count_max",
+    "project_tech_vocab_min_hits",
+    "gap_partial_months",
+    "gap_nonconform_months",
+    "recent_window_months",
+    "job_hop_company_count",
+    "short_stint_months",
+    "short_stint_strong_months",
+    "work_education_lead_months",
+    "stated_years_tolerance",
+    "advantage_required_tenure_years",
+    "internship_experienced_tenure_years",
+    "growth_gate_years",
+)
+
+_RATIO_KEYS = ("stack_conform_ratio", "stack_partial_ratio")
+_ORDERED_BANDS = (
+    ("advantage_points", "advantage_points_min", "advantage_points_max"),
+    ("selfeval_points", "selfeval_points_min", "selfeval_points_max"),
+    ("skill_count", "skill_count_min", "skill_count_max"),
+    ("project_count", "project_count_min", "project_count_max"),
+    ("gap_months", "gap_partial_months", "gap_nonconform_months"),
+    ("short_stint", "short_stint_strong_months", "short_stint_months"),
+)
+
+_VOCABULARY_SECTIONS = (
+    "regex_patterns",
+    "degree_rank_patterns",
+    "mainstream_stack_groups",
+    "advantage_title_tokens",
+    "advantage_key_tokens",
+    "selfeval_title_tokens",
+    "selfeval_key_tokens",
+    "template_labels",
+)
+
+
+def _yaml_fail(message: str) -> None:
+    raise ValueError(f"{YAML_PATH.relative_to(REPO_ROOT)}: {message}")
+
+
+def _compile_pattern(locator: str, spec: Any, *, strict_keys: bool = False) -> None:
+    if not isinstance(spec, dict) or not isinstance(spec.get("pattern"), str) \
+            or not spec["pattern"].strip():
+        _yaml_fail(f"{locator}: entry must be a mapping with a non-empty `pattern` string")
+    flags = spec.get("flags", [])
+    if not isinstance(flags, list) or any(not isinstance(flag, str) for flag in flags):
+        _yaml_fail(f"{locator}.flags: must be a list of flag-name strings")
+    unknown = [flag for flag in flags if flag not in _PATTERN_FLAGS]
+    if unknown:
+        _yaml_fail(f"{locator}.flags: unknown flags {unknown}")
+    # Entries in regex_patterns must be pure pattern specs; nested entries
+    # (degree ranks, stack groups) carry their own structural fields beside
+    # pattern/flags.
+    if strict_keys and set(spec) - {"pattern", "flags"}:
+        _yaml_fail(f"{locator}: only `pattern` and `flags` keys are allowed")
+    try:
+        compiled_flags = 0
+        for flag in flags:
+            compiled_flags |= _PATTERN_FLAGS[flag]
+        re.compile(spec["pattern"], compiled_flags)
+    except re.error as exc:
+        _yaml_fail(f"{locator}.pattern does not compile: {exc}")
+
+
+def _validate_string_list(locator: str, values: Any) -> None:
+    if not isinstance(values, list) or not values:
+        _yaml_fail(f"{locator}: must be a non-empty list")
+    seen: set[str] = set()
+    for entry in values:
+        if not isinstance(entry, str) or not entry.strip():
+            _yaml_fail(f"{locator}: entries must be non-empty strings")
+        if entry in seen:
+            _yaml_fail(f"{locator}: duplicate entry {entry!r}")
+        seen.add(entry)
+
+
+def _validate_parameters(section: Any) -> None:
+    if not isinstance(section, dict):
+        _yaml_fail("`parameters` must be a mapping")
+    missing = [key for key in _PARAMETER_KEYS if key not in section]
+    if missing:
+        _yaml_fail(f"parameters missing keys: {', '.join(missing)}")
+    unexpected = set(section) - set(_PARAMETER_KEYS)
+    if unexpected:
+        _yaml_fail(f"parameters has unexpected keys: {', '.join(sorted(unexpected))}")
+    zero_allowed = (
+        "advantage_points_min",
+        "selfeval_points_min",
+        "gap_partial_months",
+        "work_education_lead_months",
+    )
+    for key, value in section.items():
+        # bool is an int subclass; reject it explicitly (unquoted yes/no footgun).
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            _yaml_fail(f"parameters.{key}: numeric value required, got {type(value).__name__}")
+        if value < 0 or (value == 0 and key not in zero_allowed):
+            _yaml_fail(f"parameters.{key}: must be > 0")
+    for label, low_key, high_key in _ORDERED_BANDS:
+        if section[low_key] > section[high_key]:
+            _yaml_fail(f"{label}: {low_key} must not exceed {high_key}")
+    if section["stack_partial_ratio"] > section["stack_conform_ratio"]:
+        _yaml_fail("stack_partial_ratio must not exceed stack_conform_ratio")
+    for key in _RATIO_KEYS:
+        if not 0 < section[key] <= 1:
+            _yaml_fail(f"parameters.{key}: ratio must be within (0, 1]")
+
+
+def _validate_vocabularies(section: Any) -> None:
+    if not isinstance(section, dict):
+        _yaml_fail("`vocabularies` must be a mapping")
+    missing = [name for name in _VOCABULARY_SECTIONS if name not in section]
+    if missing:
+        _yaml_fail(f"vocabularies missing sections: {', '.join(missing)}")
+    unexpected = set(section) - set(_VOCABULARY_SECTIONS)
+    if unexpected:
+        _yaml_fail(f"vocabularies has unexpected sections: {', '.join(sorted(unexpected))}")
+
+    patterns = section["regex_patterns"]
+    if not isinstance(patterns, dict) or not patterns:
+        _yaml_fail("vocabularies.regex_patterns must be a non-empty mapping")
+    for name, spec in patterns.items():
+        _compile_pattern(
+            f"vocabularies.regex_patterns.{name}", spec, strict_keys=True
+        )
+
+    degree = section["degree_rank_patterns"]
+    if not isinstance(degree, list) or not degree:
+        _yaml_fail("vocabularies.degree_rank_patterns must be a non-empty list")
+    ranks: list[Any] = []
+    for entry in degree:
+        if not isinstance(entry, dict) or not isinstance(entry.get("rank"), int):
+            _yaml_fail("degree_rank_patterns entries need an integer `rank`")
+        ranks.append(entry["rank"])
+        _compile_pattern(
+            f"vocabularies.degree_rank_patterns.rank-{entry['rank']}", entry
+        )
+    if len(set(ranks)) != len(ranks):
+        _yaml_fail("degree_rank_patterns ranks must be unique")
+
+    groups = section["mainstream_stack_groups"]
+    if not isinstance(groups, list) or not groups:
+        _yaml_fail("vocabularies.mainstream_stack_groups must be a non-empty list")
+    group_keys: list[str] = []
+    required_text_fields = ("key", "name", "pattern", "hint", "equiv")
+    for entry in groups:
+        if not isinstance(entry, dict):
+            _yaml_fail("mainstream_stack_groups entries must be mappings")
+        for field in required_text_fields:
+            if not isinstance(entry.get(field), str) or not entry[field].strip():
+                _yaml_fail(f"mainstream_stack_groups entry missing non-empty {field!r}")
+        group_keys.append(entry["key"])
+        _compile_pattern(
+            f"vocabularies.mainstream_stack_groups.{entry['key']}", entry
+        )
+    if len(set(group_keys)) != len(group_keys):
+        _yaml_fail("mainstream_stack_groups keys must be unique")
+
+    for token_section in (
+        "advantage_title_tokens",
+        "advantage_key_tokens",
+        "selfeval_title_tokens",
+        "selfeval_key_tokens",
+    ):
+        _validate_string_list(f"vocabularies.{token_section}", section[token_section])
+
+    labels = section["template_labels"]
+    if not isinstance(labels, dict) or not labels:
+        _yaml_fail("vocabularies.template_labels must be a non-empty mapping")
+    for key, value in labels.items():
+        if not isinstance(key, str) or not key.strip() or not isinstance(value, str) \
+                or not value.strip():
+            _yaml_fail("template_labels keys and values must be non-empty strings")
+
+
+def export_checker_rules() -> dict[str, Any]:
+    """Load and validate the objective-checker YAML (returns both sections)."""
+    raw = yaml.safe_load(YAML_PATH.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        _yaml_fail("top-level document must be a mapping")
+    if set(raw) != {"parameters", "vocabularies"}:
+        _yaml_fail("top-level keys must be exactly `parameters` and `vocabularies`")
+    _validate_parameters(raw["parameters"])
+    _validate_vocabularies(raw["vocabularies"])
+    return {"parameters": raw["parameters"], "vocabularies": raw["vocabularies"]}
 
 
 def _clean_cell(value: Any) -> str:
@@ -332,6 +556,7 @@ def export() -> dict[str, Any]:
         if LEVEL_SHEET in wb.sheetnames
         else []
     )
+    checker_rules = export_checker_rules()
 
     return {
         "spec_version": SPEC_VERSION,
@@ -340,22 +565,67 @@ def export() -> dict[str, Any]:
         "global_rules": global_rules,
         "competency_models": competency_models,
         "items": items,
+        "parameters": checker_rules["parameters"],
+        "vocabularies": checker_rules["vocabularies"],
     }
+
+
+def _warn_xlsx_drift(payload: dict[str, Any]) -> None:
+    """Warn when xlsx-derived sections drift from the currently shipped JSON.
+
+    The xlsx is the source of truth, so regeneration always wins, but a
+    rubric-text change must never ride silently inside an unrelated YAML
+    parameter edit. Name the changed items loudly so the diff gets reviewed.
+    """
+    if not OUT_PATH.exists():
+        return
+    shipped = json.loads(OUT_PATH.read_text(encoding="utf-8"))
+    shipped_items = {item["id"]: item for item in shipped.get("items", [])}
+    changed: list[int] = []
+    for item in payload["items"]:
+        if shipped_items.get(item["id"]) != item:
+            changed.append(item["id"])
+    structural_sections = (
+        "spec_version",
+        "title",
+        "dimensions",
+        "global_rules",
+        "competency_models",
+    )
+    section_drift = [
+        name for name in structural_sections if shipped.get(name) != payload.get(name)
+    ]
+    if changed:
+        print(
+            f"WARNING: xlsx rubric text differs from the shipped JSON for items "
+            f"{changed} — regenerating will change LLM-judge wording, review the "
+            "diff deliberately (parameters/vocabularies drift is not reported here)."
+        )
+    if section_drift:
+        print(
+            "WARNING: xlsx-derived section(s) differ from the shipped JSON: "
+            f"{section_drift}"
+        )
 
 
 def main() -> None:
     payload = export()
+    _warn_xlsx_drift(payload)
     OUT_PATH.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     redlines = [i["id"] for i in payload["items"] if i["severity"] == "redline"]
     model_sizes = [f"{m['key']}({len(m['items'])})" for m in payload["competency_models"]]
+    vocabularies = payload["vocabularies"]
     print(
         f"wrote {OUT_PATH.relative_to(REPO_ROOT)}: {len(payload['items'])} items, "
         f"{len(payload['dimensions'])} dimensions, "
         f"{len(redlines)} redlines {redlines}, "
         f"{len(payload['global_rules'])} global rules, "
-        f"{len(payload['competency_models'])} competency models: {', '.join(model_sizes)}"
+        f"{len(payload['competency_models'])} competency models: {', '.join(model_sizes)}, "
+        f"{len(payload['parameters'])} parameters, "
+        f"{len(vocabularies['regex_patterns'])} regex patterns, "
+        f"{len(vocabularies['mainstream_stack_groups'])} stack groups"
     )
 
 
