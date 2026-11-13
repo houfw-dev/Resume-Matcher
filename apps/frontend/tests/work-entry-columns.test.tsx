@@ -174,6 +174,13 @@ describe('ResumeSingleColumn work entry row', () => {
     }
     // A no-department row keeps its role flush right by spanning two tracks.
     expect(css.slice(css.indexOf('.entryRoleThree {'))).toContain('grid-column: 3 / -1');
+    // Print media: the base .resume-items `display: block !important` override
+    // would kill both section grids and collapse the subgrid rows to a single
+    // stacked column; the module must restore grid display in its print block.
+    const printBlock = css.slice(css.indexOf('@media print'));
+    expect(printBlock).toContain(':global(.resume-print) .entrySectionWork');
+    expect(printBlock).toContain(':global(.resume-print) .entrySectionEdu');
+    expect(printBlock).toContain('display: grid !important');
     // The project row keeps its time column where it was (name-first grid).
     expect(css).toContain('minmax(0, 2fr) minmax(0, 9.5rem)');
   });

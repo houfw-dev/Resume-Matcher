@@ -421,6 +421,16 @@ templates (components under `apps/frontend/components/resume/`):
   - `vivid` and the two-column templates (`resume-two-column`,
     `resume-modern-two-column`) keep their own entry layouts — the
     section/subgrid rule is specific to the four full-width ATS layouts.
+  - **Print caveat (PDF regression, 2026-11):** `_base.module.css` forces
+    `.resume-items` to `display: block !important` inside `@media print`,
+    and these section elements carry `resume-items` too. A block parent makes
+    the rows' `subgrid` compute to a single implicit column, so every cell
+    stacks vertically in the PDF while the on-screen preview stays correct.
+    Each of the four modules therefore re-asserts
+    `:global(.resume-print) .entryGridSection { display: grid !important }`
+    (or `.entrySectionWork, .entrySectionEdu` for swiss-single) inside its
+    own `@media print` block; the 0,2,0 selector wins over the base 0,1,0
+    rule. Keep that rule when touching these grids.
 - **swiss-single header facts.** Below the left-aligned name, the header
   renders a labeled, left-aligned fact grid (`infoGrid` / `infoCell`) in
   the Chinese-resume order: **性别 / 年龄 / 学历 / 工作年限 / 求职意向 /

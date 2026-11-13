@@ -161,4 +161,16 @@
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+
+  /*
+   * _base forces .resume-items to `display: block` in print (a flex-
+   * fragmentation workaround). This section element is also .entryGridSection
+   * and OWNS the column tracks the subgrid rows inherit: as a block the rows
+   * lose their parent grid, `subgrid` computes to a single implicit column and
+   * every cell stacks vertically. The :global(.resume-print) ancestor raises
+   * specificity (0,2,0) above the base 0,1,0 !important rule.
+   */
+  :global(.resume-print) .entryGridSection {
+    display: grid !important;
+  }
 }

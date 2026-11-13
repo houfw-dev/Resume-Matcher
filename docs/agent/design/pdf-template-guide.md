@@ -113,7 +113,15 @@ pagination), so break rules live entirely in CSS. The intended granularity:
   in `_base.module.css @media print`). Column-flex stacks fragment
   conservatively in Chromium (atomic flex items get pushed early and reopen
   the same whitespace gap); block flow fills pages densely. Entries already
-  carry their inter-item margin.
+  carry their inter-item margin. **Grid-section exception:** the work/
+  education section elements also carry `entryGridSection`
+  (modern/latex/clean) or `entrySectionWork`/`entrySectionEdu`
+  (swiss-single) and OWN the column tracks their subgrid rows inherit. As a
+  plain block the parent stops being a grid, `grid-template-columns: subgrid`
+  computes to one implicit column and every cell stacks vertically — so each
+  template module re-asserts `display: grid !important` inside its own
+  `@media print` via the higher-specificity `:global(.resume-print) …`
+  selector (0,2,0 over the base 0,1,0). Do not remove that rule.
 - The on-screen `PaginatedPreview` mirrors the same policy in JS
   (`use-pagination.ts`: item + title bounds, never whole sections).
 

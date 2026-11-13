@@ -249,7 +249,10 @@ contract with `entryGridSection` / `entryGridItem` / `entryGrid` /
 `entryGridThree`; rows without a department keep three cells and span the
 role across the department+role tracks (`grid-column: 3 / -1`). The
 name-first project grid (`entryColumnsProject`) is intentionally left
-independent.
+independent. In print, the base `.resume-items` block-flow override would
+collapse these grids to one stacked column, so each module re-asserts
+`display: grid !important` in its `@media print` block — see the PDF guide's
+"Print forces `.resume-items` to block flow" entry; do not remove it.
 
 The org unit on its own source line (`武汉软通动力 / 全球资金部`, also
 研发部 / 云计算集成部 / 保险事业群 / 平台研发中心 / "Payments Team") must

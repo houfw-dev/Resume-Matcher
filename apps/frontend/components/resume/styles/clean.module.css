@@ -182,4 +182,10 @@
     break-after: avoid !important;
     page-break-after: avoid !important;
   }
+
+  /* Keep the section grid alive in print — see modern.module.css for why the
+     base .resume-items block override must not win here. */
+  :global(.resume-print) .entryGridSection {
+    display: grid !important;
+  }
 }

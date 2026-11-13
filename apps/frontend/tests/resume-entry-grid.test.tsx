@@ -217,6 +217,16 @@ describe('entry grid stylesheet lock', () => {
       const threeTrack = css.slice(css.indexOf('.entryGridThree'));
       expect(threeTrack).toContain('grid-template-columns: subgrid');
       expect(threeTrack).toContain('grid-column: 3 / -1');
+
+      // Print media trap: _base.module.css forces .resume-items to
+      // `display: block !important` in print, and the section element carries
+      // resume-items too. As a block it stops being a grid container, the
+      // subgrid rows compute to one implicit column and every cell stacks
+      // vertically. Each module must restore grid display inside the print
+      // block with a higher-specificity selector.
+      const printBlock = css.slice(css.indexOf('@media print'));
+      expect(printBlock).toContain(':global(.resume-print) .entryGridSection');
+      expect(printBlock).toContain('display: grid !important');
     }
   );
 
